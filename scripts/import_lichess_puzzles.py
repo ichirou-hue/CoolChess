@@ -5,7 +5,7 @@ The source archive is intentionally kept outside Git. Install the optional
 
   python scripts/import_lichess_puzzles.py \
     data/source/lichess_db_puzzle.csv.zst \
-    public/data/puzzles.json \
+    frontend/public/data/puzzles.json \
     --max-per-tag 500
 
 The output keeps only fields needed by the learning UI. It does not call the

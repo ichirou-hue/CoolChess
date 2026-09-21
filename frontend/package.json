@@ -14,11 +14,13 @@
     "chessground": "latest",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "vite": "latest",
-    "typescript": "5.8.3"
+    "typescript": "5.8.3",
+    "vite": "latest"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/react": "latest",
-    "@types/react-dom": "latest"
+    "@types/react-dom": "latest",
+    "tailwindcss": "^4.3.3"
   }
 }

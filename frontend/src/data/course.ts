@@ -54,4 +54,3 @@ export const courseModules: CourseModule[] = [
   },
 ];
 
-export const finalCourseEvent = { id: 'final-tournament', title: 'Турнир по швейцарской системе', type: 'tournament' as const };

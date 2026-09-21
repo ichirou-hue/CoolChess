@@ -1,0 +1,11 @@
+[
+  {"topicId":"basics-history","path":"course/chess-basics/basics-history.md","status":"ready"},
+  {"topicId":"basics-pieces","path":"course/chess-basics/basics-pieces.md","status":"ready"},
+  {"topicId":"basics-moves","path":"course/chess-basics/basics-moves.md","status":"ready"},
+  {"topicId":"basics-capture","path":"course/chess-basics/basics-capture.md","status":"ready"},
+  {"topicId":"basics-checkmate","path":"course/chess-basics/basics-checkmate.md","status":"ready"},
+  {"topicId":"basics-draw","path":"course/chess-basics/basics-draw.md","status":"ready"},
+  {"topicId":"basics-value","path":"course/chess-basics/basics-value.md","status":"ready"},
+  {"topicId":"basics-notation","path":"course/chess-basics/basics-notation.md","status":"ready"},
+  {"topicId":"basics-special","path":"course/chess-basics/basics-special.md","status":"ready"}
+]

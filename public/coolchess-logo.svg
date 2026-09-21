@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 550 110" role="img" aria-labelledby="title desc">
+  <title id="title">CoolChess</title>
+  <desc id="desc">Vector CoolChess pawn and connected CoolChess wordmark</desc>
+  <defs>
+    <clipPath id="pawn-left"><rect x="0" y="0" width="52" height="110"/></clipPath>
+    <path id="pawn-shape" d="M52 12c-8.3 0-15 6.7-15 15 0 5.2 2.7 9.8 6.8 12.5v6.1h-5.6v7.1h-5.8v7.9l-6.8 7.2v12.6h52.8V67.8l-6.8-7.2v-7.9h-5.8v-7.1h-5.6v-6.1c4.1-2.7 6.8-7.3 6.8-12.5 0-8.3-6.7-15-15-15Z"/>
+  </defs>
+  <use href="#pawn-shape" fill="#9696e8"/>
+  <use href="#pawn-shape" fill="#4e50f4" clip-path="url(#pawn-left)"/>
+  <text x="96" y="76" fill="#050505" font-family="Arial, Helvetica, sans-serif" font-size="66" letter-spacing="-3.5"><tspan font-weight="300">Cool</tspan><tspan font-weight="800">Chess</tspan></text>
+</svg>

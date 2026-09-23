@@ -1,6 +1,10 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
+from puzzles.puzzle_routes import puzzle_router
+
+
+
 from auth.manager import (
     auth_backend,
     fastapi_users,
@@ -13,6 +17,9 @@ from auth.models import User, UserRole
 from bot.bot_routes import bot_router
 
 app = FastAPI(title="CoolChess API")
+
+# Регистрируем роутер задач
+app.include_router(puzzle_router)
 
 app.add_middleware(
     CORSMiddleware,

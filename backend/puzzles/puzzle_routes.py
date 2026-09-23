@@ -3,7 +3,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from database import get_async_session
 from auth.models import Puzzle, User, user_solved_puzzles
@@ -28,6 +28,8 @@ DIFFICULTY_RANGES = {
 }
 
 class PuzzleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     fen: str
     initial_move: str        # Первый ход оппонента, после которого ходит игрок
@@ -35,9 +37,6 @@ class PuzzleResponse(BaseModel):
     popularity: int
     themes: List[str]
     game_url: Optional[str]
-
-    class Config:
-        from_attributes = True
 
 class SolveRequest(BaseModel):
     user_moves: str          # Ход игрока в UCI (например: "e2e4" или "d8d1")

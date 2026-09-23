@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from puzzles.puzzle_routes import puzzle_router
 
+from games.game_routes import game_router
+
+
 
 
 from auth.manager import (
@@ -20,6 +23,9 @@ app = FastAPI(title="CoolChess API")
 
 # Регистрируем роутер задач
 app.include_router(puzzle_router)
+
+# Регистрируем роутер партий
+app.include_router(game_router)
 
 app.add_middleware(
     CORSMiddleware,

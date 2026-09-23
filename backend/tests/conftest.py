@@ -20,7 +20,9 @@ def mock_user():
     user.is_verified = True
     
     # Безопасное определение роли вне зависимости от регистра Enum
-    if hasattr(UserRole, "PLAYER"):
+    if hasattr(UserRole, "STUDENT"):
+        user.role = UserRole.STUDENT
+    elif hasattr(UserRole, "PLAYER"):
         user.role = UserRole.PLAYER
     elif hasattr(UserRole, "player"):
         user.role = UserRole.player
@@ -31,6 +33,7 @@ def mock_user():
     user.coins = 0
     user.elo_rating = 1200
     user.level = 1
+    user.games_played = 0
     return user
 
 
@@ -38,8 +41,10 @@ def mock_user():
 def mock_db_session():
     """Мок асинхронной сессии SQLAlchemy."""
     session = AsyncMock()
+    session.add = MagicMock()
     session.execute = AsyncMock()
     session.commit = AsyncMock()
+    session.refresh = AsyncMock()
     session.rollback = AsyncMock()
     return session
 

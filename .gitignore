@@ -5,3 +5,8 @@ data/source/
 .tools/
 _docx_render/
 .DS_Store
+
+backend/models/*
+*.pt
+*.onnx
+*.bin

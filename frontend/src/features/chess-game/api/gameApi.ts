@@ -11,9 +11,10 @@ export type GameResponse = {
   last_bot_move: string | null;
   xp_earned: number;
   coins_earned: number;
+  elo_delta: number;
 };
 
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8081').replace(/\/$/, '');
+const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
 
 async function request<T>(path: string, init: RequestInit = {}) {
   const token = sessionStorage.getItem('coolchess.accessToken');

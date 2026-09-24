@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+# Позволяет запускать тесты из корня репозитория:
+# backend-модули (server, database, auth, ...) резолвятся без cd backend/.
+pythonpath = ["backend"]
+testpaths = ["tests"]

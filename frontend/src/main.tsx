@@ -12,6 +12,7 @@ import { AuthPage as FeatureAuthPage } from './features/auth/ui/AuthPage';
 import { AuthProvider } from './features/auth/model/AuthProvider';
 import * as gameApi from './features/chess-game/api/gameApi';
 import type { GameResponse } from './features/chess-game/api/gameApi';
+import { getRandomPuzzle, solvePuzzle, hasToken, type ServerPuzzle, type SolveResult } from './features/puzzles/api/puzzleApi';
 import { useHashRoute } from './app/useHashRoute';
 import 'chessground/assets/chessground.base.css';
 import 'chessground/assets/chessground.cburnett.css';
@@ -156,10 +157,21 @@ function OriginalLichessPuzzleLibrary() {
   const [library, setLibrary] = useState<ImportedPuzzle[]>([]);
   const [index, setIndex] = useState(0);
   const [status, setStatus] = useState<'ready' | 'correct' | 'wrong'>('ready');
+  // Серверный режим: авторизованный пользователь решает задачи backend
+  // (/api/puzzles) и получает серверные награды; без токена — локальный индекс.
+  const [serverPuzzle, setServerPuzzle] = useState<ServerPuzzle | null>(null);
+  const [serverReward, setServerReward] = useState<SolveResult | null>(null);
   const puzzle = library[index];
 
-  useEffect(() => {
+  const loadLocalLibrary = () => {
     fetch('/data/puzzles.json').then((response) => response.json() as Promise<ImportedPuzzle[]>).then(setLibrary).catch(() => setLibrary([]));
+  };
+
+  useEffect(() => {
+    if (!hasToken()) { loadLocalLibrary(); return; }
+    getRandomPuzzle()
+      .then((task) => { setServerPuzzle(task); setServerReward(null); setStatus('ready'); })
+      .catch(() => loadLocalLibrary());
   }, []);
 
   useEffect(() => {
@@ -175,11 +187,77 @@ function OriginalLichessPuzzleLibrary() {
     return () => groundRef.current?.destroy();
   }, [puzzle]);
 
+  // Серверный режим: позиция и проверка хода — через backend.
+  useEffect(() => {
+    if (!boardRef.current || !serverPuzzle) return;
+    const task = serverPuzzle;
+    const game = new Chess(task.fen);
+    const first = task.initial_move;
+    if (first) game.move({ from: first.slice(0, 2), to: first.slice(2, 4), promotion: first[4] as 'q' | 'r' | 'b' | 'n' | undefined });
+    setStatus('ready');
+    setServerReward(null);
+    const side = game.turn() === 'w' ? 'white' : 'black';
+    groundRef.current = Chessground(boardRef.current, {
+      fen: game.fen(), coordinates: false, orientation: side, turnColor: side,
+      movable: {
+        free: false, color: side, dests: legalDests(game),
+        events: {
+          after: (orig, dest) => {
+            void (async () => {
+              const uci = `${orig}${dest}`;
+              try {
+                let result = await solvePuzzle(task.id, uci);
+                // Backend сверяет ход строго, включая символ превращения,
+                // поэтому для хода на последнюю горизонталь пробуем и вариант с ферзем.
+                if (!result.is_correct && (dest[1] === '8' || dest[1] === '1')) {
+                  result = await solvePuzzle(task.id, `${uci}q`);
+                }
+                if (!result.is_correct) {
+                  setStatus('wrong');
+                  groundRef.current?.set({ fen: game.fen(), turnColor: side, movable: { color: side, dests: legalDests(game) } });
+                  window.setTimeout(() => setStatus('ready'), 650);
+                  return;
+                }
+                const played = game.move({ from: orig as Square, to: dest as Square, promotion: 'q' });
+                setServerReward(result);
+                setStatus('correct');
+                groundRef.current?.set({ fen: game.fen(), lastMove: played ? [played.from as Key, played.to as Key] : undefined, movable: { color: side, dests: new Map() } });
+              } catch {
+                setStatus('ready');
+                groundRef.current?.set({ fen: game.fen(), turnColor: side, movable: { color: side, dests: legalDests(game) } });
+              }
+            })();
+          },
+        },
+      },
+      highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 180 },
+    });
+    return () => groundRef.current?.destroy();
+  }, [serverPuzzle]);
+
   const tags = puzzle?.themes.filter((theme) => !['short', 'long', 'veryLong', 'master', 'masterVsMaster'].includes(theme)).slice(0, 4) ?? [];
-  return <section className="puzzle-section" id="puzzles"><div className="section-heading"><span className="section-number">04</span><h2>Одна задача.<br /><span>Один инсайт.</span></h2></div><div className="puzzle-layout"><div className="puzzle-board"><div ref={boardRef} className="game-board" aria-label="Доска шахматной задачи" /></div><div className="puzzle-copy">{puzzle ? <><p className="eyebrow">ЗАДАЧА {index + 1} ИЗ {library.length}</p><h3>{tags.map((tag) => tag.replace(/([A-Z])/g, ' $1').toLowerCase()).join(' · ') || 'Тактическая идея'}</h3><p>Позиция из открытой базы Lichess. После хода соперника найди лучший ответ и проверь свою идею.</p><div className="puzzle-meta"><span><strong>{puzzle.rating}</strong><small>рейтинг задачи</small></span><span><strong>{puzzle.plays.toLocaleString('ru-RU')}</strong><small>решений</small></span></div><div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? 'Отлично! Ход найден.' : status === 'wrong' ? 'Попробуй ещё раз.' : 'Твой ход'}</strong></div><div className="puzzle-actions"><button className="button button-primary" type="button" onClick={() => setIndex((index + 1) % library.length)}>Следующая задача <span>↗</span></button><a className="source-link" href={`https://${puzzle.gameUrl}`} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a></div></> : <><p className="eyebrow">БАЗА ЗАДАЧ</p><h3>Загрузка задач…</h3><p>Индекс Lichess загружается из локальных данных проекта.</p></>}</div></div></section>;
+  const serverTags = serverPuzzle?.themes.filter((theme) => !['short', 'long', 'veryLong', 'master', 'masterVsMaster'].includes(theme)).slice(0, 4) ?? [];
+
+  const nextTask = () => {
+    if (serverPuzzle) {
+      setStatus('ready');
+      setServerReward(null);
+      getRandomPuzzle().then(setServerPuzzle).catch(() => undefined);
+      return;
+    }
+    if (library.length) setIndex((index + 1) % library.length);
+  };
+
+  const sourceHref = (url: string) => (url.startsWith('http') ? url : `https://${url}`);
+
+  return <section className="puzzle-section" id="puzzles"><div className="section-heading"><span className="section-number">04</span><h2>Одна задача.<br /><span>Один инсайт.</span></h2></div><div className="puzzle-layout"><div className="puzzle-board"><div ref={boardRef} className="game-board" aria-label="Доска шахматной задачи" /></div><div className="puzzle-copy">{serverPuzzle ? <><p className="eyebrow">ЗАДАЧА С СЕРВЕРА · РЕЙТИНГ {serverPuzzle.rating}</p><h3>{serverTags.map((tag) => tag.replace(/([A-Z])/g, ' $1').toLowerCase()).join(' · ') || 'Тактическая идея'}</h3><p>Позиция из базы CoolChess. После хода соперника найди лучший ответ — сервер проверит ход и начислит награду.</p><div className="puzzle-meta"><span><strong>{serverPuzzle.rating}</strong><small>рейтинг задачи</small></span><span><strong>{serverPuzzle.popularity}</strong><small>популярность</small></span></div><div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? (serverReward && serverReward.xp_earned > 0 ? `Отлично! +${serverReward.xp_earned} XP · +${serverReward.coins_earned} монет` : 'Отлично! Ход найден.') : status === 'wrong' ? 'Попробуй ещё раз.' : 'Твой ход'}</strong></div><div className="puzzle-actions"><button className="button button-primary" type="button" onClick={nextTask}>Следующая задача <span>↗</span></button>{serverPuzzle.game_url && <a className="source-link" href={sourceHref(serverPuzzle.game_url)} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a>}</div></> : puzzle ? <><p className="eyebrow">ЗАДАЧА {index + 1} ИЗ {library.length}</p><h3>{tags.map((tag) => tag.replace(/([A-Z])/g, ' $1').toLowerCase()).join(' · ') || 'Тактическая идея'}</h3><p>Позиция из открытой базы Lichess. После хода соперника найди лучший ответ и проверь свою идею.</p><div className="puzzle-meta"><span><strong>{puzzle.rating}</strong><small>рейтинг задачи</small></span><span><strong>{puzzle.plays.toLocaleString('ru-RU')}</strong><small>решений</small></span></div><div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? 'Отлично! Ход найден.' : status === 'wrong' ? 'Попробуй ещё раз.' : 'Твой ход'}</strong></div><div className="puzzle-actions"><button className="button button-primary" type="button" onClick={nextTask}>Следующая задача <span>↗</span></button><a className="source-link" href={`https://${puzzle.gameUrl}`} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a></div></> : <><p className="eyebrow">БАЗА ЗАДАЧ</p><h3>Загрузка задач…</h3><p>Индекс Lichess загружается из локальных данных проекта.</p></>}</div></div></section>;
 }
 
 function LessonPracticeBoard({ themes }: { themes: string[] }) {
+  // Практика по теме сознательно остается на локальном индексе:
+  // здесь разбираются многоходовые линии с ответами соперника,
+  // а backend /api/puzzles проверяет только один ключевой ход.
+  // Одноходовые задачи раздела «Задачи» уже идут через сервер.
   const boardRef = useRef<HTMLDivElement>(null);
   const groundRef = useRef<Api | null>(null);
   const lineIndexRef = useRef(1);

@@ -11,7 +11,7 @@ type TokenResponse = {
 };
 
 const tokenKey = 'coolchess.accessToken';
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8081').replace(/\/$/, '');
+const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
 
 async function readError(response: Response) {
   try {
@@ -54,10 +54,11 @@ export async function login(email: string, password: string) {
 }
 
 export async function register(email: string, password: string) {
+  // Роль и стартовый Elo назначает сервер — клиент их не передает.
   const response = await fetch(`${apiUrl}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, role: 'student', elo_rating: 1200 }),
+    body: JSON.stringify({ email, password }),
   });
   if (!response.ok) throw new Error(await readError(response));
   return login(email, password);

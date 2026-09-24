@@ -1,3 +1,4 @@
+/** Login and registration screen connected to the shared auth state. */
 import { useState, type FormEvent } from 'react';
 import { useAuth } from '../model/AuthProvider';
 

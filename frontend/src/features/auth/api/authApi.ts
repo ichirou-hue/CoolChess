@@ -1,3 +1,4 @@
+/** Sends login and registration requests to the backend. */
 export type AuthUser = {
   id: string;
   email: string;

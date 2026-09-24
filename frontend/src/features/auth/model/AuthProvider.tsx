@@ -1,3 +1,4 @@
+/** Shares the signed-in user and auth actions with the app screens. */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import * as authApi from '../api/authApi';
 import type { AuthUser } from '../api/authApi';

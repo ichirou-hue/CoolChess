@@ -1,3 +1,4 @@
+/** Course outline and puzzle tags used to link lessons with practice. */
 export type CourseTopic = {
   id: string;
   title: string;

@@ -1,3 +1,4 @@
+/** Short article text shown in the theory lessons. */
 export type LessonArticle = {
   lead: string;
   analogy: string;

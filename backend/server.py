@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import os
 
 from puzzles.puzzle_routes import puzzle_router
 from games.game_routes import game_router
@@ -15,9 +16,20 @@ from auth.schemas import UserRead, UserCreate, UserUpdate
 
 app = FastAPI(title="CoolChess API")
 
+# CORS: явный список origin из окружения, wildcard запрещен —
+# комбинация allow_origins=["*"] + allow_credentials=True небезопасна.
+# Пример: CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

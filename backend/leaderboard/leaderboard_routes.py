@@ -16,6 +16,17 @@ from leaderboard.schemas import (
 leaderboard_router = APIRouter(prefix="/api/leaderboard", tags=["Таблица лидеров"])
 
 
+def mask_email(email: str) -> str:
+    """Скрывает локальную часть email: magnus@chess.com -> m***@chess.com.
+
+    Полные адреса отдавать в публичном топе нельзя (PII).
+    """
+    local, sep, domain = email.partition("@")
+    if not sep or not local:
+        return "***"
+    return f"{local[0]}***@{domain}"
+
+
 @leaderboard_router.get("", response_model=LeaderboardResponse)
 async def get_leaderboard(
     category: LeaderboardCategory = Query(
@@ -72,7 +83,7 @@ async def get_leaderboard(
         item = LeaderboardUserItem(
             rank=idx,
             user_id=user.id,
-            email=user.email,
+            email=mask_email(user.email),
             elo_rating=user.elo_rating,
             level=user.level,
             xp=user.xp,

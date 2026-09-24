@@ -41,20 +41,26 @@ class UserRead(schemas.BaseUser[uuid.UUID]):
     elo_rating: int
 
 
-# Схема регистрации нового пользователя с проверкой безопасности
+# Схема регистрации нового пользователя с проверкой безопасности.
+#
+# ВАЖНО: роль и стартовый Elo назначаются только сервером
+# (дефолты колонок в models.User). Клиент не может передать их
+# в теле запроса — иначе любой мог бы зарегистрироваться тренером.
 class UserCreate(schemas.BaseUserCreate):
-    role: UserRole = UserRole.STUDENT
-    elo_rating: int = 1200
-
     @field_validator("email")
     @classmethod
     def validate_email_safety(cls, v: str) -> str:
         return normalize_and_validate_email(v)
 
-# Схема обновления профиля
+# Схема обновления профиля.
+# Роль и Elo здесь отсутствуют намеренно: их меняет только
+# администратор через PATCH /api/admin/users/{id}/role.
 class UserUpdate(schemas.BaseUserUpdate):
-    role: UserRole | None = None
-    elo_rating: int | None = None
+    pass
+
+
+class RoleUpdateRequest(BaseModel):
+    role: UserRole = Field(..., description="Новая роль пользователя")
 
 class LichessSyncRequest(BaseModel):
     lichess_username: str = Field(..., min_length=2, max_length=50, description="Никнейм на lichess.org")

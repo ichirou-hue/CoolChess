@@ -25,6 +25,7 @@ def create_mock_user(role=UserRole.STUDENT, is_superuser=False, email="student@c
     user.lichess_blitz_rating = None
     user.lichess_rapid_rating = None
     user.lichess_puzzle_rating = None
+    user.lichess_verification_code = None
     return user
 
 
@@ -47,7 +48,10 @@ async def test_get_profile_authorized(anonymous_client):
         data = response.json()
         assert data["email"] == mock_student.email
         assert data["role"] == UserRole.STUDENT.value
-        assert data["elo"] == 1350
+        assert data["elo_rating"] == 1350
+        assert data["xp"] == 150
+        assert data["level"] == 2
+        assert data["coins"] == 20
     finally:
         app.dependency_overrides.pop(current_active_user, None)
 
@@ -107,23 +111,63 @@ async def test_sync_lichess_unauthorized(anonymous_client):
 
 
 @pytest.mark.asyncio
-async def test_get_lichess_verification_code(anonymous_client):
+async def test_get_lichess_verification_code_generates_and_reuses(anonymous_client, mock_db_session):
     mock_student = create_mock_user(role=UserRole.STUDENT)
     app.dependency_overrides[current_active_user] = lambda: mock_student
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
 
     try:
+        # Первый запрос генерирует случайный код и сохраняет его
         response = await anonymous_client.get("/api/users/lichess-verification-code")
         assert response.status_code == 200
         data = response.json()
-        assert "coolchess-verify-" in data["verification_code"]
+        assert data["verification_code"].startswith("coolchess-")
+        assert "coolchess-verify-" not in data["verification_code"]
         assert data["verification_code"] in data["instructions"]
+        assert mock_student.lichess_verification_code == data["verification_code"]
+        mock_db_session.commit.assert_awaited()
+
+        # Повторный запрос возвращает тот же код, а не генерирует новый
+        response2 = await anonymous_client.get("/api/users/lichess-verification-code")
+        assert response2.json()["verification_code"] == data["verification_code"]
     finally:
         app.dependency_overrides.pop(current_active_user, None)
+        app.dependency_overrides.pop(get_async_session, None)
+
+
+@pytest.mark.asyncio
+async def test_sync_lichess_requires_issued_code(anonymous_client, mock_db_session):
+    # У пользователя нет выданного кода — просим сначала получить его
+    mock_student = create_mock_user(role=UserRole.STUDENT)
+    app.dependency_overrides[current_active_user] = lambda: mock_student
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+
+    try:
+        with patch("auth.users_routes.lichess_service.fetch_user_profile", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = {
+                "username": "MagnusCarlsen",
+                "bio": "Just a normal chess fan bio",
+                "blitz_rating": 2850,
+                "rapid_rating": 2820,
+                "puzzle_rating": 2900,
+            }
+
+            response = await anonymous_client.post(
+                "/api/users/sync-lichess",
+                json={"lichess_username": "MagnusCarlsen"}
+            )
+
+            assert response.status_code == 400
+            assert "проверочный код" in response.json()["detail"]
+    finally:
+        app.dependency_overrides.pop(current_active_user, None)
+        app.dependency_overrides.pop(get_async_session, None)
 
 
 @pytest.mark.asyncio
 async def test_sync_lichess_fails_without_verification_code_in_bio(anonymous_client, mock_db_session):
     mock_student = create_mock_user(role=UserRole.STUDENT)
+    mock_student.lichess_verification_code = "coolchess-abc12345"
     app.dependency_overrides[current_active_user] = lambda: mock_student
     app.dependency_overrides[get_async_session] = lambda: mock_db_session
 
@@ -160,7 +204,8 @@ async def test_sync_lichess_success_with_verification_code(anonymous_client, moc
     app.dependency_overrides[current_active_user] = lambda: mock_student
     app.dependency_overrides[get_async_session] = lambda: mock_db_session
 
-    code = f"coolchess-verify-{str(mock_student.id)[:8]}"
+    code = "coolchess-abc12345"
+    mock_student.lichess_verification_code = code
     fake_lichess_data = {
         "username": "MagnusCarlsen",
         "bio": f"Hello world! Verifying: {code}",
@@ -184,6 +229,68 @@ async def test_sync_lichess_success_with_verification_code(anonymous_client, moc
             assert data["lichess_rapid_rating"] == 2820
             assert data["updated_elo"] == 2820
             assert mock_student.lichess_username == "MagnusCarlsen"
+    finally:
+        app.dependency_overrides.pop(current_active_user, None)
+        app.dependency_overrides.pop(get_async_session, None)
+
+
+# --- 4. ТЕСТЫ СМЕНЫ РОЛИ АДМИНИСТРАТОРОМ ---
+
+@pytest.mark.asyncio
+async def test_set_user_role_forbidden_for_student(anonymous_client):
+    mock_student = create_mock_user(role=UserRole.STUDENT)
+    app.dependency_overrides[current_active_user] = lambda: mock_student
+
+    try:
+        response = await anonymous_client.patch(
+            f"/api/admin/users/{uuid.uuid4()}/role",
+            json={"role": "coach"},
+        )
+        assert response.status_code == 403
+    finally:
+        app.dependency_overrides.pop(current_active_user, None)
+
+
+@pytest.mark.asyncio
+async def test_set_user_role_success_for_superuser(anonymous_client, mock_db_session):
+    mock_admin = create_mock_user(role=UserRole.STUDENT, is_superuser=True, email="admin@coolchess.com")
+    target = create_mock_user(role=UserRole.STUDENT, email="target@coolchess.com")
+    app.dependency_overrides[current_active_user] = lambda: mock_admin
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = target
+    mock_db_session.execute.return_value = mock_res
+
+    try:
+        response = await anonymous_client.patch(
+            f"/api/admin/users/{target.id}/role",
+            json={"role": "coach"},
+        )
+        assert response.status_code == 200
+        assert response.json()["role"] == "coach"
+        assert target.role == UserRole.COACH
+    finally:
+        app.dependency_overrides.pop(current_active_user, None)
+        app.dependency_overrides.pop(get_async_session, None)
+
+
+@pytest.mark.asyncio
+async def test_set_user_role_not_found(anonymous_client, mock_db_session):
+    mock_admin = create_mock_user(role=UserRole.STUDENT, is_superuser=True, email="admin@coolchess.com")
+    app.dependency_overrides[current_active_user] = lambda: mock_admin
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = None
+    mock_db_session.execute.return_value = mock_res
+
+    try:
+        response = await anonymous_client.patch(
+            f"/api/admin/users/{uuid.uuid4()}/role",
+            json={"role": "coach"},
+        )
+        assert response.status_code == 404
     finally:
         app.dependency_overrides.pop(current_active_user, None)
         app.dependency_overrides.pop(get_async_session, None)

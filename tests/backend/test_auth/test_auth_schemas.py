@@ -39,5 +39,18 @@ def test_user_create_schema_defaults():
         "password": "strong_password_123",
     }
     user_data = UserCreate(**payload)
-    assert user_data.role == UserRole.STUDENT
-    assert user_data.elo_rating == 1200
+    # Роль и стартовый Elo назначаются сервером (дефолты модели),
+    # в схеме регистрации этих полей быть не должно.
+    assert "role" not in UserCreate.model_fields
+    assert "elo_rating" not in UserCreate.model_fields
+
+
+def test_user_create_schema_ignores_privilege_escalation():
+    # Попытка зарегистрироваться тренером: поле role игнорируется,
+    # пользователь всегда создается с серверным дефолтом STUDENT.
+    user_data = UserCreate(
+        email="attacker@chess.org",
+        password="strong_password_123",
+        role="coach",  # type: ignore[call-arg] — лишнее поле отбрасывается
+    )
+    assert getattr(user_data, "role", None) is None

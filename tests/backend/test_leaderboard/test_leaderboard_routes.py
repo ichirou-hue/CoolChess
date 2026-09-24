@@ -37,7 +37,8 @@ async def test_get_leaderboard_anonymous_by_elo(anonymous_client, mock_db_sessio
         data = res.json()
         assert data["category"] == "elo"
         assert len(data["top_players"]) == 2
-        assert data["top_players"][0]["email"] == "magnus@chess.com"
+        # Email маскируется в публичном топе (защита PII)
+        assert data["top_players"][0]["email"] == "m***@chess.com"
         assert data["top_players"][0]["rank"] == 1
         assert data["top_players"][0]["puzzles_solved"] == 150
         assert data["my_rank"] is None

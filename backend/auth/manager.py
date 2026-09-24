@@ -57,6 +57,7 @@ fastapi_users = FastAPIUsers[User, uuid.UUID](
 current_active_user = fastapi_users.current_user(active=True)
 current_verified_user = fastapi_users.current_user(active=True, verified=True)
 current_superuser = fastapi_users.current_user(active=True, superuser=True)
+current_optional_user = fastapi_users.current_user(active=True, optional=True)
 
 # 4. Ролевой контроль доступа (RBAC)
 def require_role(required_role: UserRole):

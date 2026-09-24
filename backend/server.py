@@ -5,6 +5,9 @@ from puzzles.puzzle_routes import puzzle_router
 
 from games.game_routes import game_router
 
+from leaderboard.leaderboard_routes import leaderboard_router
+
+
 
 
 
@@ -26,6 +29,9 @@ app.include_router(puzzle_router)
 
 # Регистрируем роутер партий
 app.include_router(game_router)
+
+# Регистрируем роутер таблицы лидеров
+app.include_router(leaderboard_router)
 
 app.add_middleware(
     CORSMiddleware,

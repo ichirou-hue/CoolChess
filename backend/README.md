@@ -52,7 +52,7 @@ pip install -r requirements.txt
 
 ### 2. Запуск сервера разработки
 PowerShell
-uvicorn main:app --reload --port 8080
+uvicorn server:app --reload --port 8081
 Swagger UI: http://127.0.0.1:8080/docs
 
 ReDoc: http://127.0.0.1:8080/redoc

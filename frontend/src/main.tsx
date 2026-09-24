@@ -1,6 +1,6 @@
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Chess, type Move, type Square } from 'chess.js';
+import { Chess, type Square } from 'chess.js';
 import { Chessground } from 'chessground';
 import type { Api } from 'chessground/api';
 import type { Key } from 'chessground/types';
@@ -9,12 +9,13 @@ import { lessonContent } from './data/lessonContent';
 import { lessonVisuals, type LessonVisual } from './data/lessonVisuals';
 import { awardPawns, readStudentState } from './shared/lib/studentState';
 import { AuthPage as FeatureAuthPage } from './features/auth/ui/AuthPage';
+import { AuthProvider } from './features/auth/model/AuthProvider';
+import * as gameApi from './features/chess-game/api/gameApi';
+import type { GameResponse } from './features/chess-game/api/gameApi';
 import { useHashRoute } from './app/useHashRoute';
 import 'chessground/assets/chessground.base.css';
 import 'chessground/assets/chessground.cburnett.css';
 import './styles.css';
-
-type GameResult = 'playing' | 'white' | 'black' | 'draw';
 
 function legalDests(game: Chess) {
   const dests = new Map<Key, Key[]>();
@@ -26,81 +27,94 @@ function legalDests(game: Chess) {
   return dests;
 }
 
-function gameResult(game: Chess): GameResult {
-  if (!game.isGameOver()) return 'playing';
-  if (game.isDraw()) return 'draw';
-  return game.turn() === 'w' ? 'black' : 'white';
-}
-
 function BoardShell({ game, boardRef }: { game: Chess; boardRef: React.RefObject<HTMLDivElement | null> }) {
-  return <div className="board-frame"><div ref={boardRef} className="game-board" aria-label="Шахматная доска" /><div className="board-file-label">{['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((file) => <span key={file}>{file}</span>)}</div><span className="board-turn-label">{game.turn() === 'w' ? 'Ваш ход' : 'Ход компьютера'}</span></div>;
+  return <div className="board-frame"><div ref={boardRef} className="game-board" aria-label="Шахматная доска" /><div className="board-file-label">{['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((file) => <span key={file}>{file}</span>)}</div><span className="board-turn-label">{game.turn() === 'w' ? 'Ход белых' : 'Ход чёрных'}</span></div>;
 }
 
 function ChessGame() {
   const boardRef = useRef<HTMLDivElement>(null);
   const groundRef = useRef<Api | null>(null);
   const gameRef = useRef(new Chess());
-  const [moves, setMoves] = useState<Move[]>([]);
-  const [result, setResult] = useState<GameResult>('playing');
+  const startedRef = useRef(false);
+  const gameStateRef = useRef<GameResponse | null>(null);
+  const thinkingRef = useRef(false);
+  const [game, setGame] = useState<GameResponse | null>(null);
+  const [moves, setMoves] = useState<string[]>([]);
   const [thinking, setThinking] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const syncBoard = () => {
-    const game = gameRef.current;
-    const nextResult = gameResult(game);
-    setResult(nextResult);
-    if (nextResult !== 'playing') {
-      awardPawns(`game:${game.history().join('|')}`, nextResult === 'white' ? 20 : nextResult === 'draw' ? 10 : 5, 'game');
-    }
+  const syncBoard = (response: GameResponse) => {
+    const nextGame = new Chess(response.current_fen);
+    gameRef.current = nextGame;
+    gameStateRef.current = response;
+    setGame(response);
+    setMoves(response.moves_uci);
+    const last = response.moves_uci.at(-1);
+    const canMove = response.status === 'in_progress' && ((response.player_color === 'white' && nextGame.turn() === 'w') || (response.player_color === 'black' && nextGame.turn() === 'b'));
     groundRef.current?.set({
-      fen: game.fen(),
-      turnColor: game.turn() === 'w' ? 'white' : 'black',
-      check: game.isCheck() ? (game.turn() === 'w' ? 'white' : 'black') : false,
-      lastMove: moves.length ? [moves[moves.length - 1].from as Key, moves[moves.length - 1].to as Key] : undefined,
-      movable: { color: game.turn() === 'w' ? 'white' : 'black', dests: legalDests(game) },
+      fen: response.current_fen,
+      turnColor: nextGame.turn() === 'w' ? 'white' : 'black',
+      check: response.is_check ? (nextGame.turn() === 'w' ? 'white' : 'black') : false,
+      lastMove: last ? [last.slice(0, 2) as Key, last.slice(2, 4) as Key] : undefined,
+      movable: { color: canMove ? response.player_color : 'white', dests: canMove ? legalDests(nextGame) : new Map() },
     });
   };
 
-  const computerMove = () => {
-    const game = gameRef.current;
-    if (game.isGameOver() || game.turn() !== 'b') return;
-    setThinking(true);
-    window.setTimeout(() => {
-      const current = gameRef.current;
-      const options = current.moves({ verbose: true });
-      if (!options.length) return;
-      const captures = options.filter((move) => Boolean(move.captured));
-      const pool = captures.length ? captures : options;
-      const move = pool[Math.floor(Math.random() * pool.length)];
-      const played = current.move({ from: move.from, to: move.to, promotion: 'q' });
-      setMoves((previous) => [...previous, played]);
+  const loadGame = async () => {
+    setLoading(true);
+    setError(null);
+    if (!sessionStorage.getItem('coolchess.accessToken')) {
+      setError('Сначала войдите в аккаунт');
+      setLoading(false);
+      return;
+    }
+    try {
+      const active = await gameApi.getActiveGame();
+      syncBoard(active ?? await gameApi.startGame());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не удалось загрузить партию');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendMove = async (orig: Key, dest: Key) => {
+    const currentGame = gameStateRef.current;
+    if (!currentGame?.id || thinkingRef.current || currentGame.status !== 'in_progress') return;
+    const current = gameRef.current;
+    const promotion = (orig[1] === '7' && dest[1] === '8') || (orig[1] === '2' && dest[1] === '1') ? 'q' : '';
+    try {
+      current.move({ from: orig as Square, to: dest as Square, promotion: promotion || 'q' });
+      thinkingRef.current = true;
+      setThinking(true);
+      const response = await gameApi.makeMove(currentGame.id, `${orig}${dest}${promotion}`);
+      syncBoard(response);
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не удалось отправить ход');
+      await loadGame();
+    } finally {
+      thinkingRef.current = false;
       setThinking(false);
-      syncBoard();
-    }, 480);
+    }
   };
 
   useEffect(() => {
     if (!boardRef.current) return;
-    const game = gameRef.current;
     groundRef.current = Chessground(boardRef.current, {
-      fen: game.fen(), orientation: 'white', coordinates: false, turnColor: 'white',
-      movable: { free: false, color: 'white', dests: legalDests(game), showDests: true, events: {
-        after: (orig, dest) => {
-          const current = gameRef.current;
-          try {
-            const played = current.move({ from: orig as Square, to: dest as Square, promotion: 'q' });
-            setMoves((previous) => [...previous, played]);
-            syncBoard();
-            window.setTimeout(computerMove, 80);
-          } catch { syncBoard(); }
-        },
-      } },
-      highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 180 },
+      fen: gameRef.current.fen(), orientation: 'white', coordinates: false, turnColor: 'white',
+      movable: { free: false, color: 'white', dests: new Map(), showDests: true, events: { after: (orig, dest) => { void sendMove(orig as Key, dest as Key); } } },
+      highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 220 },
     });
+    if (!startedRef.current) { startedRef.current = true; void loadGame(); }
     return () => groundRef.current?.destroy();
   }, []);
 
-  const reset = () => { gameRef.current.reset(); setMoves([]); setThinking(false); syncBoard(); };
-  return <section className="game-section" id="play"><div className="game-intro"><p className="eyebrow"><span>03</span> ИГРА ПРОТИВ КОМПЬЮТЕРА</p><h2>Сделай первый<br /><span>сильный ход.</span></h2><p>Настоящая партия с легальными ходами, взятиями, рокировкой и проверкой окончания игры.</p><div className="game-controls"><button className="button button-primary" type="button" onClick={reset}>Новая партия <span>↗</span></button><span className="engine-status"><i className={thinking ? 'thinking' : ''} /> {thinking ? 'Компьютер думает…' : result === 'playing' ? 'Компьютер готов' : result === 'draw' ? 'Ничья' : result === 'white' ? 'Вы победили' : 'Компьютер победил'}</span></div></div><div className="game-layout"><div className="player-row"><span className="avatar black-avatar">♞</span><div><strong>CoolChess Bot</strong><small>Уровень 1 · 800</small></div><span className="clock">∞</span></div><BoardShell game={gameRef.current} boardRef={boardRef} /><div className="player-row user-row"><span className="avatar user-avatar">Е</span><div><strong>Егор</strong><small>Ученик · 0 XP</small></div><span className="clock">∞</span></div></div><aside className="move-panel"><div className="panel-tabs"><button className="selected" type="button">ХОДЫ</button><button type="button">ПОЗИЦИЯ</button></div><div className="move-list">{moves.length ? moves.map((move, index) => <span key={`${move.san}-${index}`}><b>{index % 2 === 0 ? `${Math.floor(index / 2) + 1}.` : ''}</b> {move.san}</span>) : <p>Сделайте ход белыми,<br />чтобы начать партию.</p>}</div><div className="game-hint"><span>✦</span><div><strong>Подсказка</strong><p>Развивайте фигуры и контролируйте центр.</p></div></div></aside></section>;
+  const newGame = () => { void loadGame(); };
+  const statusText = loading ? 'Загрузка партии…' : error ?? (thinking ? 'Maia думает…' : game?.status === 'player_won' ? 'Вы победили' : game?.status === 'bot_won' ? 'Победил бот' : game?.status === 'draw' ? 'Ничья' : 'Ваша очередь');
+
+  return <section className="game-section" id="play"><div className="game-intro"><p className="eyebrow"><span>03</span> ИГРА ПРОТИВ MAIA</p><h2>Настоящая<br /><span>партия.</span></h2><p>Сервер проверяет каждый ход, сохраняет партию и отвечает ходом Maia.</p><div className="game-controls"><button className="button button-primary" type="button" onClick={newGame} disabled={loading || thinking}>Новая партия <span>↗</span></button><span className="engine-status"><i className={thinking ? 'thinking' : ''} /> {statusText}</span>{(error?.includes('401') || error?.includes('Сначала войдите')) && <a className="source-link" href="#auth">Войти в аккаунт ↗</a>}</div></div><div className="game-layout"><div className="player-row"><span className="avatar black-avatar">♞</span><div><strong>CoolChess Maia</strong><small>Серверная партия · {game?.bot_difficulty ?? 1500}</small></div><span className="clock">∞</span></div><BoardShell game={gameRef.current} boardRef={boardRef} /><div className="player-row user-row"><span className="avatar user-avatar">Е</span><div><strong>Ученик</strong><small>{game?.player_color === 'black' ? 'Чёрные' : 'Белые'}</small></div><span className="clock">∞</span></div></div><aside className="move-panel"><div className="panel-tabs"><button className="selected" type="button">ХОДЫ</button><button type="button">ПАРТИЯ</button></div><div className="move-list">{moves.length ? moves.map((move, index) => <span key={`${move}-${index}`}><b>{index % 2 === 0 ? `${Math.floor(index / 2) + 1}.` : ''}</b> {move}</span>) : <p>{loading ? 'Подключаемся к серверу…' : 'Начните новую партию.'}</p>}</div><div className="game-hint"><span>✦</span><div><strong>Серверная проверка</strong><p>Нелегальный ход не будет принят backend.</p></div></div></aside></section>;
 }
 
 type ImportedPuzzle = { id: string; fen: string; moves: string[]; rating: number; ratingDeviation: number; popularity: number; plays: number; themes: string[]; gameUrl: string; openingTags: string[]; dailyDate?: string };
@@ -256,4 +270,4 @@ function AppV2() {
   return <div className="app-shell"><header className="topbar"><a className="brand" href="#home" aria-label="CoolChess, на главную"><span className="brand-mark">♞</span><span>cool<span>chess</span></span></a><nav className="main-nav" aria-label="Основная навигация"><a className={route === 'home' ? 'active' : ''} href="#home">Главная</a><a className={route === 'learn' || route === 'theory' ? 'active' : ''} href="#learn">Учиться</a><a className={route === 'play' ? 'active' : ''} href="#play">Играть</a><a className={route === 'puzzles' ? 'active' : ''} href="#puzzles">Задачи</a><a className={route === 'community' ? 'active' : ''} href="#community">Сообщество</a></nav><div className="topbar-user"><a className="auth-nav-link" href="#auth">Войти</a><WalletBadge /><a className="profile-button" href="#profile">Мой профиль <span>↗</span></a></div><button className="menu-button" type="button" aria-label="Открыть меню">☰</button></header><main className="route-main">{page}</main><footer className="footer"><div className="footer-brand"><span className="brand-mark">♞</span><span>cool<span>chess</span></span></div><p>Шахматы, которые растут вместе с тобой.</p><small>© 2026 CoolChess. Учимся думать на несколько ходов вперёд.</small></footer></div>;
 }
 
-createRoot(document.getElementById('root')!).render(<StrictMode><AppV2 /></StrictMode>);
+createRoot(document.getElementById('root')!).render(<StrictMode><AuthProvider><AppV2 /></AuthProvider></StrictMode>);

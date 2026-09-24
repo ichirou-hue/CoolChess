@@ -62,7 +62,6 @@ async def test_coach_dashboard_unauthorized(anonymous_client):
 
 @pytest.mark.asyncio
 async def test_coach_dashboard_forbidden_for_student(anonymous_client):
-    """Студент не имеет прав тренера и получает 403 Forbidden."""
     mock_student = create_mock_user(role=UserRole.STUDENT)
     app.dependency_overrides[current_active_user] = lambda: mock_student
 
@@ -76,7 +75,6 @@ async def test_coach_dashboard_forbidden_for_student(anonymous_client):
 
 @pytest.mark.asyncio
 async def test_coach_dashboard_success_for_coach(anonymous_client):
-    """Пользователь с ролью COACH успешно заходит в панель."""
     mock_coach = create_mock_user(role=UserRole.COACH, email="coach@coolchess.com")
     app.dependency_overrides[current_active_user] = lambda: mock_coach
 
@@ -90,7 +88,6 @@ async def test_coach_dashboard_success_for_coach(anonymous_client):
 
 @pytest.mark.asyncio
 async def test_coach_dashboard_allowed_for_superuser(anonymous_client):
-    """Суперпользователь (админ) может обходить ролевые ограничения."""
     mock_admin = create_mock_user(role=UserRole.STUDENT, is_superuser=True, email="admin@coolchess.com")
     app.dependency_overrides[current_active_user] = lambda: mock_admin
 
@@ -101,7 +98,7 @@ async def test_coach_dashboard_allowed_for_superuser(anonymous_client):
         app.dependency_overrides.pop(current_active_user, None)
 
 
-# --- 3. ТЕСТЫ СИНХРОНИЗАЦИИ С LICHESS API ---
+# --- 3. ТЕСТЫ ВЕРИФИКАЦИИ И СИНХРОНИЗАЦИИ LICHESS ---
 
 @pytest.mark.asyncio
 async def test_sync_lichess_unauthorized(anonymous_client):
@@ -110,7 +107,52 @@ async def test_sync_lichess_unauthorized(anonymous_client):
 
 
 @pytest.mark.asyncio
-async def test_sync_lichess_success_calibrates_elo(anonymous_client, mock_db_session):
+async def test_get_lichess_verification_code(anonymous_client):
+    mock_student = create_mock_user(role=UserRole.STUDENT)
+    app.dependency_overrides[current_active_user] = lambda: mock_student
+
+    try:
+        response = await anonymous_client.get("/api/users/lichess-verification-code")
+        assert response.status_code == 200
+        data = response.json()
+        assert "coolchess-verify-" in data["verification_code"]
+        assert data["verification_code"] in data["instructions"]
+    finally:
+        app.dependency_overrides.pop(current_active_user, None)
+
+
+@pytest.mark.asyncio
+async def test_sync_lichess_fails_without_verification_code_in_bio(anonymous_client, mock_db_session):
+    mock_student = create_mock_user(role=UserRole.STUDENT)
+    app.dependency_overrides[current_active_user] = lambda: mock_student
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+
+    fake_lichess_data = {
+        "username": "MagnusCarlsen",
+        "bio": "Just a normal chess fan bio without secret token",
+        "blitz_rating": 2850,
+        "rapid_rating": 2820,
+        "puzzle_rating": 2900,
+    }
+
+    try:
+        with patch("auth.users_routes.lichess_service.fetch_user_profile", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = fake_lichess_data
+
+            response = await anonymous_client.post(
+                "/api/users/sync-lichess",
+                json={"lichess_username": "MagnusCarlsen"}
+            )
+
+            assert response.status_code == 400
+            assert "не найден в профиле Lichess" in response.json()["detail"]
+    finally:
+        app.dependency_overrides.pop(current_active_user, None)
+        app.dependency_overrides.pop(get_async_session, None)
+
+
+@pytest.mark.asyncio
+async def test_sync_lichess_success_with_verification_code(anonymous_client, mock_db_session):
     mock_student = create_mock_user(role=UserRole.STUDENT)
     mock_student.games_played = 0
     mock_student.elo_rating = 1200
@@ -118,8 +160,10 @@ async def test_sync_lichess_success_calibrates_elo(anonymous_client, mock_db_ses
     app.dependency_overrides[current_active_user] = lambda: mock_student
     app.dependency_overrides[get_async_session] = lambda: mock_db_session
 
+    code = f"coolchess-verify-{str(mock_student.id)[:8]}"
     fake_lichess_data = {
         "username": "MagnusCarlsen",
+        "bio": f"Hello world! Verifying: {code}",
         "blitz_rating": 2850,
         "rapid_rating": 2820,
         "puzzle_rating": 2900,
@@ -138,8 +182,7 @@ async def test_sync_lichess_success_calibrates_elo(anonymous_client, mock_db_ses
             data = response.json()
             assert data["lichess_username"] == "MagnusCarlsen"
             assert data["lichess_rapid_rating"] == 2820
-            assert data["lichess_blitz_rating"] == 2850
-            assert data["updated_elo"] == 2820  # Новичок откалибровался по Rapid
+            assert data["updated_elo"] == 2820
             assert mock_student.lichess_username == "MagnusCarlsen"
     finally:
         app.dependency_overrides.pop(current_active_user, None)

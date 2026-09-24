@@ -18,6 +18,7 @@ async def test_fetch_user_profile_success():
     service = LichessService()
     mock_payload = {
         "username": "drnykterstein",
+        "profile": {"bio": "hello lichess"},
         "perfs": {
             "blitz": {"rating": 2800},
             "rapid": {"rating": 2750},
@@ -25,13 +26,18 @@ async def test_fetch_user_profile_success():
         },
     }
 
-    mock_resp = httpx.Response(200, json=mock_payload, request=httpx.Request("GET", "https://lichess.org/api/user/drnykterstein"))
+    mock_resp = httpx.Response(
+        200,
+        json=mock_payload,
+        request=httpx.Request("GET", "https://lichess.org/api/user/drnykterstein")
+    )
 
     with patch.object(httpx.AsyncClient, "get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = mock_resp
         result = await service.fetch_user_profile("drnykterstein")
 
         assert result["username"] == "drnykterstein"
+        assert result["bio"] == "hello lichess"
         assert result["blitz_rating"] == 2800
         assert result["rapid_rating"] == 2750
         assert result["puzzle_rating"] == 2600

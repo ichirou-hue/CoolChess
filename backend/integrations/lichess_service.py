@@ -12,7 +12,7 @@ class LichessService:
     async def fetch_user_profile(self, username: str) -> Dict[str, Any]:
         """
         Запрашивает публичный профиль пользователя с Lichess API.
-        Возвращает распарсенный JSON с рейтингами.
+        Возвращает распарсенный JSON с рейтингами и текстом био.
         """
         clean_username = username.strip().lower()
         if not clean_username:
@@ -58,13 +58,16 @@ class LichessService:
 
     def _parse_ratings(self, data: Dict[str, Any]) -> Dict[str, Any]:
         perfs = data.get("perfs", {})
-        
+        profile = data.get("profile", {})
+
         blitz = perfs.get("blitz", {}).get("rating")
         rapid = perfs.get("rapid", {}).get("rating")
         puzzle = perfs.get("puzzle", {}).get("rating")
+        bio = profile.get("bio", "") or ""
 
         return {
             "username": data.get("username", ""),
+            "bio": bio,
             "blitz_rating": blitz,
             "rapid_rating": rapid,
             "puzzle_rating": puzzle,

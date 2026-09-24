@@ -67,3 +67,7 @@ class LichessSyncResponse(BaseModel):
     lichess_puzzle_rating: Optional[int] = None
     updated_elo: int
     message: str
+
+class LichessVerificationCodeResponse(BaseModel):
+    verification_code: str
+    instructions: str

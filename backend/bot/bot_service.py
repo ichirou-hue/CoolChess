@@ -1,19 +1,25 @@
 import os
-import torch
 import chess
 from typing import Dict, Any
-from maia3.uci import parse_args, Maia3UCIEngine
+
+try:
+    import torch
+    from maia3.uci import parse_args, Maia3UCIEngine
+except ImportError:
+    torch = None
+    parse_args = None
+    Maia3UCIEngine = None
 
 class MaiaBotService:
     def __init__(self):
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.model_path = os.path.join(base_dir, "models", "maia3-5m.pt")
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cuda" if torch is not None and torch.cuda.is_available() else "cpu"
         self.engine = None
         self._load_engine()
 
     def _load_engine(self):
-        if not os.path.exists(self.model_path):
+        if not os.path.exists(self.model_path) or Maia3UCIEngine is None or parse_args is None:
             print(f"[MaiaBot Warning] Файл весов не найден: {self.model_path}")
             return
 

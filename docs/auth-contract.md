@@ -1,201 +1,90 @@
-# Авторизация для backend-разработчика
+# Авторизация CoolChess: реальный контракт
 
-Этот файл объясняет простыми словами, как подключить сервер к готовым экранам входа CoolChess.
+Сейчас backend использует JWT Bearer-токен. Cookie-сессия из старой версии документа больше не используется.
 
-## Что уже есть на frontend
+## Endpoint’ы
 
-- Экран находится в `frontend/src/features/auth/ui/AuthPage.tsx`.
-- Вход открывается по адресу `#auth`.
-- Регистрация открывается по адресу `#auth/register`.
-- Сейчас это демонстрационная форма: она ничего не отправляет на сервер.
-- После подключения API внешний вид менять не нужно — мы заменим только действие кнопки.
+| Метод  | Адрес                  | Что делает                       |
+| ------ | ---------------------- | -------------------------------- |
+| `POST` | `/api/auth/register`   | создаёт ученика                  |
+| `POST` | `/api/auth/jwt/login`  | выдаёт JWT-токен                 |
+| `POST` | `/api/auth/jwt/logout` | завершает JWT-сессию             |
+| `GET`  | `/api/users/me`        | возвращает текущего пользователя |
+| `GET`  | `/api/me/profile`      | возвращает профиль игрока и Elo  |
 
-## Что должен сделать backend
+## Регистрация
 
-Нужны четыре простых адреса:
-
-| Метод и адрес | Для чего |
-| --- | --- |
-| `POST /api/auth/register` | создать ученика |
-| `POST /api/auth/login` | войти в аккаунт |
-| `POST /api/auth/logout` | выйти из аккаунта |
-| `GET /api/auth/me` | проверить, кто сейчас вошёл |
-
-Все запросы и ответы — JSON.
-
-## 1. Регистрация
-
-Frontend отправляет:
+Frontend отправляет JSON:
 
 ```json
 {
-  "displayName": "Егор",
-  "email": "egor@example.com",
-  "password": "secret-password"
+  "email": "student@example.com",
+  "password": "secret-password",
+  "role": "student",
+  "elo_rating": 1200
 }
 ```
 
-Если всё хорошо, сервер отвечает кодом `201`:
+## Вход
+
+Login принимает не JSON, а form-data:
+
+```text
+username=student@example.com
+password=secret-password
+```
+
+Успешный ответ:
 
 ```json
 {
-  "user": {
-    "id": "uuid",
-    "email": "egor@example.com",
-    "displayName": "Егор",
-    "role": "student"
-  }
+  "access_token": "jwt-token",
+  "token_type": "bearer"
 }
 ```
 
-После этого сервер создаёт сессию и кладёт её в cookie.
+После входа frontend сохраняет токен на время текущей вкладки и отправляет его в каждом защищённом запросе:
 
-## 2. Вход
+```http
+Authorization: Bearer jwt-token
+```
 
-Frontend отправляет:
+## Проверка пользователя
+
+```http
+GET /api/users/me
+Authorization: Bearer jwt-token
+```
+
+Сейчас ответ содержит минимум:
 
 ```json
 {
-  "email": "egor@example.com",
-  "password": "secret-password"
+  "id": "uuid",
+  "email": "student@example.com",
+  "role": "student",
+  "elo_rating": 1200
 }
 ```
 
-При успехе сервер отвечает кодом `200`, возвращает тот же объект `user` и устанавливает cookie сессии.
+Позже в `UserRead` нужно добавить `xp`, `level`, `coins` и статистику игр, чтобы frontend мог показывать настоящий профиль.
 
-## 3. Проверка сессии
+## Где это подключено на frontend
 
-При открытии сайта frontend вызывает:
+- `frontend/src/features/auth/api/authApi.ts` — запросы к backend;
+- `frontend/src/features/auth/model/AuthProvider.tsx` — текущий пользователь и состояние входа;
+- `frontend/src/features/auth/ui/AuthPage.tsx` — форма входа и регистрации;
+- `frontend/.env.example` — адрес backend.
 
-```
-GET /api/auth/me
-```
+## Запуск вместе
 
-Если пользователь вошёл, вернуть:
+Backend запускается на `http://localhost:8081`, frontend — на `http://localhost:5173`.
 
-```json
-{
-  "user": {
-    "id": "uuid",
-    "email": "egor@example.com",
-    "displayName": "Егор",
-    "role": "student"
-  }
-}
+В backend CORS должен разрешать оба frontend-адреса:
+
+```text
+http://localhost:5173
+http://127.0.0.1:5173
 ```
 
-Если пользователь не вошёл, вернуть `401`.
-
-## 4. Выход
-
-На выходе frontend вызывает:
-
-```
-POST /api/auth/logout
-```
-
-Сервер удаляет cookie и отвечает кодом `204`.
-
-## Как frontend будет обращаться к серверу
-
-В frontend появится переменная:
-
-```
-VITE_API_URL=http://localhost:8080
-```
-
-Тогда запрос входа выглядит так:
-
-```ts
-fetch(`${import.meta.env.VITE_API_URL}/api/auth/login`, {
-  method: 'POST',
-  credentials: 'include',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ email, password }),
-});
-```
-
-Важно: `credentials: 'include'` нужен, чтобы браузер сохранял cookie.
-
-## Что настроить на сервере
-
-Для локальной разработки разрешить frontend:
-
-- `http://localhost:5173`
-- `http://127.0.0.1:5173`
-
-В CORS включить отправку cookies: `credentials: true`.
-
-Cookie должна быть:
-
-- `HttpOnly`;
-- `SameSite=Lax`;
-- `Secure` только на настоящем HTTPS-сайте.
-
-Пароль нужно хранить только как безопасный хэш. Сам пароль и `password_hash` никогда не возвращать frontend.
-
-## Единый формат ошибок
-
-При ошибке возвращать такой JSON:
-
-```json
-{
-  "error": {
-    "code": "INVALID_CREDENTIALS",
-    "message": "Неверный email или пароль",
-    "fields": {
-      "email": "Проверь email или пароль"
-    }
-  }
-}
-```
-
-Нужные коды:
-
-- `EMAIL_ALREADY_EXISTS` — email уже занят;
-- `INVALID_CREDENTIALS` — неправильный вход;
-- `VALIDATION_ERROR` — ошибка конкретного поля;
-- `TOO_MANY_REQUESTS` — слишком много попыток.
-
-## Минимальные данные ученика
-
-Сначала достаточно такой модели:
-
-```
-id
-email
-displayName
-role = student
-avatarUrl (может быть пустым)
-createdAt
-```
-
-Пешки, серия, решённые задачи и статистику лучше хранить отдельно. В каждой такой записи нужен `userId`, чтобы понимать, какому ученику она принадлежит.
-
-## Как проверить соединение вдвоём
-
-1. Backend-разработчик запускает API, например на порту `8080`.
-2. Frontend-разработчик запускает CoolChess на порту `5173`.
-3. В frontend указывается `VITE_API_URL=http://localhost:8080`.
-4. Проверяется регистрация.
-5. Затем обновляется страница и проверяется `GET /api/auth/me`.
-6. После этого проверяется выход.
-
-Для теста используйте отдельный аккаунт, не настоящий пароль.
-
-## Что backend-разработчик должен прислать frontend-разработчику
-
-- адрес API;
-- список готовых endpoint’ов;
-- пример успешного ответа;
-- пример ошибки;
-- настройки CORS;
-- тестовый аккаунт без настоящих личных данных.
-
-Связанные файлы frontend:
-
-- `frontend/src/features/auth/ui/AuthPage.tsx` — экран;
-- `frontend/src/app/useHashRoute.ts` — переходы по страницам;
-- `docs/frontend-architecture.md` — простая схема проекта.
-
-После готовности API demo-обработчик формы заменяется на `fetch`. Дизайн и маршруты при этом сохраняются.
+Для браузера нельзя использовать `allow_origins=["*"]` вместе с `allow_credentials=True`. Нужно указать конкретные адреса.

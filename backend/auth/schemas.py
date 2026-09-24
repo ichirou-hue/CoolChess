@@ -4,6 +4,8 @@ from fastapi import HTTPException, status
 from fastapi_users import schemas
 from disposable_email_domains import blocklist
 from auth.models import UserRole
+from pydantic import BaseModel, Field
+from typing import Optional
 
 def normalize_and_validate_email(email: str) -> str:
     cleaned = email.strip().lower()
@@ -49,8 +51,23 @@ class UserCreate(schemas.BaseUserCreate):
     def validate_email_safety(cls, v: str) -> str:
         return normalize_and_validate_email(v)
 
-
 # Схема обновления профиля
 class UserUpdate(schemas.BaseUserUpdate):
     role: UserRole | None = None
     elo_rating: int | None = None
+
+class LichessSyncRequest(BaseModel):
+    lichess_username: str = Field(..., min_length=2, max_length=50, description="Никнейм на lichess.org")
+
+
+class LichessSyncResponse(BaseModel):
+    lichess_username: str
+    lichess_blitz_rating: Optional[int] = None
+    lichess_rapid_rating: Optional[int] = None
+    lichess_puzzle_rating: Optional[int] = None
+    updated_elo: int
+    message: str
+
+class LichessVerificationCodeResponse(BaseModel):
+    verification_code: str
+    instructions: str

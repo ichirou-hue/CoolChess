@@ -25,6 +25,28 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     role = Column(SQLEnum(UserRole), default=UserRole.STUDENT, nullable=False)
     elo_rating = Column(Integer, default=1200, nullable=False)
+
+    # Геймификация и статистика
+    xp = Column(Integer, default=0, nullable=False)
+    level = Column(Integer, default=1, nullable=False)
+    coins = Column(Integer, default=0, nullable=False)
+    games_played = Column(Integer, default=0, nullable=False)
+    tournaments_played = Column(Integer, default=0, nullable=False)
+    tournaments_won = Column(Integer, default=0, nullable=False)
+    tournaments_podium = Column(Integer, default=0, nullable=False)
+
+    # Решенные задачи
+    solved_puzzles = relationship("Puzzle", secondary=user_solved_puzzles, back_populates="solvers")
+
+    # Lichess интеграция
+    lichess_username = Column(String(50), nullable=True, index=True)
+    lichess_blitz_rating = Column(Integer, nullable=True)
+    lichess_rapid_rating = Column(Integer, nullable=True)
+    lichess_puzzle_rating = Column(Integer, nullable=True)
+    __tablename__ = "users"
+
+    role = Column(SQLEnum(UserRole), default=UserRole.STUDENT, nullable=False)
+    elo_rating = Column(Integer, default=1200, nullable=False)
     games_played = Column(Integer, default=0, nullable=False)
     tournaments_played = Column(Integer, default=0, nullable=False)
     tournaments_won = Column(Integer, default=0, nullable=False)
@@ -39,6 +61,12 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     tournaments_played = Column(Integer, default=0, nullable=False)
     tournaments_won = Column(Integer, default=0, nullable=False)
     tournaments_podium = Column(Integer, default=0, nullable=False)
+
+    # Lichess интеграция
+    lichess_username = Column(String(50), nullable=True, index=True)
+    lichess_blitz_rating = Column(Integer, nullable=True)
+    lichess_rapid_rating = Column(Integer, nullable=True)
+    lichess_puzzle_rating = Column(Integer, nullable=True)
     
 class Puzzle(Base):
     __tablename__ = "puzzles"

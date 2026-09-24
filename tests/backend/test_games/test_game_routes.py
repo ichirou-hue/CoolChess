@@ -238,6 +238,12 @@ async def test_resign_game_success(authorized_client):
     assert data["status"] == "resigned"
     assert data["winner"] == "bot"
     assert user.games_played == 1
+    # Сдача не приносит опыт и монеты (защита от фарма start -> resign),
+    # но засчитывается как поражение для Elo.
+    assert data["xp_earned"] == 0
+    assert data["coins_earned"] == 0
+    assert user.xp == 0
+    assert user.coins == 0
 
 
 # --- 6. ИСТОРИЯ ПАРТИЙ (GET /api/games/my) ---

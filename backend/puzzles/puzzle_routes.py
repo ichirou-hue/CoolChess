@@ -3,6 +3,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, ConfigDict
 
 from database import get_async_session
@@ -151,6 +152,24 @@ async def solve_puzzle(
     elo_change = 0
 
     if not already_solved:
+        # Вставку делаем ДО начисления наград и ловим IntegrityError:
+        # два параллельных запроса могут оба пройти проверку выше,
+        # но составной PK (user_id, puzzle_id) пропустит только один.
+        # Проигравший получает already_solved=True без повторных наград.
+        insert_stmt = user_solved_puzzles.insert().values(
+            user_id=user.id,
+            puzzle_id=puzzle.id
+        )
+        try:
+            await db.execute(insert_stmt)
+        except IntegrityError:
+            await db.rollback()
+            return SolveResponse(
+                is_correct=True,
+                message="Отлично! Задача решена верно.",
+                already_solved=True,
+            )
+
         # Награды по порогам рейтинга самой задачи
         rewards = get_fixed_puzzle_rewards(puzzle.rating)
         xp_earned = rewards["xp_gain"]
@@ -163,12 +182,6 @@ async def solve_puzzle(
         user.elo_rating += elo_change
         user.level = calculate_level(user.xp)
 
-        # Сохраняем в таблицу решённых
-        insert_stmt = user_solved_puzzles.insert().values(
-            user_id=user.id,
-            puzzle_id=puzzle.id
-        )
-        await db.execute(insert_stmt)
         await db.commit()
 
     return SolveResponse(

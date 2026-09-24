@@ -13,6 +13,7 @@ from bot.bot_service import maia_engine
 from games.models import Game, GameStatus, PlayerColor
 from games.schemas import GameCreateRequest, PlayerMoveRequest, GameResponse, GameHistoryItem
 from games.rewards import calculate_match_rewards, apply_match_rewards_to_user
+from puzzles.rewards import calculate_level
 
 game_router = APIRouter(prefix="/api/games", tags=["Партии с Maia Bot"])
 
@@ -213,15 +214,19 @@ async def resign_game(
 
     game.status = GameStatus.RESIGNED
 
+    # Сдача партии засчитывается как поражение для Elo, но НЕ приносит
+    # опыт и монеты: иначе цикл start -> resign дает бесконечный фарм XP.
     rewards = calculate_match_rewards(user.elo_rating, game.bot_difficulty, "loss")
-    apply_match_rewards_to_user(user, rewards)
+    user.games_played += 1
+    user.elo_rating = max(100, user.elo_rating + rewards["elo_delta"])
+    user.level = calculate_level(user.xp)
 
     await db.commit()
 
     return _build_game_response(
         game,
-        xp=rewards["xp_earned"],
-        coins=rewards["coins_earned"],
+        xp=0,
+        coins=0,
         elo_delta=rewards["elo_delta"],
     )
 

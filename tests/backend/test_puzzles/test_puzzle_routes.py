@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
+from sqlalchemy.exc import IntegrityError
 from auth.models import Puzzle
 
 
@@ -182,3 +183,42 @@ async def test_solve_puzzle_already_solved_repeat(authorized_client):
     assert data["coins_earned"] == 0
     assert data["elo_change"] == 0
     assert data["new_level"] is None
+
+
+@pytest.mark.asyncio
+async def test_solve_puzzle_concurrent_race_no_double_rewards(authorized_client):
+    # Гонка: два параллельных запроса оба прошли проверку already_solved,
+    # но составной PK пропустил только один — второй ловит IntegrityError
+    # и получает already_solved=True без повторных наград.
+    client, user, db = authorized_client
+    fake_puzzle = make_fake_puzzle(rating=1526)
+
+    res_puzzle = MagicMock()
+    res_puzzle.scalar_one_or_none.return_value = fake_puzzle
+
+    res_already_solved = MagicMock()
+    res_already_solved.first.return_value = None
+
+    db.execute.side_effect = [
+        res_puzzle,
+        res_already_solved,
+        IntegrityError("INSERT INTO user_solved_puzzles", {}, Exception("duplicate key")),
+    ]
+
+    response = await client.post(
+        f"/api/puzzles/{fake_puzzle.id}/solve",
+        json={"user_moves": "b6e3"}
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["is_correct"] is True
+    assert data["already_solved"] is True
+    assert data["xp_earned"] == 0
+    assert data["coins_earned"] == 0
+    assert data["elo_change"] == 0
+    # Награды не начислены повторно
+    assert user.xp == 0
+    assert user.coins == 0
+    assert user.elo_rating == 1200
+    db.rollback.assert_awaited_once()

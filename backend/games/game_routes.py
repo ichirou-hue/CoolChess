@@ -10,17 +10,23 @@ from database import get_async_session
 from auth.models import User
 from auth.manager import current_active_user
 from bot.bot_service import maia_engine
-from puzzles.rewards import calculate_level
 from games.models import Game, GameStatus, PlayerColor
 from games.schemas import GameCreateRequest, PlayerMoveRequest, GameResponse, GameHistoryItem
+from games.rewards import calculate_match_rewards, apply_match_rewards_to_user
 
 game_router = APIRouter(prefix="/api/games", tags=["Партии с Maia Bot"])
 
 
-def _build_game_response(game: Game, last_bot_move: Optional[str] = None, xp: int = 0, coins: int = 0) -> GameResponse:
+def _build_game_response(
+    game: Game,
+    last_bot_move: Optional[str] = None,
+    xp: int = 0,
+    coins: int = 0,
+    elo_delta: int = 0,
+) -> GameResponse:
     board = chess.Board(game.current_fen)
     moves = game.moves_uci.split() if game.moves_uci else []
-    
+
     winner = None
     if game.status == GameStatus.PLAYER_WON:
         winner = "player"
@@ -41,7 +47,8 @@ def _build_game_response(game: Game, last_bot_move: Optional[str] = None, xp: in
         winner=winner,
         last_bot_move=last_bot_move,
         xp_earned=xp,
-        coins_earned=coins
+        coins_earned=coins,
+        elo_delta=elo_delta,
     )
 
 
@@ -54,7 +61,7 @@ async def get_active_game(
     stmt = select(Game).where(
         and_(Game.user_id == user.id, Game.status == GameStatus.IN_PROGRESS)
     ).order_by(desc(Game.updated_at)).limit(1)
-    
+
     res = await db.execute(stmt)
     game = res.scalar_one_or_none()
     if not game:
@@ -137,47 +144,55 @@ async def make_move(
 
     xp_earned = 0
     coins_earned = 0
+    elo_delta = 0
 
     # 2. Проверка: не поставил ли игрок мат / пат
     if board.is_game_over():
-        if board.is_checkmate():
-            game.status = GameStatus.PLAYER_WON
-            # Награды за победу над ботом в зависимости от его сложности
-            xp_earned = int(game.bot_difficulty / 15)  # например, 1500 Elo -> 100 XP
-            coins_earned = int(game.bot_difficulty / 50)
-            user.xp += xp_earned
-            user.coins += coins_earned
-            user.games_played += 1
-            user.level = calculate_level(user.xp)
-        else:
-            game.status = GameStatus.DRAW
-            user.games_played += 1
+        outcome = "win" if board.is_checkmate() else "draw"
+        game.status = GameStatus.PLAYER_WON if outcome == "win" else GameStatus.DRAW
+
+        rewards = calculate_match_rewards(user.elo_rating, game.bot_difficulty, outcome)
+        apply_match_rewards_to_user(user, rewards)
+        xp_earned = rewards["xp_earned"]
+        coins_earned = rewards["coins_earned"]
+        elo_delta = rewards["elo_delta"]
 
         game.current_fen = board.fen()
         game.moves_uci = " ".join(moves_list)
         await db.commit()
-        return _build_game_response(game, xp=xp_earned, coins=coins_earned)
+        return _build_game_response(
+            game, xp=xp_earned, coins=coins_earned, elo_delta=elo_delta
+        )
 
     # 3. Ответный ход Maia
     bot_res = maia_engine.predict_move(board.fen(), target_rating=game.bot_difficulty)
     bot_move_uci = bot_res.get("move_uci")
-    
+
     if bot_move_uci:
         moves_list.append(bot_move_uci)
         board_after_bot = chess.Board(bot_res["new_fen"])
         game.current_fen = bot_res["new_fen"]
 
         if board_after_bot.is_game_over():
-            if board_after_bot.is_checkmate():
-                game.status = GameStatus.BOT_WON
-            else:
-                game.status = GameStatus.DRAW
-            user.games_played += 1
-    
+            outcome = "loss" if board_after_bot.is_checkmate() else "draw"
+            game.status = GameStatus.BOT_WON if outcome == "loss" else GameStatus.DRAW
+
+            rewards = calculate_match_rewards(user.elo_rating, game.bot_difficulty, outcome)
+            apply_match_rewards_to_user(user, rewards)
+            xp_earned = rewards["xp_earned"]
+            coins_earned = rewards["coins_earned"]
+            elo_delta = rewards["elo_delta"]
+
     game.moves_uci = " ".join(moves_list)
     await db.commit()
 
-    return _build_game_response(game, last_bot_move=bot_move_uci)
+    return _build_game_response(
+        game,
+        last_bot_move=bot_move_uci,
+        xp=xp_earned,
+        coins=coins_earned,
+        elo_delta=elo_delta,
+    )
 
 
 @game_router.post("/{game_id}/resign", response_model=GameResponse)
@@ -197,10 +212,18 @@ async def resign_game(
         raise HTTPException(status_code=400, detail="Партия уже завершена.")
 
     game.status = GameStatus.RESIGNED
-    user.games_played += 1
+
+    rewards = calculate_match_rewards(user.elo_rating, game.bot_difficulty, "loss")
+    apply_match_rewards_to_user(user, rewards)
+
     await db.commit()
 
-    return _build_game_response(game)
+    return _build_game_response(
+        game,
+        xp=rewards["xp_earned"],
+        coins=rewards["coins_earned"],
+        elo_delta=rewards["elo_delta"],
+    )
 
 
 @game_router.get("/my", response_model=List[GameHistoryItem])

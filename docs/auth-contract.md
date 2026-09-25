@@ -78,7 +78,7 @@ Authorization: Bearer jwt-token
 
 ## Запуск вместе
 
-Backend запускается на `http://localhost:8081`, frontend — на `http://localhost:5173`.
+Backend запускается на `http://localhost:8080`, frontend — на `http://localhost:5173`.
 
 В backend CORS должен разрешать оба frontend-адреса:
 

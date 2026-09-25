@@ -1,14 +1,48 @@
+# CoolChess — зависимости backend
+# Установка: pip install -r requirements.txt
+# Проверка: .\venv\Scripts\python.exe -m pytest -q
+
+# --- Web API ---
 fastapi>=0.110.0
-fastapi-users[sqlalchemy]>=15.0.5
-sqlalchemy[asyncio]>=2.0.0
-asyncpg>=0.29.0
-aiosqlite>=0.20.0
-python-dotenv>=1.0.0
-disposable-email-domains>=0.0.1
 uvicorn[standard]>=0.28.0
-python-chess>=1.999
 pydantic>=2.0.0
+python-multipart>=0.0.32   # form-data для POST /api/auth/jwt/login (username/password)
+
+# --- Аутентификация (fastapi-users, JWT Bearer) ---
+fastapi-users[sqlalchemy]>=15.0.5
+fastapi-users-db-sqlalchemy>=7.0.0   # SQLAlchemyUserDatabase (импорт напрямую в backend/auth/db.py)
+email-validator>=2.3.0               # валидация email в схемах fastapi-users
+bcrypt>=4.1.0                        # хеширование паролей
+PyJWT>=2.8.0                         # JWTStrategy (auth_backend)
+
+# --- База данных и ORM ---
+sqlalchemy[asyncio]>=2.0.0
+asyncpg>=0.29.0        # PostgreSQL (продакшен и Docker)
+aiosqlite>=0.20.0      # SQLite (локальная разработка без Docker)
+python-dotenv>=1.0.0   # чтение DATABASE_URL / JWT_SECRET из .env
+
+# --- Антиспам email при регистрации ---
+disposable-email-domains>=0.0.1
+
+# --- Шахматная логика ---
+python-chess>=1.999
+
+# --- HTTP-клиент (Lichess API, тесты) ---
 httpx>=0.27.0
-# Только для скрипта загрузки задач backend/load_lichess_puzzles.py
+
+# --- Датасет задач Lichess ---
+# Только для скриптов backend/load_lichess_puzzles.py и scripts/import_lichess_puzzles.py
 requests>=2.31.0
 zstandard>=0.22.0
+
+# --- Тестирование ---
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=5.0.0
+
+# --- Нейросетевой движок Maia-3 (ОПЦИОНАЛЬНО, тяжёлое) ---
+# Без этих пакетов бот работает в fallback-режиме (первый легальный ход).
+# Веса backend/models/maia3-5m.pt в Git не хранятся (правило *.pt).
+# Установка вручную:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install "maia3 @ git+https://github.com/CSSLab/maia3.git@1e13597c42d4858b7cfd7cfdae01e297263364b2"

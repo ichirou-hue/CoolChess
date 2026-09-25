@@ -1,3 +1,4 @@
+/* Shared visual styles and responsive layouts for the CoolChess screens. */
 @import url('https://fonts.googleapis.com/css2?family=Geologica:wght@300;500;600&family=Montserrat:wght@300;400;600;700;800&display=swap');
 @import "tailwindcss";
 
@@ -160,3 +161,13 @@ h1 em { color: #464bff; font-style: normal; }
   .learn-article { padding: 16px; }
   .learn-article-board { width: 100%; }
 }
+/* Controls for data loaded from the backend APIs. */
+.leaderboard-filters { display: flex; flex-wrap: wrap; gap: 5px; }
+.leaderboard-filters button { background: #f1f1f6; border: 0; border-radius: 7px; color: #777985; cursor: pointer; font: inherit; font-size: 9px; padding: 7px 9px; }
+.leaderboard-filters button.selected { background: #464bff; color: #fff; }
+.puzzle-reward { color: #555662; font-size: 12px; line-height: 1.5; }
+.lichess-link-controls { align-content: center; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.lichess-link-controls input { background: #f7f7fb; border: 1px solid #e1e2eb; border-radius: 9px; font: inherit; font-size: 12px; min-width: 170px; padding: 11px 12px; }
+.lichess-link-controls .button { cursor: pointer; }
+.lichess-link-controls .button:disabled { cursor: wait; opacity: .6; }
+@media (max-width: 700px) { .lichess-link-controls { justify-content: flex-start; margin-top: 16px; } .lichess-link-controls input { width: 100%; } .leaderboard-filters { margin-top: 8px; } }

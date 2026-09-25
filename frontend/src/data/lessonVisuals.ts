@@ -1,3 +1,4 @@
+/** FEN positions and move lines for lesson board demonstrations. */
 export type LessonVisual = {
   fen: string;
   moves: string[];

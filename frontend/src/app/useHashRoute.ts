@@ -1,3 +1,4 @@
+/** Keeps the current app page in sync with the URL hash. */
 import { useEffect, useState } from 'react';
 
 export function useHashRoute() {

@@ -1,3 +1,4 @@
+/** Starts games and sends player moves to the backend. */
 export type GameResponse = {
   id: string;
   status: 'in_progress' | 'player_won' | 'bot_won' | 'draw' | 'resigned' | string;

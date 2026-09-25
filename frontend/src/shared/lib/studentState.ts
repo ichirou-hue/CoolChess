@@ -1,3 +1,4 @@
+/** Temporary browser storage for progress until the progress API is ready. */
 export type RewardKind = 'puzzle' | 'theory' | 'game';
 
 export type StudentState = {

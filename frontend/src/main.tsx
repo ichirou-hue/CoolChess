@@ -1,3 +1,4 @@
+/** Browser entry point: starts CoolChess and connects its main screens. */
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Chess, type Square } from 'chess.js';
@@ -7,12 +8,22 @@ import type { Key } from 'chessground/types';
 import { courseModules } from './data/course';
 import { lessonContent } from './data/lessonContent';
 import { lessonVisuals, type LessonVisual } from './data/lessonVisuals';
-import { awardPawns, readStudentState } from './shared/lib/studentState';
+import { awardPawns } from './shared/lib/studentState';
 import { AuthPage as FeatureAuthPage } from './features/auth/ui/AuthPage';
 import { AuthProvider } from './features/auth/model/AuthProvider';
+import { useAuth } from './features/auth/model/AuthProvider';
 import * as gameApi from './features/chess-game/api/gameApi';
 import type { GameResponse } from './features/chess-game/api/gameApi';
+<<<<<<< HEAD
 import { getRandomPuzzle, solvePuzzle, hasToken, type ServerPuzzle, type SolveResult } from './features/puzzles/api/puzzleApi';
+=======
+import * as puzzleApi from './features/puzzles/api/puzzleApi';
+import type { Puzzle } from './features/puzzles/api/puzzleApi';
+import * as leaderboardApi from './features/community/api/leaderboardApi';
+import type { LeaderboardCategory, LeaderboardResponse } from './features/community/api/leaderboardApi';
+import * as profileApi from './features/profile/api/profileApi';
+import type { StudentProfile } from './features/profile/api/profileApi';
+>>>>>>> 6faf31c4167ec0e785bc9b57b4e8fdeed406c114
 import { useHashRoute } from './app/useHashRoute';
 import 'chessground/assets/chessground.base.css';
 import 'chessground/assets/chessground.cburnett.css';
@@ -118,8 +129,6 @@ function ChessGame() {
   return <section className="game-section" id="play"><div className="game-intro"><p className="eyebrow"><span>03</span> ИГРА ПРОТИВ MAIA</p><h2>Настоящая<br /><span>партия.</span></h2><p>Сервер проверяет каждый ход, сохраняет партию и отвечает ходом Maia.</p><div className="game-controls"><button className="button button-primary" type="button" onClick={newGame} disabled={loading || thinking}>Новая партия <span>↗</span></button><span className="engine-status"><i className={thinking ? 'thinking' : ''} /> {statusText}</span>{(error?.includes('401') || error?.includes('Сначала войдите')) && <a className="source-link" href="#auth">Войти в аккаунт ↗</a>}</div></div><div className="game-layout"><div className="player-row"><span className="avatar black-avatar">♞</span><div><strong>CoolChess Maia</strong><small>Серверная партия · {game?.bot_difficulty ?? 1500}</small></div><span className="clock">∞</span></div><BoardShell game={gameRef.current} boardRef={boardRef} /><div className="player-row user-row"><span className="avatar user-avatar">Е</span><div><strong>Ученик</strong><small>{game?.player_color === 'black' ? 'Чёрные' : 'Белые'}</small></div><span className="clock">∞</span></div></div><aside className="move-panel"><div className="panel-tabs"><button className="selected" type="button">ХОДЫ</button><button type="button">ПАРТИЯ</button></div><div className="move-list">{moves.length ? moves.map((move, index) => <span key={`${move}-${index}`}><b>{index % 2 === 0 ? `${Math.floor(index / 2) + 1}.` : ''}</b> {move}</span>) : <p>{loading ? 'Подключаемся к серверу…' : 'Начните новую партию.'}</p>}</div><div className="game-hint"><span>✦</span><div><strong>Серверная проверка</strong><p>Нелегальный ход не будет принят backend.</p></div></div></aside></section>;
 }
 
-type ImportedPuzzle = { id: string; fen: string; moves: string[]; rating: number; ratingDeviation: number; popularity: number; plays: number; themes: string[]; gameUrl: string; openingTags: string[]; dailyDate?: string };
-
 function TheoryBoard({ visual }: { visual: LessonVisual }) {
   const boardRef = useRef<HTMLDivElement>(null);
   const groundRef = useRef<Api | null>(null);
@@ -154,8 +163,13 @@ function TheoryBoard({ visual }: { visual: LessonVisual }) {
 function OriginalLichessPuzzleLibrary() {
   const boardRef = useRef<HTMLDivElement>(null);
   const groundRef = useRef<Api | null>(null);
-  const [library, setLibrary] = useState<ImportedPuzzle[]>([]);
+  const gameRef = useRef<Chess | null>(null);
+  const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'submitting' | 'correct' | 'wrong' | 'error'>('loading');
+  const [error, setError] = useState('');
+  const [reward, setReward] = useState('');
   const [index, setIndex] = useState(0);
+<<<<<<< HEAD
   const [status, setStatus] = useState<'ready' | 'correct' | 'wrong'>('ready');
   // Серверный режим: авторизованный пользователь решает задачи backend
   // (/api/puzzles) и получает серверные награды; без токена — локальный индекс.
@@ -173,20 +187,38 @@ function OriginalLichessPuzzleLibrary() {
       .then((task) => { setServerPuzzle(task); setServerReward(null); setStatus('ready'); })
       .catch(() => loadLocalLibrary());
   }, []);
+=======
+
+  const loadPuzzle = async () => {
+    setStatus('loading');
+    groundRef.current?.set({ movable: { color: 'white', dests: new Map() } });
+    setError('');
+    setReward('');
+    try {
+      setPuzzle(await puzzleApi.getRandomPuzzle());
+      setIndex((value) => value + 1);
+      setStatus('ready');
+    } catch (reason) {
+      setPuzzle(null);
+      setError(reason instanceof Error ? reason.message : 'Не удалось загрузить задачу');
+      setStatus('error');
+    }
+  };
+
+  useEffect(() => { void loadPuzzle(); }, []);
+>>>>>>> 6faf31c4167ec0e785bc9b57b4e8fdeed406c114
 
   useEffect(() => {
     if (!boardRef.current || !puzzle) return;
     const game = new Chess(puzzle.fen);
-    const first = puzzle.moves[0];
-    if (first) game.move({ from: first.slice(0, 2), to: first.slice(2, 4), promotion: first[4] as 'q' | 'r' | 'b' | 'n' | undefined });
-    setStatus('ready');
-    groundRef.current = Chessground(boardRef.current, { fen: game.fen(), coordinates: false, orientation: game.turn() === 'w' ? 'white' : 'black', turnColor: game.turn() === 'w' ? 'white' : 'black', movable: { free: false, color: game.turn() === 'w' ? 'white' : 'black', dests: legalDests(game), events: { after: (orig, dest) => {
-      if (`${orig}${dest}` === puzzle.moves[1]?.slice(0, 4)) { const played = game.move({ from: orig as Square, to: dest as Square, promotion: 'q' }); awardPawns(`puzzle:${puzzle.id}`, 10); setStatus('correct'); groundRef.current?.set({ fen: game.fen(), lastMove: played ? [played.from as Key, played.to as Key] : undefined, movable: { color: game.turn() === 'w' ? 'white' : 'black', dests: new Map() } }); }
-      else { setStatus('wrong'); groundRef.current?.set({ fen: game.fen(), turnColor: game.turn() === 'w' ? 'white' : 'black', movable: { color: game.turn() === 'w' ? 'white' : 'black', dests: legalDests(game) } }); window.setTimeout(() => setStatus('ready'), 650); }
-    } } }, highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 180 } });
+    if (puzzle.initial_move) game.move({ from: puzzle.initial_move.slice(0, 2), to: puzzle.initial_move.slice(2, 4), promotion: puzzle.initial_move[4] as 'q' | 'r' | 'b' | 'n' | undefined });
+    gameRef.current = game;
+    groundRef.current?.destroy();
+    groundRef.current = Chessground(boardRef.current, { fen: game.fen(), coordinates: false, orientation: game.turn() === 'w' ? 'white' : 'black', turnColor: game.turn() === 'w' ? 'white' : 'black', movable: { free: false, color: game.turn() === 'w' ? 'white' : 'black', dests: legalDests(game), events: { after: (orig, dest) => { void submitMove(orig as Key, dest as Key); } } }, highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 240 } });
     return () => groundRef.current?.destroy();
   }, [puzzle]);
 
+<<<<<<< HEAD
   // Серверный режим: позиция и проверка хода — через backend.
   useEffect(() => {
     if (!boardRef.current || !serverPuzzle) return;
@@ -251,6 +283,38 @@ function OriginalLichessPuzzleLibrary() {
   const sourceHref = (url: string) => (url.startsWith('http') ? url : `https://${url}`);
 
   return <section className="puzzle-section" id="puzzles"><div className="section-heading"><span className="section-number">04</span><h2>Одна задача.<br /><span>Один инсайт.</span></h2></div><div className="puzzle-layout"><div className="puzzle-board"><div ref={boardRef} className="game-board" aria-label="Доска шахматной задачи" /></div><div className="puzzle-copy">{serverPuzzle ? <><p className="eyebrow">ЗАДАЧА С СЕРВЕРА · РЕЙТИНГ {serverPuzzle.rating}</p><h3>{serverTags.map((tag) => tag.replace(/([A-Z])/g, ' $1').toLowerCase()).join(' · ') || 'Тактическая идея'}</h3><p>Позиция из базы CoolChess. После хода соперника найди лучший ответ — сервер проверит ход и начислит награду.</p><div className="puzzle-meta"><span><strong>{serverPuzzle.rating}</strong><small>рейтинг задачи</small></span><span><strong>{serverPuzzle.popularity}</strong><small>популярность</small></span></div><div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? (serverReward && serverReward.xp_earned > 0 ? `Отлично! +${serverReward.xp_earned} XP · +${serverReward.coins_earned} монет` : 'Отлично! Ход найден.') : status === 'wrong' ? 'Попробуй ещё раз.' : 'Твой ход'}</strong></div><div className="puzzle-actions"><button className="button button-primary" type="button" onClick={nextTask}>Следующая задача <span>↗</span></button>{serverPuzzle.game_url && <a className="source-link" href={sourceHref(serverPuzzle.game_url)} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a>}</div></> : puzzle ? <><p className="eyebrow">ЗАДАЧА {index + 1} ИЗ {library.length}</p><h3>{tags.map((tag) => tag.replace(/([A-Z])/g, ' $1').toLowerCase()).join(' · ') || 'Тактическая идея'}</h3><p>Позиция из открытой базы Lichess. После хода соперника найди лучший ответ и проверь свою идею.</p><div className="puzzle-meta"><span><strong>{puzzle.rating}</strong><small>рейтинг задачи</small></span><span><strong>{puzzle.plays.toLocaleString('ru-RU')}</strong><small>решений</small></span></div><div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? 'Отлично! Ход найден.' : status === 'wrong' ? 'Попробуй ещё раз.' : 'Твой ход'}</strong></div><div className="puzzle-actions"><button className="button button-primary" type="button" onClick={nextTask}>Следующая задача <span>↗</span></button><a className="source-link" href={`https://${puzzle.gameUrl}`} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a></div></> : <><p className="eyebrow">БАЗА ЗАДАЧ</p><h3>Загрузка задач…</h3><p>Индекс Lichess загружается из локальных данных проекта.</p></>}</div></div></section>;
+=======
+  const submitMove = async (orig: Key, dest: Key) => {
+    if (!puzzle || !gameRef.current || status !== 'ready') return;
+    const current = gameRef.current;
+    const promotion = (orig[1] === '7' && dest[1] === '8') || (orig[1] === '2' && dest[1] === '1') ? 'q' : '';
+    const uci = `${orig}${dest}${promotion}`;
+    setStatus('submitting');
+    setError('');
+    groundRef.current?.set({ movable: { color: 'white', dests: new Map() } });
+    try {
+      const result = await puzzleApi.submitPuzzleMove(puzzle.id, uci);
+      if (!result.is_correct) {
+        setStatus('wrong');
+        groundRef.current?.set({ fen: current.fen(), turnColor: current.turn() === 'w' ? 'white' : 'black', movable: { color: current.turn() === 'w' ? 'white' : 'black', dests: legalDests(current) } });
+        window.setTimeout(() => setStatus('ready'), 700);
+        return;
+      }
+      const played = current.move({ from: orig as Square, to: dest as Square, promotion: promotion || 'q' });
+      setStatus('correct');
+      setReward(result.already_solved ? 'Задача уже была решена — награда не начисляется повторно.' : `Награда: +${result.xp_earned} XP · +${result.coins_earned} ♟`);
+      groundRef.current?.set({ fen: current.fen(), lastMove: played ? [played.from as Key, played.to as Key] : undefined, movable: { color: current.turn() === 'w' ? 'white' : 'black', dests: new Map() } });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не удалось проверить ход');
+      setStatus('error');
+      groundRef.current?.set({ fen: current.fen(), turnColor: current.turn() === 'w' ? 'white' : 'black', movable: { color: 'white', dests: new Map() } });
+    }
+  };
+
+  const tags = puzzle?.themes.filter((theme) => !['short', 'long', 'veryLong', 'master', 'masterVsMaster'].includes(theme)).slice(0, 4) ?? [];
+  const gameUrl = puzzle?.game_url ? (puzzle.game_url.startsWith('http') ? puzzle.game_url : `https://${puzzle.game_url}`) : null;
+  return <section className="puzzle-section" id="puzzles"><div className="section-heading"><span className="section-number">04</span><h2>Одна задача.<br /><span>Один инсайт.</span></h2></div><div className="puzzle-layout"><div className="puzzle-board"><div ref={boardRef} className="game-board" aria-label="Доска шахматной задачи" /></div><div className="puzzle-copy"><p className="eyebrow">ЗАДАЧА {index}</p><h3>{tags.map((tag) => tag.replace(/([A-Z])/g, ' $1').toLowerCase()).join(' · ') || 'Тактическая идея'}</h3><p>Позиция из базы Lichess. Сервер проверит твой ход и начислит награду.</p>{puzzle && <div className="puzzle-meta"><span><strong>{puzzle.rating}</strong><small>рейтинг задачи</small></span><span><strong>{puzzle.popularity}</strong><small>популярность</small></span></div>}<div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? 'Отлично! Ход найден.' : status === 'wrong' ? 'Неверный ход — попробуй ещё.' : status === 'submitting' ? 'Проверяем ход…' : status === 'loading' ? 'Загружаем задачу…' : status === 'error' ? error : 'Твой ход'}</strong></div>{status === 'error' && <a className="source-link" href="#auth">Войти в аккаунт и повторить ↗</a>}{reward && <p className="puzzle-reward">{reward}</p>}{error && status !== 'error' && <p className="puzzle-reward">{error}</p>}<div className="puzzle-actions"><button className="button button-primary" type="button" onClick={() => void loadPuzzle()} disabled={status === 'loading' || status === 'submitting'}>Следующая задача <span>↗</span></button>{gameUrl && <a className="source-link" href={gameUrl} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a>}</div></div></div></section>;
+>>>>>>> 6faf31c4167ec0e785bc9b57b4e8fdeed406c114
 }
 
 function LessonPracticeBoard({ themes }: { themes: string[] }) {
@@ -260,46 +324,69 @@ function LessonPracticeBoard({ themes }: { themes: string[] }) {
   // Одноходовые задачи раздела «Задачи» уже идут через сервер.
   const boardRef = useRef<HTMLDivElement>(null);
   const groundRef = useRef<Api | null>(null);
-  const lineIndexRef = useRef(1);
-  const [library, setLibrary] = useState<ImportedPuzzle[]>([]);
-  const [selected, setSelected] = useState(0);
-  const [status, setStatus] = useState<'ready' | 'correct' | 'wrong'>('ready');
-  const filtered = library.filter((puzzle) => themes.some((theme) => puzzle.themes.includes(theme)));
-  const puzzle = filtered[selected % Math.max(filtered.length, 1)];
+  const gameRef = useRef<Chess | null>(null);
+  const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'submitting' | 'correct' | 'wrong' | 'error'>('loading');
+  const [error, setError] = useState('');
+  const [reward, setReward] = useState('');
+  const [requestIndex, setRequestIndex] = useState(0);
+  const themeKey = themes.join(',');
 
-  useEffect(() => { fetch('/data/puzzles.json').then((response) => response.json() as Promise<ImportedPuzzle[]>).then(setLibrary).catch(() => setLibrary([])); }, []);
+  const loadPuzzle = async (rotation = 0) => {
+    setStatus('loading');
+    groundRef.current?.set({ movable: { color: 'white', dests: new Map() } });
+    setError('');
+    setReward('');
+    const theme = themes.length ? themes[(requestIndex + rotation) % themes.length] : undefined;
+    try {
+      const next = await puzzleApi.getRandomPuzzle(theme);
+      setPuzzle(next);
+      setRequestIndex((value) => value + 1);
+      setStatus('ready');
+    } catch (reason) {
+      setPuzzle(null);
+      setError(reason instanceof Error ? reason.message : 'Не удалось загрузить задачу');
+      setStatus('error');
+    }
+  };
+
+  useEffect(() => { void loadPuzzle(); }, [themeKey]);
   useEffect(() => {
     if (!boardRef.current || !puzzle) return;
     const game = new Chess(puzzle.fen);
-    const first = puzzle.moves[0];
-    if (first) game.move({ from: first.slice(0, 2), to: first.slice(2, 4), promotion: first[4] as 'q' | 'r' | 'b' | 'n' | undefined });
-    lineIndexRef.current = 1;
-    setStatus('ready');
-    groundRef.current = Chessground(boardRef.current, { fen: game.fen(), coordinates: false, orientation: game.turn() === 'w' ? 'white' : 'black', turnColor: game.turn() === 'w' ? 'white' : 'black', movable: { free: false, color: game.turn() === 'w' ? 'white' : 'black', dests: legalDests(game), events: { after: (orig, dest) => {
-      const expected = puzzle.moves[lineIndexRef.current]?.slice(0, 4);
-      if (`${orig}${dest}` !== expected) { setStatus('wrong'); groundRef.current?.set({ fen: game.fen(), turnColor: game.turn() === 'w' ? 'white' : 'black', movable: { color: game.turn() === 'w' ? 'white' : 'black', dests: legalDests(game) } }); window.setTimeout(() => setStatus('ready'), 650); return; }
-      const played = game.move({ from: orig as Square, to: dest as Square, promotion: 'q' });
-      if (!played) return;
-      lineIndexRef.current += 1;
-      awardPawns(`puzzle:${puzzle.id}`, 10);
-      groundRef.current?.set({ fen: game.fen(), lastMove: [played.from as Key, played.to as Key], turnColor: game.turn() === 'w' ? 'white' : 'black', movable: { color: game.turn() === 'w' ? 'white' : 'black', dests: new Map() } });
-      if (lineIndexRef.current >= puzzle.moves.length) { setStatus('correct'); return; }
-      setStatus('correct');
-      window.setTimeout(() => {
-        const replyUci = puzzle.moves[lineIndexRef.current];
-        const reply = game.move({ from: replyUci.slice(0, 2), to: replyUci.slice(2, 4), promotion: replyUci[4] as 'q' | 'r' | 'b' | 'n' | undefined });
-        if (!reply) return;
-        lineIndexRef.current += 1;
-        const hasNext = lineIndexRef.current < puzzle.moves.length;
-        groundRef.current?.set({ fen: game.fen(), lastMove: [reply.from as Key, reply.to as Key], turnColor: game.turn() === 'w' ? 'white' : 'black', movable: { color: game.turn() === 'w' ? 'white' : 'black', dests: hasNext ? legalDests(game) : new Map() } });
-        setStatus(hasNext ? 'ready' : 'correct');
-      }, 650);
-    } } }, highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 320 } });
+    if (puzzle.initial_move) game.move({ from: puzzle.initial_move.slice(0, 2), to: puzzle.initial_move.slice(2, 4), promotion: puzzle.initial_move[4] as 'q' | 'r' | 'b' | 'n' | undefined });
+    gameRef.current = game;
+    groundRef.current?.destroy();
+    groundRef.current = Chessground(boardRef.current, { fen: game.fen(), coordinates: false, orientation: game.turn() === 'w' ? 'white' : 'black', turnColor: game.turn() === 'w' ? 'white' : 'black', movable: { free: false, color: game.turn() === 'w' ? 'white' : 'black', dests: legalDests(game), events: { after: (orig, dest) => { void submitMove(orig as Key, dest as Key); } } }, highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 300 } });
     return () => groundRef.current?.destroy();
   }, [puzzle]);
 
-  if (!puzzle) return <div className="lesson-practice empty-practice"><span className="block-kicker">ПРАКТИКА ПО ТЕМЕ</span><p>Подбираем позицию из базы Lichess…</p></div>;
-  return <div className="lesson-practice"><div className="practice-header"><div><span className="block-kicker">ПРАКТИКА ПО ТЕМЕ</span><strong>{filtered.length} связанных задач</strong></div><span className="practice-rating">{puzzle.rating} рейтинг</span></div><div className="practice-board-wrap"><div ref={boardRef} className="game-board" aria-label="Позиция по текущей теме" /></div><div className="practice-info"><div><strong>{status === 'correct' ? 'Ход найден ✓' : status === 'wrong' ? 'Попробуй ещё раз' : 'Найди лучший ход'}</strong><small>Ход соперника уже показан · позиция связана с тегами: {themes.join(', ')}</small></div><button type="button" className="practice-next" onClick={() => setSelected((value) => value + 1)}>Другая позиция ↗</button></div></div>;
+  const submitMove = async (orig: Key, dest: Key) => {
+    if (!puzzle || !gameRef.current || status !== 'ready') return;
+    const current = gameRef.current;
+    const promotion = (orig[1] === '7' && dest[1] === '8') || (orig[1] === '2' && dest[1] === '1') ? 'q' : '';
+    setStatus('submitting');
+    groundRef.current?.set({ movable: { color: 'white', dests: new Map() } });
+    try {
+      const result = await puzzleApi.submitPuzzleMove(puzzle.id, `${orig}${dest}${promotion}`);
+      if (!result.is_correct) {
+        setStatus('wrong');
+        groundRef.current?.set({ fen: current.fen(), turnColor: current.turn() === 'w' ? 'white' : 'black', movable: { color: current.turn() === 'w' ? 'white' : 'black', dests: legalDests(current) } });
+        window.setTimeout(() => setStatus('ready'), 700);
+        return;
+      }
+      const played = current.move({ from: orig as Square, to: dest as Square, promotion: promotion || 'q' });
+      setStatus('correct');
+      setReward(result.already_solved ? 'Задача уже решена — награда не начисляется повторно.' : `+${result.xp_earned} XP · +${result.coins_earned} ♟`);
+      groundRef.current?.set({ fen: current.fen(), lastMove: played ? [played.from as Key, played.to as Key] : undefined, movable: { color: current.turn() === 'w' ? 'white' : 'black', dests: new Map() } });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не удалось проверить ход');
+      setStatus('error');
+      groundRef.current?.set({ fen: current.fen(), turnColor: current.turn() === 'w' ? 'white' : 'black', movable: { color: 'white', dests: new Map() } });
+    }
+  };
+
+  return <div className="lesson-practice"><div className="practice-header"><div><span className="block-kicker">ПРАКТИКА ПО ТЕМЕ</span><strong>{status === 'loading' ? 'Загружаем задачу…' : themes.join(', ') || 'Случайная задача'}</strong></div>{puzzle && <span className="practice-rating">{puzzle.rating} рейтинг</span>}</div><div className="practice-board-wrap"><div ref={boardRef} className="game-board" aria-label="Позиция по текущей теме" /></div><div className="practice-info"><div><strong>{status === 'correct' ? 'Ход найден ✓' : status === 'wrong' ? 'Неверный ход — попробуй ещё' : status === 'submitting' ? 'Проверяем ход…' : status === 'error' ? error : 'Найди лучший ход'}</strong><small>{reward || `Тег задачи: ${puzzle?.themes.join(', ') ?? themes.join(', ')}`}</small></div><button type="button" className="practice-next" onClick={() => void loadPuzzle(1)} disabled={status === 'loading' || status === 'submitting'}>Другая позиция ↗</button></div></div>;
 }
 
 function LichessPuzzleLibrary() {
@@ -307,10 +394,21 @@ function LichessPuzzleLibrary() {
 }
 
 function CommunityPage() {
-  const [joined, setJoined] = useState(false);
-  const [student, setStudent] = useState(readStudentState);
-  useEffect(() => { const refresh = () => setStudent(readStudentState()); window.addEventListener('coolchess:state', refresh); return () => window.removeEventListener('coolchess:state', refresh); }, []);
-  return <section className="community-page" id="community"><div className="community-hero"><div><span className="eyebrow"><span>03</span> СООБЩЕСТВО COOLCHESS</span><h2>Решай вместе.<br /><em>Расти быстрее.</em></h2><p>Задачи становятся интереснее, когда у каждой есть соперник, рейтинг и общий результат.</p></div><div className="community-live"><span className="live-label"><i /> LIVE NOW</span><strong>12</strong><small>учеников сейчас решают задачи</small><div className="live-stack"><span>М</span><span>А</span><span>К</span><span>Е</span><b>+8</b></div></div></div><div className="community-grid"><div className="community-card race-large"><div className="card-kicker">БЛИЖАЙШЕЕ СОБЫТИЕ · 05:00</div><h3>Гонка задач</h3><p>5 минут, 10 позиций, один общий рейтинг. Точность важнее случайной скорости.</p><div className="race-track"><span className="race-line" /><i style={{ left: '63%' }}>Е</i><i style={{ left: '74%' }}>М</i><i style={{ left: '48%' }}>А</i></div><button className="button button-primary" type="button" onClick={() => setJoined(!joined)}>{joined ? 'Ты участвуешь ✓' : 'Войти в гонку'} <span>↗</span></button></div><div className="community-card online-card"><div className="community-card-title"><h3>Онлайн сейчас</h3><a href="#community">Все игроки ↗</a></div>{['Мария', 'Артём', 'Кирилл', 'Ника'].map((name, index) => <div className="community-player" key={name}><span>{name[0]}</span><div><strong>{name}</strong><small>{1240 - index * 46} · решает задачи</small></div><i /></div>)}</div><div className="community-card leaderboard-large"><div className="community-card-title"><h3>Лидерборд недели</h3><span>ПО ПЕШКАМ</span></div>{['Ника', 'Михаил', 'Егор', 'София', 'Даниил'].map((name, index) => <div className={index === 2 ? 'ranking-row current' : 'ranking-row'} key={name}><b>{String(index + 1).padStart(2, '0')}</b><span>{name}</span><small>{48 - index * 5} задач</small><strong>♟ {name === 'Егор' ? student.pawns : 980 - index * 32}</strong></div>)}</div><div className="community-card invite-card"><span className="invite-symbol">♞</span><h3>Создай свою группу</h3><p>Собери друзей или класс и сравнивайте прогресс в одной таблице.</p><button className="button button-link" type="button">Создать группу ↗</button></div></div></section>;
+  const { user } = useAuth();
+  const [category, setCategory] = useState<LeaderboardCategory>('elo');
+  const [data, setData] = useState<LeaderboardResponse | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    leaderboardApi.getLeaderboard(category).then((result) => { if (active) setData(result); }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : 'Не удалось загрузить рейтинг'); }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [category]);
+
+  const sortedValue = (player: LeaderboardResponse['top_players'][number]) => category === 'elo' ? `${player.elo_rating} ELO` : category === 'level' ? `ур. ${player.level}` : `${player.puzzles_solved} задач`;
+  return <section className="community-page" id="community"><div className="community-hero"><div><span className="eyebrow"><span>03</span> СООБЩЕСТВО COOLCHESS</span><h2>Решай вместе.<br /><em>Расти быстрее.</em></h2><p>Сравнивай рейтинг, уровень и количество решённых задач с учениками школы.</p></div><div className="community-live"><span className="live-label">СЕРВЕРНЫЕ ДАННЫЕ</span><strong>{data?.top_players.length ?? '—'}</strong><small>учеников в текущем списке рейтинга</small><div className="live-stack"><span>♟</span><span>♞</span><span>♜</span></div></div></div><div className="community-grid"><div className="community-card race-large"><div className="card-kicker">СОРЕВНОВАНИЯ</div><h3>Гонки и PvP</h3><p>Для живых гонок, онлайн-статуса и партий друг с другом понадобится отдельный API. Пока доступен рейтинг учеников.</p><div className="race-track"><span className="race-line" /><i style={{ left: '63%' }}>♟</i><i style={{ left: '74%' }}>♞</i></div><span className="source-link">Онлайн-лобби пока не подключено</span></div><div className="community-card online-card"><div className="community-card-title"><h3>Твоя позиция</h3><span>СЕЙЧАС</span></div>{data?.my_rank ? <><div className="community-player"><span>#{data.my_rank.rank}</span><div><strong>Твой результат</strong><small>{data.my_rank.elo_rating} ELO · уровень {data.my_rank.level}</small></div><i /></div><div className="community-player"><span>♟</span><div><strong>{data.my_rank.xp} XP</strong><small>{data.my_rank.puzzles_solved} решённых задач</small></div></div></> : <p>{loading ? 'Загружаем твоё место…' : 'Войди в аккаунт, чтобы увидеть своё место.'}</p>}</div><div className="community-card leaderboard-large"><div className="community-card-title"><h3>Рейтинг учеников</h3><div className="leaderboard-filters">{(['elo', 'level', 'puzzles'] as const).map((item) => <button className={category === item ? 'selected' : ''} key={item} type="button" onClick={() => { setError(''); setCategory(item); }}>{item === 'elo' ? 'ELO' : item === 'level' ? 'Уровень' : 'Задачи'}</button>)}</div></div>{error ? <p className="puzzle-reward">{error}</p> : loading ? <p>Загружаем рейтинг…</p> : data?.top_players.length ? data.top_players.map((player) => <div className={player.user_id === user?.id ? 'ranking-row current' : 'ranking-row'} key={player.user_id}><b>{String(player.rank).padStart(2, '0')}</b><span>{player.email.split('@')[0]}</span><small>{player.puzzles_solved} задач</small><strong>{sortedValue(player)}</strong></div>) : <p>Пока нет учеников в рейтинге.</p>}</div><div className="community-card invite-card"><span className="invite-symbol">♞</span><h3>Классы и группы</h3><p>Серверный API групп пока не подключён. Сейчас можно посмотреть общий рейтинг школы.</p><span className="button button-link">Группы появятся позже</span></div></div></section>;
 }
 
 function StartLearningPanel() {
@@ -329,23 +427,70 @@ function LearnPage() {
   return <section className="learn-page"><aside className="learn-page-sidebar"><div className="sidebar-title"><span className="sidebar-logo">♟</span><div><strong>Курс ученика</strong><small>Выбери тему для изучения</small></div></div>{courseModules.map((item) => <div className="learn-module" key={item.id}><strong>{item.title}</strong>{item.topics.map((itemTopic) => <button className={itemTopic.id === topic.id ? 'learn-topic active' : 'learn-topic'} key={itemTopic.id} type="button" onClick={() => setTopicId(itemTopic.id)}><span>{itemTopic.id === topic.id ? '→' : '·'}</span>{itemTopic.title}</button>)}</div>)}</aside><main className="learn-page-main"><div className="learn-page-heading"><div><span className="eyebrow"><span>01</span> УЧЕБНАЯ СТРАНИЦА</span><h1>{topic.title}</h1><p>{article.lead}</p></div><div className="lesson-reward"><span>НАГРАДА ЗА ТЕМУ</span><strong>♟ +20</strong></div></div><article className="learn-article"><div className="learn-article-text"><div className="article-breadcrumb">{module.title.toUpperCase()} / ТЕМА</div><h2>Пойми идею,<br /><em>а не только правило.</em></h2><div className="learn-callout"><span className="block-kicker">ПОНЯТНАЯ АНАЛОГИЯ</span><p>{article.analogy}</p></div><div className="learn-example"><span className="block-kicker">РАЗБЕРЁМ НА ПРИМЕРЕ</span><p>{article.example}</p></div><ol>{article.steps.map((step) => <li key={step}>{step}</li>)}</ol><button className="button button-primary" type="button" onClick={completeTheory}>Завершить теорию · ♟ +20 <span>↗</span></button></div><div className="learn-article-board"><TheoryBoard visual={visual} /></div></article><section className="learn-practice"><div className="learn-practice-heading"><div><span className="block-kicker">ПРАКТИКА ЭТОЙ ТЕМЫ</span><h2>Теперь проверь идею на задаче.</h2><p>Подборка загружается только по тегам выбранной темы: {topic.puzzleThemes.join(', ') || 'базовая позиция'}.</p></div></div><LessonPracticeBoard themes={topic.puzzleThemes} /></section></main></section>;
 }
 
-function WalletBadge() {
-  const [state, setState] = useState(readStudentState);
-  useEffect(() => { const update = () => setState(readStudentState()); window.addEventListener('coolchess:state', update); return () => window.removeEventListener('coolchess:state', update); }, []);
-  return <a className="wallet-badge" href="#profile" title="Открыть профиль">♟ <strong>{state.pawns}</strong></a>;
-}
-
 function ProfilePage() {
-  const [state, setState] = useState(readStudentState);
-  useEffect(() => { const update = () => setState(readStudentState()); window.addEventListener('coolchess:state', update); return () => window.removeEventListener('coolchess:state', update); }, []);
-  return <section className="profile-page"><div className="profile-hero"><div className="profile-avatar-large">Е</div><div><span className="eyebrow"><span>06</span> ПРОФИЛЬ УЧЕНИКА</span><h1>Егор <em>в игре.</em></h1><p>Каждая задача и каждая тема двигают тебя вперёд.</p></div><div className="profile-wallet"><span>БАЛАНС</span><strong>♟ {state.pawns}</strong><small>{state.totalEarned} всего заработано</small></div></div><div className="profile-grid"><div className="profile-card streak-card"><span className="profile-card-kicker">СЕРИЯ</span><strong>🔥 {state.currentStreak}</strong><p>дней подряд</p><small>Лучший результат: {state.bestStreak} дней</small></div><div className="profile-card"><span className="profile-card-kicker">ЗАДАЧИ</span><strong>{state.solved}</strong><p>решено правильно</p><small>Награда начисляется один раз за позицию</small></div><div className="profile-card"><span className="profile-card-kicker">ТЕОРИЯ</span><strong>{state.theoryCompleted}</strong><p>тем завершено</p><small>Сегодня нужны задача и теория</small></div></div><div className="profile-activity"><div><h2>Активность</h2><p>Серия сохраняется, если каждый день решена задача и изучена теория.</p></div><div className="activity-calendar">{Array.from({ length: 28 }, (_, index) => <i className={index < Math.min(state.currentStreak, 28) ? 'active' : ''} key={index} />)}</div></div></section>;
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [rankData, setRankData] = useState<LeaderboardResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [verification, setVerification] = useState('');
+  const [lichessName, setLichessName] = useState('');
+  const [linkMessage, setLinkMessage] = useState('');
+  const [linkBusy, setLinkBusy] = useState(false);
+
+  const refreshProfile = async () => {
+    setLoading(true);
+    try {
+      const [nextProfile, nextRank] = await Promise.all([profileApi.getStudentProfile(), leaderboardApi.getLeaderboard('puzzles')]);
+      setProfile(nextProfile);
+      setRankData(nextRank);
+      setLichessName(nextProfile.lichess_username ?? '');
+      setError('');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не удалось загрузить профиль');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void refreshProfile(); }, []);
+
+  const startLichessLink = async () => {
+    setLinkMessage('');
+    try {
+      const result = await profileApi.getLichessVerificationCode();
+      setVerification(result.verification_code);
+      setLinkMessage(result.instructions);
+    } catch (reason) {
+      setLinkMessage(reason instanceof Error ? reason.message : 'Не удалось получить код');
+    }
+  };
+
+  const submitLichessLink = async () => {
+    setLinkBusy(true);
+    setLinkMessage('');
+    try {
+      const result = await profileApi.syncLichessAccount(lichessName.trim());
+      setLinkMessage(result.message);
+      setVerification('');
+      await refreshProfile();
+    } catch (reason) {
+      setLinkMessage(reason instanceof Error ? reason.message : 'Не удалось привязать Lichess');
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+
+  const displayName = user?.email.split('@')[0] ?? 'Ученик';
+  return <section className="profile-page"><div className="profile-hero"><div className="profile-avatar-large">{displayName[0]?.toUpperCase() ?? 'У'}</div><div><span className="eyebrow"><span>06</span> ПРОФИЛЬ УЧЕНИКА</span><h1>{displayName} <em>в игре.</em></h1><p>{profile?.email ?? user?.email ?? 'Данные профиля загружаются с сервера.'}</p></div><div className="profile-wallet"><span>РЕЙТИНГ COOLCHESS</span><strong>{loading ? '…' : profile?.elo ?? '—'}</strong><small>{profile?.role ?? user?.role ?? 'ученик'}</small></div></div>{error && <p className="puzzle-reward">{error}</p>}<div className="profile-grid"><div className="profile-card streak-card"><span className="profile-card-kicker">ОПЫТ</span><strong>{loading ? '…' : rankData?.my_rank?.xp ?? '—'} XP</strong><p>накопленный опыт</p><small>Данные рейтинга сервера</small></div><div className="profile-card"><span className="profile-card-kicker">ЗАДАЧИ</span><strong>{loading ? '…' : rankData?.my_rank?.puzzles_solved ?? '—'}</strong><p>решено правильно</p><small>{rankData?.my_rank ? `Место в рейтинге: ${rankData.my_rank.rank}` : 'Пока нет статистики'}</small></div><div className="profile-card"><span className="profile-card-kicker">LICHESS</span><strong>{profile?.lichess_username ? '✓' : '—'}</strong><p>{profile?.lichess_username ?? 'Аккаунт не привязан'}</p><small>{profile?.lichess_rapid_rating ? `Rapid ${profile.lichess_rapid_rating}` : 'Подключи профиль для синхронизации'}</small></div></div><div className="profile-activity"><div><h2>Связать Lichess</h2><p>Скопируй проверочный код в описание профиля Lichess, затем укажи свой ник здесь.</p>{verification && <p><strong>{verification}</strong></p>}{linkMessage && <p>{linkMessage}</p>}</div><div className="lichess-link-controls"><input value={lichessName} onChange={(event) => setLichessName(event.target.value)} placeholder="Ник на Lichess" aria-label="Ник на Lichess" /><button className="button button-link" type="button" onClick={() => void startLichessLink()}>Получить код</button><button className="button button-primary" type="button" disabled={!lichessName.trim() || linkBusy} onClick={() => void submitLichessLink()}>{linkBusy ? 'Проверяем…' : 'Проверить и связать'}</button></div></div></section>;
 }
 
 function AppV2() {
   const route = useHashRoute();
+  const { user, logout } = useAuth();
   if (route === 'auth') return <FeatureAuthPage />;
   const page = route === 'learn' || route === 'theory' ? <LearnPage /> : route === 'play' ? <ChessGame /> : route === 'puzzles' ? <LichessPuzzleLibrary /> : route === 'community' ? <CommunityPage /> : route === 'profile' ? <ProfilePage /> : <StartLearningPanel />;
-  return <div className="app-shell"><header className="topbar"><a className="brand" href="#home" aria-label="CoolChess, на главную"><span className="brand-mark">♞</span><span>cool<span>chess</span></span></a><nav className="main-nav" aria-label="Основная навигация"><a className={route === 'home' ? 'active' : ''} href="#home">Главная</a><a className={route === 'learn' || route === 'theory' ? 'active' : ''} href="#learn">Учиться</a><a className={route === 'play' ? 'active' : ''} href="#play">Играть</a><a className={route === 'puzzles' ? 'active' : ''} href="#puzzles">Задачи</a><a className={route === 'community' ? 'active' : ''} href="#community">Сообщество</a></nav><div className="topbar-user"><a className="auth-nav-link" href="#auth">Войти</a><WalletBadge /><a className="profile-button" href="#profile">Мой профиль <span>↗</span></a></div><button className="menu-button" type="button" aria-label="Открыть меню">☰</button></header><main className="route-main">{page}</main><footer className="footer"><div className="footer-brand"><span className="brand-mark">♞</span><span>cool<span>chess</span></span></div><p>Шахматы, которые растут вместе с тобой.</p><small>© 2026 CoolChess. Учимся думать на несколько ходов вперёд.</small></footer></div>;
+  return <div className="app-shell"><header className="topbar"><a className="brand" href="#home" aria-label="CoolChess, на главную"><span className="brand-mark">♞</span><span>cool<span>chess</span></span></a><nav className="main-nav" aria-label="Основная навигация"><a className={route === 'home' ? 'active' : ''} href="#home">Главная</a><a className={route === 'learn' || route === 'theory' ? 'active' : ''} href="#learn">Учиться</a><a className={route === 'play' ? 'active' : ''} href="#play">Играть</a><a className={route === 'puzzles' ? 'active' : ''} href="#puzzles">Задачи</a><a className={route === 'community' ? 'active' : ''} href="#community">Сообщество</a></nav><div className="topbar-user">{user ? <><a className="profile-button" href="#profile">{user.email.split('@')[0]} · профиль <span>↗</span></a><button className="auth-nav-link" type="button" onClick={() => { void logout().then(() => { window.location.hash = '#home'; }); }}>Выйти</button></> : <a className="auth-nav-link" href="#auth">Войти</a>}</div><button className="menu-button" type="button" aria-label="Открыть меню">☰</button></header><main className="route-main">{page}</main><footer className="footer"><div className="footer-brand"><span className="brand-mark">♞</span><span>cool<span>chess</span></span></div><p>Шахматы, которые растут вместе с тобой.</p><small>© 2026 CoolChess. Учимся думать на несколько ходов вперёд.</small></footer></div>;
 }
 
 createRoot(document.getElementById('root')!).render(<StrictMode><AuthProvider><AppV2 /></AuthProvider></StrictMode>);

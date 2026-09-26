@@ -6,6 +6,7 @@ from puzzles.puzzle_routes import puzzle_router
 from games.game_routes import game_router
 from leaderboard.leaderboard_routes import leaderboard_router
 from bot.bot_routes import bot_router
+from clans.clan_routes import clan_router
 from auth.users_routes import users_router
 
 from auth.manager import (
@@ -13,6 +14,10 @@ from auth.manager import (
     fastapi_users,
 )
 from auth.schemas import UserRead, UserCreate, UserUpdate
+
+
+
+
 
 app = FastAPI(title="CoolChess API")
 
@@ -41,6 +46,7 @@ app.include_router(game_router)
 app.include_router(leaderboard_router)
 app.include_router(bot_router)
 app.include_router(users_router)
+app.include_router(clan_router)
 
 # 2. Аутентификация и управление аккаунтом (fastapi-users)
 app.include_router(

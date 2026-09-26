@@ -1,3 +1,10 @@
+import os
+
+# Устанавливаем тестовые секреты до импорта модулей приложения
+os.environ.setdefault("JWT_SECRET", "test_jwt_secret_coolchess_at_least_32_characters_long_123456")
+os.environ.setdefault("VERIFY_SECRET", "test_verify_secret_coolchess_at_least_32_characters_long_123456")
+os.environ.setdefault("ENV", "development")
+
 import uuid
 import pytest
 import pytest_asyncio

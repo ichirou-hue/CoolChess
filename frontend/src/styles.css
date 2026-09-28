@@ -237,6 +237,61 @@ h1 em { color: #464bff; font-style: normal; }
 .puzzle-board-state strong { font-size: clamp(20px, 2.5vw, 30px); }
 .puzzle-board-state small { color: #e1e1ff; font-size: 12px; line-height: 1.5; margin-top: 10px; max-width: 280px; }
 .puzzle-board-state .source-link { color: #eafe5f; margin-top: 18px; }
+.eyebrow { font-size: 12px; }
+.block-kicker { font-size: 11px; }
+.main-nav a { font-size: 14px; }
+.auth-nav-link, .profile-button { font-size: 13px; }
+.button { font-size: 14px; }
+.puzzle-copy h3 { font-size: clamp(28px, 3vw, 38px); line-height: 1.08; }
+.puzzle-copy > p:not(.eyebrow) { color: #4b4d5b; font-size: 17px; line-height: 1.65; }
+.puzzle-instruction { background: #fffce7; border-left: 4px solid #dce204; border-radius: 12px; padding: 16px 18px; }
+.puzzle-instruction strong { color: #111; }
+.puzzle-feedback { padding: 16px 18px; }
+.puzzle-feedback strong { font-size: 14px; line-height: 1.4; }
+.puzzle-meta small { font-size: 12px; }
+.puzzle-actions .source-link, .source-link { font-size: 13px; }
+.puzzle-reward { font-size: 14px; }
+.learn-topic { font-size: 13px; }
+.learn-module > strong, .profile-card-kicker { font-size: 11px; }
+.learn-page-heading p, .lesson-description, .learn-callout p, .learn-example p, .learn-article-text li { font-size: 15px; }
+.learn-practice-heading p, .profile-card p, .profile-activity p { font-size: 14px; }
+small { font-size: .8rem; }
+
+/* Keep every product surface inside the same CoolChess visual world as the landing page. */
+.route-main { background: #eaf5ff; }
+.game-section,
+.puzzle-section,
+.community-page,
+.profile-page,
+.learn-page {
+  background: linear-gradient(145deg, #dff3ff 0%, #f3eff9 58%, #e6e8ff 100%);
+}
+.game-section,
+.puzzle-section,
+.community-page,
+.profile-page { border-radius: 0 0 56px 56px; }
+.learn-page { border-radius: 0 0 56px 56px; overflow: hidden; }
+.learn-page-sidebar { background: rgba(255,255,255,.68); backdrop-filter: blur(10px); }
+.learn-page-main { background: transparent; }
+.learn-article,
+.profile-card,
+.profile-activity,
+.community-card,
+.move-panel {
+  box-shadow: 0 16px 36px rgba(70,75,255,.08);
+}
+.section-heading h2,
+.game-intro h2,
+.community-hero h2,
+.learn-page-heading h1,
+.profile-hero h1 { text-wrap: balance; }
+.community-hero p,
+.game-intro > p:not(.eyebrow),
+.profile-hero p,
+.learn-page-heading p { color: #274e70; }
+.card-kicker,
+.live-label,
+.block-kicker { letter-spacing: 1.1px; }
 
 @media (max-width: 1000px) {
   .start-panel { grid-template-columns: minmax(240px, .65fr) minmax(0, 1.35fr); }

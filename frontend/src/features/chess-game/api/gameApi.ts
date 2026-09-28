@@ -15,6 +15,15 @@ export type GameResponse = {
   elo_delta: number;
 };
 
+export type GameHistoryItem = {
+  id: string;
+  status: GameResponse['status'];
+  player_color: 'white' | 'black';
+  bot_difficulty: number;
+  moves_count: number;
+  created_at: string;
+};
+
 const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
 
 async function request<T>(path: string, init: RequestInit = {}) {
@@ -60,4 +69,8 @@ export function makeMove(gameId: string, moveUci: string) {
 
 export function resignGame(gameId: string) {
   return request<GameResponse>(`/api/games/${gameId}/resign`, { method: 'POST' });
+}
+
+export function getMyGames() {
+  return request<GameHistoryItem[]>('/api/games/my');
 }

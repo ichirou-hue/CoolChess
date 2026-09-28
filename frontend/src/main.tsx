@@ -14,16 +14,12 @@ import { AuthProvider } from './features/auth/model/AuthProvider';
 import { useAuth } from './features/auth/model/AuthProvider';
 import * as gameApi from './features/chess-game/api/gameApi';
 import type { GameResponse } from './features/chess-game/api/gameApi';
-<<<<<<< HEAD
-import { getRandomPuzzle, solvePuzzle, hasToken, type ServerPuzzle, type SolveResult } from './features/puzzles/api/puzzleApi';
-=======
 import * as puzzleApi from './features/puzzles/api/puzzleApi';
 import type { Puzzle } from './features/puzzles/api/puzzleApi';
 import * as leaderboardApi from './features/community/api/leaderboardApi';
 import type { LeaderboardCategory, LeaderboardResponse } from './features/community/api/leaderboardApi';
 import * as profileApi from './features/profile/api/profileApi';
 import type { StudentProfile } from './features/profile/api/profileApi';
->>>>>>> 6faf31c4167ec0e785bc9b57b4e8fdeed406c114
 import { useHashRoute } from './app/useHashRoute';
 import 'chessground/assets/chessground.base.css';
 import 'chessground/assets/chessground.cburnett.css';
@@ -53,14 +49,17 @@ function ChessGame() {
   const [game, setGame] = useState<GameResponse | null>(null);
   const [moves, setMoves] = useState<string[]>([]);
   const [thinking, setThinking] = useState(false);
+  const [difficulty, setDifficulty] = useState(1500);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<Awaited<ReturnType<typeof gameApi.getMyGames>>>([]);
 
   const syncBoard = (response: GameResponse) => {
     const nextGame = new Chess(response.current_fen);
     gameRef.current = nextGame;
     gameStateRef.current = response;
     setGame(response);
+    setDifficulty(response.bot_difficulty);
     setMoves(response.moves_uci);
     const last = response.moves_uci.at(-1);
     const canMove = response.status === 'in_progress' && ((response.player_color === 'white' && nextGame.turn() === 'w') || (response.player_color === 'black' && nextGame.turn() === 'b'));
@@ -84,6 +83,7 @@ function ChessGame() {
     try {
       const active = await gameApi.getActiveGame();
       syncBoard(active ?? await gameApi.startGame());
+      setHistory(await gameApi.getMyGames());
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Не удалось загрузить партию');
     } finally {
@@ -123,10 +123,37 @@ function ChessGame() {
     return () => groundRef.current?.destroy();
   }, []);
 
-  const newGame = () => { void loadGame(); };
+  const newGame = async () => {
+    if (!sessionStorage.getItem('coolchess.accessToken')) return;
+    setLoading(true);
+    setError(null);
+    try {
+      syncBoard(await gameApi.startGame('white', difficulty));
+      setHistory(await gameApi.getMyGames());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не удалось начать новую партию');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resign = async () => {
+    const currentGame = gameStateRef.current;
+    if (!currentGame?.id || currentGame.status !== 'in_progress' || thinkingRef.current) return;
+    setLoading(true);
+    try {
+      syncBoard(await gameApi.resignGame(currentGame.id));
+      setHistory(await gameApi.getMyGames());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не удалось сдаться');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const statusText = loading ? 'Загрузка партии…' : error ?? (thinking ? 'Maia думает…' : game?.status === 'player_won' ? 'Вы победили' : game?.status === 'bot_won' ? 'Победил бот' : game?.status === 'draw' ? 'Ничья' : 'Ваша очередь');
 
-  return <section className="game-section" id="play"><div className="game-intro"><p className="eyebrow"><span>03</span> ИГРА ПРОТИВ MAIA</p><h2>Настоящая<br /><span>партия.</span></h2><p>Сервер проверяет каждый ход, сохраняет партию и отвечает ходом Maia.</p><div className="game-controls"><button className="button button-primary" type="button" onClick={newGame} disabled={loading || thinking}>Новая партия <span>↗</span></button><span className="engine-status"><i className={thinking ? 'thinking' : ''} /> {statusText}</span>{(error?.includes('401') || error?.includes('Сначала войдите')) && <a className="source-link" href="#auth">Войти в аккаунт ↗</a>}</div></div><div className="game-layout"><div className="player-row"><span className="avatar black-avatar">♞</span><div><strong>CoolChess Maia</strong><small>Серверная партия · {game?.bot_difficulty ?? 1500}</small></div><span className="clock">∞</span></div><BoardShell game={gameRef.current} boardRef={boardRef} /><div className="player-row user-row"><span className="avatar user-avatar">Е</span><div><strong>Ученик</strong><small>{game?.player_color === 'black' ? 'Чёрные' : 'Белые'}</small></div><span className="clock">∞</span></div></div><aside className="move-panel"><div className="panel-tabs"><button className="selected" type="button">ХОДЫ</button><button type="button">ПАРТИЯ</button></div><div className="move-list">{moves.length ? moves.map((move, index) => <span key={`${move}-${index}`}><b>{index % 2 === 0 ? `${Math.floor(index / 2) + 1}.` : ''}</b> {move}</span>) : <p>{loading ? 'Подключаемся к серверу…' : 'Начните новую партию.'}</p>}</div><div className="game-hint"><span>✦</span><div><strong>Серверная проверка</strong><p>Нелегальный ход не будет принят backend.</p></div></div></aside></section>;
+  return <section className="game-section" id="play"><div className="game-intro"><p className="eyebrow"><span>03</span> ИГРА ПРОТИВ MAIA</p><h2>Настоящая<br /><span>партия.</span></h2><p>Настрой силу соперника сам: Maia играет в диапазоне от 800 до 2600 ELO.</p><label className="maia-slider"><span><b>Сила Maia</b><strong>{difficulty} ELO</strong></span><input type="range" min="800" max="2600" step="100" value={difficulty} onChange={(event) => setDifficulty(Number(event.target.value))} disabled={loading || thinking} /><small>Новая сила применяется в следующей партии</small></label><div className="game-controls"><button className="button button-primary" type="button" onClick={() => void newGame()} disabled={loading || thinking}>Новая партия <span>↗</span></button>{game?.status === 'in_progress' && <button className="button button-link" type="button" onClick={() => void resign()} disabled={loading || thinking}>Сдаться</button>}<span className="engine-status"><i className={thinking ? 'thinking' : ''} /> {statusText}</span>{game && game.status !== 'in_progress' && <p className="puzzle-reward">Результат: {game.status === 'resigned' ? 'партия сдана' : game.status === 'player_won' ? 'победа' : game.status === 'bot_won' ? 'поражение' : 'ничья'} · {game.elo_delta >= 0 ? '+' : ''}{game.elo_delta} ELO · +{game.xp_earned} XP · +{game.coins_earned} ♟</p>}{(error?.includes('401') || error?.includes('Сначала войдите')) && <a className="source-link" href="#auth">Войти в аккаунт ↗</a>}</div></div><div className="game-layout"><div className="player-row"><span className="avatar black-avatar">♞</span><div><strong>CoolChess Maia</strong><small>Серверная партия · {game?.bot_difficulty ?? difficulty} ELO</small></div><span className="clock">∞</span></div><BoardShell game={gameRef.current} boardRef={boardRef} /><div className="player-row user-row"><span className="avatar user-avatar">Е</span><div><strong>Ученик</strong><small>{game?.player_color === 'black' ? 'Чёрные' : 'Белые'}</small></div><span className="clock">∞</span></div></div><aside className="move-panel"><div className="panel-tabs"><button className="selected" type="button">ХОДЫ</button><button type="button">ИСТОРИЯ</button></div><div className="move-list">{moves.length ? moves.map((move, index) => <span key={`${move}-${index}`}><b>{index % 2 === 0 ? `${Math.floor(index / 2) + 1}.` : ''}</b> {move}</span>) : <p>{loading ? 'Подключаемся к серверу…' : 'Начните новую партию.'}</p>}</div><div className="game-hint"><span>✦</span><div><strong>Последние партии</strong>{history.slice(0, 3).map((item) => <p key={item.id}>{item.created_at} · {item.status} · {item.moves_count} ходов</p>)}</div></div></aside></section>;
 }
 
 function TheoryBoard({ visual }: { visual: LessonVisual }) {
@@ -169,26 +196,6 @@ function OriginalLichessPuzzleLibrary() {
   const [error, setError] = useState('');
   const [reward, setReward] = useState('');
   const [index, setIndex] = useState(0);
-<<<<<<< HEAD
-  const [status, setStatus] = useState<'ready' | 'correct' | 'wrong'>('ready');
-  // Серверный режим: авторизованный пользователь решает задачи backend
-  // (/api/puzzles) и получает серверные награды; без токена — локальный индекс.
-  const [serverPuzzle, setServerPuzzle] = useState<ServerPuzzle | null>(null);
-  const [serverReward, setServerReward] = useState<SolveResult | null>(null);
-  const puzzle = library[index];
-
-  const loadLocalLibrary = () => {
-    fetch('/data/puzzles.json').then((response) => response.json() as Promise<ImportedPuzzle[]>).then(setLibrary).catch(() => setLibrary([]));
-  };
-
-  useEffect(() => {
-    if (!hasToken()) { loadLocalLibrary(); return; }
-    getRandomPuzzle()
-      .then((task) => { setServerPuzzle(task); setServerReward(null); setStatus('ready'); })
-      .catch(() => loadLocalLibrary());
-  }, []);
-=======
-
   const loadPuzzle = async () => {
     setStatus('loading');
     groundRef.current?.set({ movable: { color: 'white', dests: new Map() } });
@@ -206,7 +213,6 @@ function OriginalLichessPuzzleLibrary() {
   };
 
   useEffect(() => { void loadPuzzle(); }, []);
->>>>>>> 6faf31c4167ec0e785bc9b57b4e8fdeed406c114
 
   useEffect(() => {
     if (!boardRef.current || !puzzle) return;
@@ -218,72 +224,6 @@ function OriginalLichessPuzzleLibrary() {
     return () => groundRef.current?.destroy();
   }, [puzzle]);
 
-<<<<<<< HEAD
-  // Серверный режим: позиция и проверка хода — через backend.
-  useEffect(() => {
-    if (!boardRef.current || !serverPuzzle) return;
-    const task = serverPuzzle;
-    const game = new Chess(task.fen);
-    const first = task.initial_move;
-    if (first) game.move({ from: first.slice(0, 2), to: first.slice(2, 4), promotion: first[4] as 'q' | 'r' | 'b' | 'n' | undefined });
-    setStatus('ready');
-    setServerReward(null);
-    const side = game.turn() === 'w' ? 'white' : 'black';
-    groundRef.current = Chessground(boardRef.current, {
-      fen: game.fen(), coordinates: false, orientation: side, turnColor: side,
-      movable: {
-        free: false, color: side, dests: legalDests(game),
-        events: {
-          after: (orig, dest) => {
-            void (async () => {
-              const uci = `${orig}${dest}`;
-              try {
-                let result = await solvePuzzle(task.id, uci);
-                // Backend сверяет ход строго, включая символ превращения,
-                // поэтому для хода на последнюю горизонталь пробуем и вариант с ферзем.
-                if (!result.is_correct && (dest[1] === '8' || dest[1] === '1')) {
-                  result = await solvePuzzle(task.id, `${uci}q`);
-                }
-                if (!result.is_correct) {
-                  setStatus('wrong');
-                  groundRef.current?.set({ fen: game.fen(), turnColor: side, movable: { color: side, dests: legalDests(game) } });
-                  window.setTimeout(() => setStatus('ready'), 650);
-                  return;
-                }
-                const played = game.move({ from: orig as Square, to: dest as Square, promotion: 'q' });
-                setServerReward(result);
-                setStatus('correct');
-                groundRef.current?.set({ fen: game.fen(), lastMove: played ? [played.from as Key, played.to as Key] : undefined, movable: { color: side, dests: new Map() } });
-              } catch {
-                setStatus('ready');
-                groundRef.current?.set({ fen: game.fen(), turnColor: side, movable: { color: side, dests: legalDests(game) } });
-              }
-            })();
-          },
-        },
-      },
-      highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 180 },
-    });
-    return () => groundRef.current?.destroy();
-  }, [serverPuzzle]);
-
-  const tags = puzzle?.themes.filter((theme) => !['short', 'long', 'veryLong', 'master', 'masterVsMaster'].includes(theme)).slice(0, 4) ?? [];
-  const serverTags = serverPuzzle?.themes.filter((theme) => !['short', 'long', 'veryLong', 'master', 'masterVsMaster'].includes(theme)).slice(0, 4) ?? [];
-
-  const nextTask = () => {
-    if (serverPuzzle) {
-      setStatus('ready');
-      setServerReward(null);
-      getRandomPuzzle().then(setServerPuzzle).catch(() => undefined);
-      return;
-    }
-    if (library.length) setIndex((index + 1) % library.length);
-  };
-
-  const sourceHref = (url: string) => (url.startsWith('http') ? url : `https://${url}`);
-
-  return <section className="puzzle-section" id="puzzles"><div className="section-heading"><span className="section-number">04</span><h2>Одна задача.<br /><span>Один инсайт.</span></h2></div><div className="puzzle-layout"><div className="puzzle-board"><div ref={boardRef} className="game-board" aria-label="Доска шахматной задачи" /></div><div className="puzzle-copy">{serverPuzzle ? <><p className="eyebrow">ЗАДАЧА С СЕРВЕРА · РЕЙТИНГ {serverPuzzle.rating}</p><h3>{serverTags.map((tag) => tag.replace(/([A-Z])/g, ' $1').toLowerCase()).join(' · ') || 'Тактическая идея'}</h3><p>Позиция из базы CoolChess. После хода соперника найди лучший ответ — сервер проверит ход и начислит награду.</p><div className="puzzle-meta"><span><strong>{serverPuzzle.rating}</strong><small>рейтинг задачи</small></span><span><strong>{serverPuzzle.popularity}</strong><small>популярность</small></span></div><div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? (serverReward && serverReward.xp_earned > 0 ? `Отлично! +${serverReward.xp_earned} XP · +${serverReward.coins_earned} монет` : 'Отлично! Ход найден.') : status === 'wrong' ? 'Попробуй ещё раз.' : 'Твой ход'}</strong></div><div className="puzzle-actions"><button className="button button-primary" type="button" onClick={nextTask}>Следующая задача <span>↗</span></button>{serverPuzzle.game_url && <a className="source-link" href={sourceHref(serverPuzzle.game_url)} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a>}</div></> : puzzle ? <><p className="eyebrow">ЗАДАЧА {index + 1} ИЗ {library.length}</p><h3>{tags.map((tag) => tag.replace(/([A-Z])/g, ' $1').toLowerCase()).join(' · ') || 'Тактическая идея'}</h3><p>Позиция из открытой базы Lichess. После хода соперника найди лучший ответ и проверь свою идею.</p><div className="puzzle-meta"><span><strong>{puzzle.rating}</strong><small>рейтинг задачи</small></span><span><strong>{puzzle.plays.toLocaleString('ru-RU')}</strong><small>решений</small></span></div><div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? 'Отлично! Ход найден.' : status === 'wrong' ? 'Попробуй ещё раз.' : 'Твой ход'}</strong></div><div className="puzzle-actions"><button className="button button-primary" type="button" onClick={nextTask}>Следующая задача <span>↗</span></button><a className="source-link" href={`https://${puzzle.gameUrl}`} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a></div></> : <><p className="eyebrow">БАЗА ЗАДАЧ</p><h3>Загрузка задач…</h3><p>Индекс Lichess загружается из локальных данных проекта.</p></>}</div></div></section>;
-=======
   const submitMove = async (orig: Key, dest: Key) => {
     if (!puzzle || !gameRef.current || status !== 'ready') return;
     const current = gameRef.current;
@@ -313,8 +253,7 @@ function OriginalLichessPuzzleLibrary() {
 
   const tags = puzzle?.themes.filter((theme) => !['short', 'long', 'veryLong', 'master', 'masterVsMaster'].includes(theme)).slice(0, 4) ?? [];
   const gameUrl = puzzle?.game_url ? (puzzle.game_url.startsWith('http') ? puzzle.game_url : `https://${puzzle.game_url}`) : null;
-  return <section className="puzzle-section" id="puzzles"><div className="section-heading"><span className="section-number">04</span><h2>Одна задача.<br /><span>Один инсайт.</span></h2></div><div className="puzzle-layout"><div className="puzzle-board"><div ref={boardRef} className="game-board" aria-label="Доска шахматной задачи" /></div><div className="puzzle-copy"><p className="eyebrow">ЗАДАЧА {index}</p><h3>{tags.map((tag) => tag.replace(/([A-Z])/g, ' $1').toLowerCase()).join(' · ') || 'Тактическая идея'}</h3><p>Позиция из базы Lichess. Сервер проверит твой ход и начислит награду.</p>{puzzle && <div className="puzzle-meta"><span><strong>{puzzle.rating}</strong><small>рейтинг задачи</small></span><span><strong>{puzzle.popularity}</strong><small>популярность</small></span></div>}<div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? 'Отлично! Ход найден.' : status === 'wrong' ? 'Неверный ход — попробуй ещё.' : status === 'submitting' ? 'Проверяем ход…' : status === 'loading' ? 'Загружаем задачу…' : status === 'error' ? error : 'Твой ход'}</strong></div>{status === 'error' && <a className="source-link" href="#auth">Войти в аккаунт и повторить ↗</a>}{reward && <p className="puzzle-reward">{reward}</p>}{error && status !== 'error' && <p className="puzzle-reward">{error}</p>}<div className="puzzle-actions"><button className="button button-primary" type="button" onClick={() => void loadPuzzle()} disabled={status === 'loading' || status === 'submitting'}>Следующая задача <span>↗</span></button>{gameUrl && <a className="source-link" href={gameUrl} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a>}</div></div></div></section>;
->>>>>>> 6faf31c4167ec0e785bc9b57b4e8fdeed406c114
+  return <section className="puzzle-section" id="puzzles"><div className="section-heading"><span className="section-number">04</span><h2>Одна задача.<br /><span>Один инсайт.</span></h2></div><div className="puzzle-layout"><div className={`puzzle-board${puzzle ? '' : ' is-empty'}`}><div ref={boardRef} className="game-board" aria-label="Доска шахматной задачи" />{!puzzle && <div className="puzzle-board-state"><span className="puzzle-board-state-icon">{status === 'loading' ? '♟' : '!'}</span><strong>{status === 'loading' ? 'Загружаем задачу…' : 'Задачи пока недоступны'}</strong><small>{status === 'error' ? error : 'Подключаем шахматную позицию к серверу.'}</small>{status === 'error' && <a className="source-link" href="#auth">Проверить вход и повторить ↗</a>}</div>}</div><div className="puzzle-copy"><p className="eyebrow">ЗАДАЧА {index}</p><h3>{tags.map((tag) => tag.replace(/([A-Z])/g, ' $1').toLowerCase()).join(' · ') || 'Тактическая идея'}</h3><p>Позиция из базы Lichess. Сервер проверит твой ход и начислит награду.</p>{puzzle && <div className="puzzle-meta"><span><strong>{puzzle.rating}</strong><small>рейтинг задачи</small></span><span><strong>{puzzle.popularity}</strong><small>популярность</small></span></div>}<div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? 'Отлично! Ход найден.' : status === 'wrong' ? 'Неверный ход — попробуй ещё.' : status === 'submitting' ? 'Проверяем ход…' : status === 'loading' ? 'Загружаем задачу…' : status === 'error' ? error : 'Твой ход'}</strong></div>{status === 'error' && <a className="source-link" href="#auth">Войти в аккаунт и повторить ↗</a>}{reward && <p className="puzzle-reward">{reward}</p>}{error && status !== 'error' && <p className="puzzle-reward">{error}</p>}<div className="puzzle-actions"><button className="button button-primary" type="button" onClick={() => void loadPuzzle()} disabled={status === 'loading' || status === 'submitting'}>Следующая задача <span>↗</span></button>{gameUrl && <a className="source-link" href={gameUrl} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a>}</div></div></div></section>;
 }
 
 function LessonPracticeBoard({ themes }: { themes: string[] }) {
@@ -412,7 +351,7 @@ function CommunityPage() {
 }
 
 function StartLearningPanel() {
-  return <section className="start-panel" id="start-learning"><div className="start-copy"><span className="eyebrow"><span>01</span> СЕГОДНЯ В COOLCHESS</span><h1>Начни с идеи.<br /><em>Увидь её на доске.</em></h1><p>Короткие объяснения, настоящие позиции и задачи, которые продолжают каждый урок. Твой маршрут уже готов — осталось сделать первый ход.</p><div className="start-stats"><span><strong>39</strong><small>тем в курсе</small></span><span><strong>6 000</strong><small>задач в базе</small></span><span><strong>12</strong><small>учеников онлайн</small></span></div><div className="flex flex-wrap items-center gap-4"><a className="button button-primary" href="#theory">Открыть первый урок <span>↘</span></a><a className="button button-link" href="#auth">Войти / регистрация ↗</a></div></div><div className="start-board"><TheoryBoard visual={lessonVisuals['opening-principles']} /></div></section>;
+  return <section className="start-panel" id="start-learning"><div className="start-copy"><span className="eyebrow"><span>01</span> ШАХМАТНАЯ ШКОЛА И ИГРОВАЯ ПЛАТФОРМА</span><h1>Научись видеть ход.<br /><em>Начни с первой партии.</em></h1><p>Понятный маршрут для ученика: короткий урок, позиция на доске, задача и игра против Maia. Без лишней теории — сразу понимаешь, что делать дальше.</p><div className="start-actions"><a className="button button-primary" href="#learn">Начать обучение бесплатно <span>↘</span></a><a className="button button-link" href="#auth">Уже есть аккаунт? Войти ↗</a></div><div className="start-trust"><span>♟</span><p><strong>Первый урок — за 5 минут</strong><small>Регистрация нужна только для сохранения прогресса и рейтинга.</small></p></div><div className="start-stats"><span><strong>39</strong><small>тем в курсе</small></span><span><strong>6 000+</strong><small>шахматных задач</small></span><span><strong>800–2600</strong><small>рейтинг Maia</small></span></div></div><div className="start-board"><TheoryBoard visual={lessonVisuals['opening-principles']} /><div className="hero-float-card"><strong>Сделай первый ход</strong><span>Урок → практика → партия</span></div></div></section>;
 }
 
 function LearnPage() {

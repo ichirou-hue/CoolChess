@@ -27,7 +27,7 @@ class MaiaBotService:
             print(f"[MaiaBot] Инициализация Maia3UCIEngine на {self.device}...")
             cfg = parse_args([
                 "--model", "maia3-5m",
-                "--checkpoint", self.model_path,
+                "--checkpoint-path", self.model_path,
                 "--trust-checkpoint",
                 "--local-files-only",
                 "--device", self.device
@@ -65,9 +65,12 @@ class MaiaBotService:
             except Exception as err:
                 print(f"[MaiaBot Error] Ошибка генерации хода: {err}")
 
-        # Резервный ход на случай непредвиденного сбоя
+        # Если модель недоступна, не выбираем первый legal move: это выглядит
+        # как случайное и часто бессмысленное поведение. Используем небольшой
+        # детерминированный эвристический fallback с приоритетом матов,
+        # взятий, шахов и центральных полей.
         if chosen_move is None:
-            chosen_move = next(iter(board.legal_moves))
+            chosen_move = self._fallback_move(board)
 
         san_move = board.san(chosen_move)
         board.push(chosen_move)
@@ -80,5 +83,37 @@ class MaiaBotService:
             "is_game_over": board.is_game_over(),
             "difficulty": target_rating
         }
+
+    @staticmethod
+    def _fallback_move(board: chess.Board) -> chess.Move:
+        piece_values = {
+            chess.PAWN: 100,
+            chess.KNIGHT: 320,
+            chess.BISHOP: 330,
+            chess.ROOK: 500,
+            chess.QUEEN: 900,
+            chess.KING: 20_000,
+        }
+        best_move = None
+        best_score = None
+        for move in board.legal_moves:
+            trial = board.copy(stack=False)
+            moving_piece = board.piece_at(move.from_square)
+            captured_piece = board.piece_at(move.to_square)
+            trial.push(move)
+            score = 0
+            if trial.is_checkmate():
+                score += 1_000_000
+            elif trial.is_check():
+                score += 4_000
+            if captured_piece:
+                score += piece_values[captured_piece.piece_type] * 10
+            if moving_piece:
+                score -= piece_values[moving_piece.piece_type] // 20
+            score += 30 - abs(chess.square_file(move.to_square) - 3.5) * 4
+            score += 30 - abs(chess.square_rank(move.to_square) - 3.5) * 4
+            if best_score is None or score > best_score:
+                best_move, best_score = move, score
+        return best_move or next(iter(board.legal_moves))
 
 maia_engine = MaiaBotService()

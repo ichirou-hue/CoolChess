@@ -2,6 +2,7 @@ import asyncio
 from database import engine, Base
 from auth.models import User
 from games.models import Game
+from clans.models import Clan, ClanMember
 
 async def init_tables():
     print("[DB] Подключаемся к PostgreSQL в контейнере Docker...")

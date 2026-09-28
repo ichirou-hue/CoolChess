@@ -2,7 +2,12 @@
 export type StudentProfile = {
   email: string;
   role: string;
-  elo: number;
+  elo_rating: number;
+  /** Temporary compatibility alias for the current profile view. */
+  elo?: number;
+  xp: number;
+  level: number;
+  coins: number;
   is_verified: boolean;
   lichess_username: string | null;
   lichess_blitz_rating: number | null;
@@ -24,7 +29,7 @@ export type LichessSyncResult = {
   message: string;
 };
 
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
+const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8081').replace(/\/$/, '');
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem('coolchess.accessToken');
@@ -50,7 +55,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export function getStudentProfile() {
-  return request<StudentProfile>('/api/me/profile');
+  return request<StudentProfile & { elo_rating: number }>('/api/me/profile').then((profile) => ({
+    ...profile,
+    // Keep the current UI compatible while it is migrated to the server field name.
+    elo: profile.elo_rating,
+  }));
 }
 
 export function getLichessVerificationCode() {

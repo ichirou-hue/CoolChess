@@ -17,7 +17,7 @@ export type LeaderboardResponse = {
   my_rank: Omit<LeaderboardPlayer, 'user_id' | 'email'> | null;
 };
 
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
+const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8081').replace(/\/$/, '');
 
 export async function getLeaderboard(category: LeaderboardCategory = 'elo', limit = 20) {
   const token = sessionStorage.getItem('coolchess.accessToken');

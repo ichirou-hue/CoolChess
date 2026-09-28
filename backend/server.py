@@ -8,7 +8,7 @@ from leaderboard.leaderboard_routes import leaderboard_router
 from bot.bot_routes import bot_router
 from clans.clan_routes import clan_router
 from auth.users_routes import users_router
-from pvp.pvp_routes import pvp_router
+from pvp.pvp_routes import pvp_router, pvp_api_router
 
 from auth.manager import (
     auth_backend,
@@ -49,6 +49,7 @@ app.include_router(bot_router)
 app.include_router(users_router)
 app.include_router(clan_router)
 app.include_router(pvp_router)
+app.include_router(pvp_api_router)
 
 # 2. Аутентификация и управление аккаунтом (fastapi-users)
 app.include_router(

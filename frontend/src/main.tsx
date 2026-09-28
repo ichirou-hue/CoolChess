@@ -569,24 +569,38 @@ function PvpPage() {
       const result = await pvpApi.createPvpRoom(opponentId.trim());
       syncBoard(result.data);
       connectRoom(result.game_id);
+      setOpponentId(result.game_id);
+      window.history.replaceState(null, '', `#pvp/${result.game_id}`);
       setMessage(`Код комнаты: ${result.game_id}`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Не удалось создать комнату');
     } finally { setBusy(false); }
   };
 
-  const joinRoom = async () => {
-    if (!opponentId.trim()) return;
+  const joinRoom = async (roomId = opponentId.trim()) => {
+    if (!roomId) return;
     setBusy(true); setError('');
-    try { const result = await pvpApi.getPvpRoom(opponentId.trim()); syncBoard(result); connectRoom(result.game_id); }
+    try { const result = await pvpApi.getPvpRoom(roomId); syncBoard(result); setOpponentId(result.game_id); connectRoom(result.game_id); setMessage(`Подключено к комнате ${result.game_id}`); }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Комната не найдена'); }
     finally { setBusy(false); }
+  };
+
+  useEffect(() => {
+    const roomId = window.location.hash.split('/')[1];
+    if (roomId) { setOpponentId(roomId); void joinRoom(roomId); }
+  }, []);
+
+  const copyInviteLink = async () => {
+    if (!room) return;
+    const link = `${window.location.origin}${window.location.pathname}#pvp/${room.game_id}`;
+    try { await navigator.clipboard.writeText(link); setMessage('Ссылка на приглашение скопирована.'); }
+    catch { setMessage(link); }
   };
 
   const sendAction = (action: 'resign' | 'draw_offer' | 'draw_accept') => socketRef.current?.send(JSON.stringify({ action }));
   const displayName = (email: string) => email.split('@')[0];
   if (!user) return <section className="pvp-page"><div className="community-card"><h1>PvP</h1><p>Войди в аккаунт, чтобы создать или подключить PvP-комнату.</p><a className="button button-primary" href="#auth">Войти ↗</a></div></section>;
-  return <section className="pvp-page"><div className="pvp-heading"><span className="eyebrow"><span>07</span> ЖИВАЯ ПАРТИЯ</span><h1>Играй<br /><em>с человеком.</em></h1><p>Создай комнату для соперника или подключись по коду. Ходы и часы синхронизируются через WebSocket.</p></div><div className="pvp-layout"><div className="pvp-board-card"><div ref={boardRef} className="game-board" aria-label="PvP шахматная доска" />{room && <div className="pvp-clocks"><span>{displayName(room.white_player.email)} <b>{Math.ceil(room.white_time)}с</b></span><span>{displayName(room.black_player.email)} <b>{Math.ceil(room.black_time)}с</b></span></div>}</div><aside className="pvp-panel"><h2>Лобби PvP</h2><label>UUID соперника или код комнаты<input value={opponentId} onChange={(event) => setOpponentId(event.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" /></label><div className="pvp-actions"><button className="button button-primary" type="button" disabled={busy || !opponentId.trim()} onClick={() => void createRoom()}>Создать комнату</button><button className="button button-link" type="button" disabled={busy || !opponentId.trim()} onClick={() => void joinRoom()}>Подключиться</button></div>{error && <p className="puzzle-reward">{error}</p>}{message && <p className="source-link">{message}</p>}{room && <><div className="pvp-players"><p><strong>Белые:</strong> {displayName(room.white_player.email)} {room.white_player.connected ? '●' : '○'}</p><p><strong>Чёрные:</strong> {displayName(room.black_player.email)} {room.black_player.connected ? '●' : '○'}</p></div><div className="pvp-actions"><button className="button button-link" type="button" onClick={() => sendAction('draw_offer')}>Предложить ничью</button><button className="button button-link" type="button" onClick={() => sendAction('draw_accept')}>Принять ничью</button><button className="button button-link" type="button" onClick={() => sendAction('resign')}>Сдаться</button></div></>}</aside></div></section>;
+  return <section className="pvp-page"><div className="pvp-heading"><span className="eyebrow"><span>07</span> ЖИВАЯ ПАРТИЯ</span><h1>Играй<br /><em>с человеком.</em></h1><p>Создай комнату для соперника или подключись по коду. Ходы и часы синхронизируются через WebSocket.</p></div><div className="pvp-layout"><div className="pvp-board-card"><div ref={boardRef} className="game-board" aria-label="PvP шахматная доска" />{room && <div className="pvp-clocks"><span>{displayName(room.white_player.email)} <b>{Math.ceil(room.white_time)}с</b></span><span>{displayName(room.black_player.email)} <b>{Math.ceil(room.black_time)}с</b></span></div>}</div><aside className="pvp-panel"><h2>Лобби PvP</h2><label>{room ? 'Ссылка или код комнаты' : 'UUID соперника или код комнаты'}<input value={opponentId} onChange={(event) => setOpponentId(event.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" /></label><div className="pvp-actions"><button className="button button-primary" type="button" disabled={busy || !opponentId.trim() || Boolean(room)} onClick={() => void createRoom()}>Создать комнату</button><button className="button button-link" type="button" disabled={busy || !opponentId.trim()} onClick={() => void joinRoom()}>{busy ? 'Подключаемся…' : 'Подключиться'}</button>{room && <button className="button button-link" type="button" onClick={() => void copyInviteLink()}>Скопировать приглашение</button>}</div>{error && <p className="puzzle-reward">{error}</p>}{message && <p className="source-link">{message}</p>}{room && <><div className="pvp-players"><p><strong>Белые:</strong> {displayName(room.white_player.email)} {room.white_player.connected ? '●' : '○'}</p><p><strong>Чёрные:</strong> {displayName(room.black_player.email)} {room.black_player.connected ? '●' : '○'}</p></div><div className="pvp-actions"><button className="button button-link" type="button" onClick={() => sendAction('draw_offer')}>Предложить ничью</button><button className="button button-link" type="button" onClick={() => sendAction('draw_accept')}>Принять ничью</button><button className="button button-link" type="button" onClick={() => sendAction('resign')}>Сдаться</button></div></>}</aside></div></section>;
 }
 
 function AppV2() {

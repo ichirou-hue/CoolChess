@@ -38,6 +38,7 @@ __pycache__/
 
 venv/
 .venv/
+.venv312/
 env/
 ENV/
 

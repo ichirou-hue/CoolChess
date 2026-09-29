@@ -242,3 +242,58 @@ def test_cleanup_rooms_removes_finished():
     room.last_activity_wall = _time.time() - 3600
     pvp_manager.cleanup_rooms()
     assert pvp_manager.get_room("game-cleanup-test") is None
+
+
+# --- 6. Прямой матч POST /api/pvp/rooms (контракт фронта) ---
+
+@_pytest.mark.asyncio
+async def test_pvp_rooms_self_match_rejected(authorized_client):
+    from unittest.mock import MagicMock as _MM
+    client, user, db = authorized_client
+    response = await client.post(
+        "/api/pvp/rooms",
+        json={"opponent_id": str(user.id), "time_control": 180, "increment": 2},
+    )
+    assert response.status_code == 400
+
+
+@_pytest.mark.asyncio
+async def test_pvp_rooms_opponent_not_found(authorized_client):
+    import uuid as _uuid
+    from unittest.mock import MagicMock as _MM
+    client, _user, db = authorized_client
+    mock_res = _MM()
+    mock_res.scalar_one_or_none.return_value = None
+    db.execute.return_value = mock_res
+    response = await client.post(
+        "/api/pvp/rooms",
+        json={"opponent_id": str(_uuid.uuid4()), "time_control": 180, "increment": 2},
+    )
+    assert response.status_code == 404
+
+
+@_pytest.mark.asyncio
+async def test_pvp_rooms_create_and_get(authorized_client):
+    import uuid as _uuid
+    from unittest.mock import MagicMock as _MM
+    client, user, db = authorized_client
+    opponent = _MM()
+    opponent.id = _uuid.uuid4()
+    opponent.email = "opp@test.com"
+    opponent.elo_rating = 1400
+    mock_res = _MM()
+    mock_res.scalar_one_or_none.return_value = opponent
+    db.execute.return_value = mock_res
+
+    response = await client.post(
+        "/api/pvp/rooms",
+        json={"opponent_id": str(opponent.id), "time_control": 180, "increment": 2},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "waiting"
+    assert data["data"]["black_player"]["user_id"] == str(opponent.id)
+
+    state = await client.get(f"/api/pvp/rooms/{data['game_id']}")
+    assert state.status_code == 200
+    assert state.json()["game_id"] == data["game_id"]

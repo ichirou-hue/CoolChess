@@ -6,10 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from fastapi_users.jwt import decode_jwt
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.manager import JWT_SECRET, current_active_user
 from auth.models import User
-from database import async_session_maker
+from database import async_session_maker, get_async_session
 from pvp.manager import pvp_manager
 from pvp.models import PlayerConnection
 
@@ -17,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 pvp_router = APIRouter(prefix="/ws/pvp", tags=["PvP WebSockets"])
 pvp_http_router = APIRouter(prefix="/api/pvp", tags=["PvP"])
+# Роутер прямого матча (контракт фронтенда: pvpApi.ts). Оба роутера живут
+# на префиксе /api/pvp: /create + /{game_id} (открытое место) и
+# /rooms + /rooms/{game_id} (матч против конкретного соперника).
+pvp_api_router = APIRouter(prefix="/api/pvp", tags=["PvP"])
 
 
 class PvpCreateRequest(BaseModel):
@@ -30,6 +35,45 @@ class PvpCreateResponse(BaseModel):
     ws_url: str
     time_control: int
     increment: int
+
+
+class CreateRoomRequest(BaseModel):
+    opponent_id: uuid.UUID
+    time_control: int = Field(default=180, ge=30, le=3600)
+    increment: int = Field(default=2, ge=0, le=60)
+
+
+@pvp_api_router.post("/rooms")
+async def create_pvp_room_direct(
+    payload: CreateRoomRequest,
+    user: User = Depends(current_active_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Прямой матч против конкретного соперника (оба места заняты сразу)."""
+    if payload.opponent_id == user.id:
+        raise HTTPException(status_code=400, detail="Нельзя создать матч против самого себя.")
+
+    opponent = (await db.execute(select(User).where(User.id == payload.opponent_id))).scalar_one_or_none()
+    if not opponent:
+        raise HTTPException(status_code=404, detail="Соперник не найден.")
+
+    game_id = str(uuid.uuid4())
+    room = pvp_manager.create_room(
+        game_id,
+        PlayerConnection(user_id=user.id, email=user.email, elo=user.elo_rating),
+        PlayerConnection(user_id=opponent.id, email=opponent.email, elo=opponent.elo_rating),
+        time_control=payload.time_control,
+        increment=payload.increment,
+    )
+    return {"game_id": game_id, "status": "waiting", "data": room.to_dict()}
+
+
+@pvp_api_router.get("/rooms/{game_id}")
+async def get_pvp_room(game_id: str):
+    room = pvp_manager.get_room(game_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Комната матча не найдена.")
+    return room.to_dict()
 
 
 async def get_user_id_from_token(token: Optional[str]) -> Optional[uuid.UUID]:

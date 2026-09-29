@@ -81,6 +81,36 @@ h1 em { color: #464bff; font-style: normal; }
 .route-main { min-height: calc(100vh - 82px); }.topbar-user { align-items: center; display: flex; gap: 16px; }.wallet-badge { align-items: center; background: #fffce7; border-radius: 20px; color: #5d5df5; display: inline-flex; font-size: 16px; gap: 5px; padding: 7px 11px; }.wallet-badge strong { color: #111; font-size: 11px; }.learn-page { background: #f6f7fb; display: grid; grid-template-columns: 285px minmax(0, 1fr); min-height: calc(100vh - 82px); }.learn-page-sidebar { background: #fff; border-right: 1px solid #e7e8ef; padding: 26px 18px; }.learn-module { margin: 22px 0; }.learn-module > strong { color: #8b8c98; display: block; font-family: Geologica, sans-serif; font-size: 9px; letter-spacing: .7px; margin: 0 9px 8px; text-transform: uppercase; }.learn-topic { background: transparent; border: 0; border-radius: 9px; color: #777985; display: flex; font-size: 10px; gap: 8px; line-height: 1.35; padding: 9px; text-align: left; width: 100%; }.learn-topic:hover, .learn-topic.active { background: #f3eff9; color: #464bff; }.learn-topic span { font-weight: 800; }.learn-page-main { min-width: 0; padding: clamp(30px, 5vw, 70px) max(22px, 5vw) 80px; }.learn-page-heading { align-items: end; display: flex; justify-content: space-between; margin-bottom: 28px; }.learn-page-heading h1 { font-size: clamp(30px, 4vw, 58px); letter-spacing: -3px; line-height: 1; margin: 0 0 13px; max-width: 850px; }.learn-page-heading p { color: #666875; font-size: 14px; line-height: 1.6; max-width: 600px; }.lesson-reward { background: #dce204; border-radius: 14px; min-width: 125px; padding: 14px; }.lesson-reward span { display: block; font-family: Geologica, sans-serif; font-size: 8px; }.lesson-reward strong { display: block; font-size: 23px; margin-top: 7px; }.learn-article { align-items: stretch; background: #fff; border: 1px solid #e4e5ec; border-radius: 20px; display: grid; gap: 28px; grid-template-columns: .8fr 1.2fr; padding: clamp(20px, 3.5vw, 42px); }.learn-article-text h2 { font-size: clamp(25px, 3vw, 43px); letter-spacing: -2px; line-height: 1; margin: 20px 0; }.learn-article-text h2 em { color: #464bff; font-style: normal; }.learn-callout { background: #fffce7; border-radius: 13px; margin: 20px 0; padding: 17px; }.learn-callout p, .learn-example p { color: #555662; font-size: 13px; line-height: 1.6; margin: 0; }.learn-example { border-top: 1px solid #eee; padding: 20px 0; }.learn-article-text ol { counter-reset: lesson; list-style: none; margin: 0 0 24px; padding: 0; }.learn-article-text li { align-items: center; counter-increment: lesson; display: flex; font-size: 12px; gap: 9px; margin: 10px 0; }.learn-article-text li::before { align-items: center; background: #f3eff9; border-radius: 50%; color: #464bff; content: counter(lesson); display: inline-flex; flex: 0 0 24px; font-family: Geologica, sans-serif; font-size: 9px; height: 24px; justify-content: center; }.learn-article-board { align-self: center; }.learn-article-board .theory-board-card { box-shadow: 10px 10px 0 #dce204; }.learn-practice { margin-top: 28px; }.learn-practice-heading { margin-bottom: 18px; }.learn-practice-heading h2 { font-size: clamp(25px, 3vw, 40px); letter-spacing: -2px; margin: 7px 0; }.learn-practice-heading p { color: #777985; font-size: 13px; }.learn-practice .lesson-practice { max-width: 760px; }.profile-page { background: #f6f7fb; min-height: calc(100vh - 82px); padding: clamp(50px, 8vh, 100px) max(22px, calc((100vw - 1100px) / 2)); }.profile-hero { align-items: center; display: flex; gap: 20px; margin-bottom: 45px; }.profile-avatar-large { align-items: center; background: #dce204; border-radius: 20px; color: #111; display: flex; font-size: 30px; font-weight: 800; height: 84px; justify-content: center; width: 84px; }.profile-hero h1 { font-size: clamp(40px, 5vw, 72px); letter-spacing: -4px; line-height: .9; margin: 0 0 10px; }.profile-hero h1 em { color: #464bff; font-style: normal; }.profile-hero p { color: #777985; font-size: 14px; }.profile-wallet { background: #111; border-radius: 16px; color: #fff; margin-left: auto; min-width: 170px; padding: 18px; }.profile-wallet span, .profile-wallet small { color: #aaa; display: block; font-family: Geologica, sans-serif; font-size: 8px; }.profile-wallet strong { color: #dce204; display: block; font-size: 25px; margin: 9px 0; }.profile-grid { display: grid; gap: 14px; grid-template-columns: repeat(3, 1fr); }.profile-card { background: #fff; border: 1px solid #e7e8ef; border-radius: 17px; padding: 24px; }.profile-card-kicker { color: #8b8c98; font-family: Geologica, sans-serif; font-size: 9px; }.profile-card > strong { display: block; font-size: 37px; letter-spacing: -2px; margin-top: 16px; }.profile-card p { color: #666875; font-size: 12px; margin: 5px 0 20px; }.profile-card small { color: #999; font-family: Geologica, sans-serif; font-size: 9px; }.streak-card { background: #464bff; border-color: #464bff; color: #fff; }.streak-card .profile-card-kicker, .streak-card p, .streak-card small { color: #d5d6ff; }.profile-activity { background: #fff; border: 1px solid #e7e8ef; border-radius: 17px; display: flex; justify-content: space-between; margin-top: 18px; padding: 25px; }.profile-activity h2 { font-size: 22px; margin: 0 0 8px; }.profile-activity p { color: #777985; font-size: 12px; max-width: 310px; }.activity-calendar { align-content: center; display: grid; gap: 6px; grid-template-columns: repeat(14, 15px); }.activity-calendar i { background: #ececf1; border-radius: 4px; height: 15px; width: 15px; }.activity-calendar i.active { background: #dce204; }
 @media (max-width: 900px) { .learn-page { grid-template-columns: 220px 1fr; }.learn-article { grid-template-columns: 1fr; }.learn-article-board { max-width: 700px; width: 100%; }.profile-grid { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .topbar-user { display: none; }.learn-page { display: block; }.learn-page-sidebar { border-bottom: 1px solid #e7e8ef; border-right: 0; max-height: 150px; overflow: auto; padding: 14px 18px; }.learn-module { display: none; }.learn-module:first-of-type { display: block; margin: 0; }.learn-module:first-of-type .learn-topic:nth-of-type(n+5) { display: none; }.learn-page-main { padding: 30px 18px 60px; }.learn-page-heading { align-items: flex-start; flex-direction: column; gap: 17px; }.lesson-reward { min-width: 0; }.profile-hero { align-items: flex-start; flex-wrap: wrap; }.profile-wallet { margin-left: 0; width: 100%; }.profile-activity { display: block; }.activity-calendar { margin-top: 25px; } }
+
+/* Landing refresh: larger actions, brighter school feel and a clearer first step. */
+.topbar { background: rgba(255,255,255,.88); }
+.main-nav { gap: 6px; }
+.main-nav a { border-radius: 999px; padding: 13px 16px; }
+.main-nav a::before { background: #eafe5f; border-radius: 999px; height: 100%; inset: 0; opacity: .8; top: 0; transform: scale(0); z-index: -1; }
+.main-nav a:hover::before, .main-nav a.active::before { transform: scale(1); }
+.auth-nav-link { background: #464bff; border-radius: 999px; color: #fff; font-size: 12px; padding: 14px 20px; }
+.start-panel { background: linear-gradient(145deg, #c2e7ff 0%, #68c2ff 52%, #a79df3 100%); border-radius: 0 0 60px 60px; grid-template-columns: minmax(330px, .75fr) minmax(520px, 1.25fr); min-height: calc(100vh - 68px); padding: clamp(40px, 6vw, 90px) clamp(22px, 6vw, 96px); }
+.start-panel::before { color: rgba(255,255,255,.25); content: '♞  ♟'; font-size: clamp(240px, 30vw, 470px); right: -7vw; top: 2%; }
+.start-panel::after { background: #eafe5f; right: 32%; top: 9%; }
+.start-copy { max-width: 520px; }
+.start-copy h1 { color: #fff; font-size: clamp(46px, 5.2vw, 82px); text-shadow: 0 3px 0 rgba(70,75,255,.08); }
+.start-copy h1 em { color: #464bff; }
+.start-copy > p { color: #173f62; font-size: 16px; max-width: 490px; }
+.start-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0 22px; }
+.start-actions .button-primary { background: #464bff; border-radius: 12px; box-shadow: 0 7px 0 rgba(38,42,181,.2); font-size: 14px; padding: 17px 22px; }
+.start-actions .button-link { background: rgba(255,255,255,.5); border-radius: 12px; color: #111; font-size: 12px; padding: 17px 18px; }
+.start-trust { align-items: center; background: rgba(255,255,255,.38); border: 1px solid rgba(255,255,255,.55); border-radius: 16px; display: flex; gap: 12px; max-width: 410px; padding: 12px 15px; }
+.start-trust > span { align-items: center; background: #eafe5f; border-radius: 50%; display: flex; font-size: 20px; height: 38px; justify-content: center; width: 38px; }
+.start-trust p, .start-trust strong, .start-trust small { display: block; margin: 0; }
+.start-trust strong { font-size: 12px; }.start-trust small { color: #245276; font-size: 10px; margin-top: 4px; }
+.start-stats { border-top: 1px solid rgba(255,255,255,.5); gap: 28px; margin-top: 28px; padding-top: 18px; }
+.start-stats strong { color: #fff; font-size: 23px; }.start-stats small { color: #174b6d; }
+.start-board { position: relative; }.start-board .theory-board-card { background: rgba(17,17,17,.94); border: 8px solid rgba(255,255,255,.65); border-radius: 34px; box-shadow: 16px 16px 0 #eafe5f, 0 30px 60px rgba(38,42,181,.24); padding: clamp(18px, 3vw, 30px); }
+.hero-float-card { background: #eafe5f; border: 3px solid #fff; border-radius: 4px 24px 24px 24px; bottom: 28px; left: -24px; padding: 14px 18px; position: absolute; transform: rotate(-3deg); }
+.hero-float-card strong, .hero-float-card span { display: block; }.hero-float-card strong { font-size: 13px; }.hero-float-card span { font-size: 10px; margin-top: 5px; }
+.maia-slider { background: rgba(255,255,255,.62); border: 1px solid rgba(70,75,255,.12); border-radius: 16px; display: flex; flex-direction: column; gap: 10px; margin: 24px 0 8px; max-width: 340px; padding: 14px 16px; }
+.maia-slider > span { display: flex; font-size: 11px; justify-content: space-between; }.maia-slider strong { color: #464bff; }.maia-slider input { accent-color: #464bff; width: 100%; }.maia-slider small { color: #777; font-size: 9px; }
+@media (max-width: 700px) { .start-panel { border-radius: 0 0 32px 32px; padding: 35px 18px 80px; }.start-board { order: -1; }.hero-float-card { bottom: 12px; left: 8px; }.start-actions { align-items: stretch; flex-direction: column; }.start-actions .button { text-align: center; width: 100%; }.main-nav { display: none; } }
 /* Большие рабочие доски в игровых режимах; теория сохраняет компактную композицию. */
 .route-main .game-layout { max-width: 900px; }
 .route-main .puzzle-board { max-width: 820px; }
@@ -161,6 +191,118 @@ h1 em { color: #464bff; font-style: normal; }
   .learn-article { padding: 16px; }
   .learn-article-board { width: 100%; }
 }
+
+/* Final landing and puzzle states: keep the primary visual hierarchy and make API failures explicit. */
+.start-panel {
+  background: linear-gradient(145deg, #c2e7ff 0%, #68c2ff 52%, #a79df3 100%);
+  grid-template-columns: minmax(290px, .68fr) minmax(0, 1.32fr);
+}
+.start-copy h1 {
+  color: #fff;
+  text-shadow: 0 3px 0 rgba(41, 72, 160, .2), 0 12px 28px rgba(38, 42, 181, .18);
+}
+.start-copy h1 em { color: #464bff; }
+.start-copy > p { color: #173f62; }
+.start-board { max-width: none; }
+.start-board .theory-board { max-width: 760px; width: 100%; }
+.start-board .theory-board-card { box-shadow: 18px 18px 0 #eafe5f, 0 30px 60px rgba(38,42,181,.24); }
+.puzzle-board { position: relative; }
+.puzzle-board.is-empty .game-board { opacity: .22; }
+.puzzle-board-state {
+  align-items: center;
+  background: linear-gradient(145deg, #464bff 0%, #6a63f5 100%);
+  border-radius: 18px;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  inset: 12px;
+  justify-content: center;
+  padding: 28px;
+  position: absolute;
+  text-align: center;
+  z-index: 2;
+}
+.puzzle-board-state-icon {
+  align-items: center;
+  background: #eafe5f;
+  border-radius: 50%;
+  color: #464bff;
+  display: inline-flex;
+  font-size: 28px;
+  height: 58px;
+  justify-content: center;
+  margin-bottom: 18px;
+  width: 58px;
+}
+.puzzle-board-state strong { font-size: clamp(20px, 2.5vw, 30px); }
+.puzzle-board-state small { color: #e1e1ff; font-size: 12px; line-height: 1.5; margin-top: 10px; max-width: 280px; }
+.puzzle-board-state .source-link { color: #eafe5f; margin-top: 18px; }
+.eyebrow { font-size: 12px; }
+.block-kicker { font-size: 11px; }
+.main-nav a { font-size: 14px; }
+.auth-nav-link, .profile-button { font-size: 13px; }
+.button { font-size: 14px; }
+.puzzle-copy h3 { font-size: clamp(28px, 3vw, 38px); line-height: 1.08; }
+.puzzle-copy > p:not(.eyebrow) { color: #4b4d5b; font-size: 17px; line-height: 1.65; }
+.puzzle-instruction { background: #fffce7; border-left: 4px solid #dce204; border-radius: 12px; padding: 16px 18px; }
+.puzzle-instruction strong { color: #111; }
+.puzzle-feedback { padding: 16px 18px; }
+.puzzle-feedback strong { font-size: 14px; line-height: 1.4; }
+.puzzle-meta small { font-size: 12px; }
+.puzzle-actions .source-link, .source-link { font-size: 13px; }
+.puzzle-reward { font-size: 14px; }
+.learn-topic { font-size: 13px; }
+.learn-module > strong, .profile-card-kicker { font-size: 11px; }
+.learn-page-heading p, .lesson-description, .learn-callout p, .learn-example p, .learn-article-text li { font-size: 15px; }
+.learn-practice-heading p, .profile-card p, .profile-activity p { font-size: 14px; }
+small { font-size: .8rem; }
+
+/* Keep every product surface inside the same CoolChess visual world as the landing page. */
+.route-main { background: #eaf5ff; }
+.game-section,
+.puzzle-section,
+.community-page,
+.profile-page,
+.learn-page {
+  background: linear-gradient(145deg, #dff3ff 0%, #f3eff9 58%, #e6e8ff 100%);
+}
+.game-section,
+.puzzle-section,
+.community-page,
+.profile-page { border-radius: 0 0 56px 56px; }
+.learn-page { border-radius: 0 0 56px 56px; overflow: hidden; }
+.learn-page-sidebar { background: rgba(255,255,255,.68); backdrop-filter: blur(10px); }
+.learn-page-main { background: transparent; }
+.learn-article,
+.profile-card,
+.profile-activity,
+.community-card,
+.move-panel {
+  box-shadow: 0 16px 36px rgba(70,75,255,.08);
+}
+.section-heading h2,
+.game-intro h2,
+.community-hero h2,
+.learn-page-heading h1,
+.profile-hero h1 { text-wrap: balance; }
+.community-hero p,
+.game-intro > p:not(.eyebrow),
+.profile-hero p,
+.learn-page-heading p { color: #274e70; }
+.card-kicker,
+.live-label,
+.block-kicker { letter-spacing: 1.1px; }
+
+@media (max-width: 1000px) {
+  .start-panel { grid-template-columns: minmax(240px, .65fr) minmax(0, 1.35fr); }
+  .start-board .theory-board { max-width: 700px; }
+}
+
+@media (max-width: 700px) {
+  .start-panel { display: flex; }
+  .start-board .theory-board { max-width: none; }
+  .puzzle-board-state { inset: 8px; }
+}
 /* Controls for data loaded from the backend APIs. */
 .leaderboard-filters { display: flex; flex-wrap: wrap; gap: 5px; }
 .leaderboard-filters button { background: #f1f1f6; border: 0; border-radius: 7px; color: #777985; cursor: pointer; font: inherit; font-size: 9px; padding: 7px 9px; }
@@ -171,3 +313,6 @@ h1 em { color: #464bff; font-style: normal; }
 .lichess-link-controls .button { cursor: pointer; }
 .lichess-link-controls .button:disabled { cursor: wait; opacity: .6; }
 @media (max-width: 700px) { .lichess-link-controls { justify-content: flex-start; margin-top: 16px; } .lichess-link-controls input { width: 100%; } .leaderboard-filters { margin-top: 8px; } }
+.clan-form { display: grid; gap: 8px; margin-top: 14px; }.clan-form input { background: rgba(255,255,255,.72); border: 1px solid rgba(75,76,0,.25); border-radius: 9px; color: #111; font: inherit; font-size: 11px; padding: 10px 11px; }.clan-form input::placeholder { color: #686900; }.clan-form .button { border: 0; cursor: pointer; font-size: 10px; padding: 10px 12px; }.invite-card .community-player { border-top-color: rgba(75,76,0,.18); }.invite-card .community-player .button { margin-left: auto; padding: 7px 8px; }.invite-card > .button-link { border: 0; cursor: pointer; margin-top: 8px; padding-left: 0; }.invite-card .puzzle-reward { color: #8b3020; }
+.pvp-page { background: #f6f7fb; min-height: calc(100vh - 82px); padding: clamp(45px, 7vh, 90px) max(24px, calc((100vw - 1200px) / 2)); }.pvp-heading { margin-bottom: 32px; }.pvp-heading h1 { font-size: clamp(42px, 6vw, 76px); letter-spacing: -4px; line-height: .92; margin: 12px 0 16px; }.pvp-heading em { color: #464bff; font-style: normal; }.pvp-heading p { color: #676975; font-size: 14px; line-height: 1.6; max-width: 520px; }.pvp-layout { align-items: start; display: grid; gap: 18px; grid-template-columns: minmax(320px, 680px) minmax(260px, 1fr); }.pvp-board-card { background: #111; border-radius: 18px; padding: 18px; }.pvp-board-card .game-board { aspect-ratio: 1; width: 100%; }.pvp-panel { background: #fff; border: 1px solid #e7e8ef; border-radius: 18px; padding: 24px; }.pvp-panel h2 { margin: 0 0 20px; }.pvp-panel label { color: #676975; display: grid; font-size: 11px; gap: 8px; }.pvp-panel input { border: 1px solid #dfe0e8; border-radius: 9px; font: inherit; font-size: 11px; padding: 11px; }.pvp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }.pvp-actions .button { border: 0; cursor: pointer; font-size: 10px; padding: 10px 12px; }.pvp-players { border-top: 1px solid #eee; margin-top: 20px; padding-top: 10px; }.pvp-players p { font-size: 12px; }.pvp-clocks { color: #fff; display: flex; font-family: Geologica, sans-serif; font-size: 11px; justify-content: space-between; padding: 14px 2px 0; }.pvp-clocks b { color: #dce204; margin-left: 8px; }@media (max-width: 760px) { .pvp-layout { grid-template-columns: 1fr; }.pvp-panel { order: -1; } }
+.pvp-page { background: #f3eff9; }.pvp-layout { align-items: start; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); max-width: 1320px; }.pvp-board-card { background: #faf5f1; border: 1px solid #e7e0da; border-radius: 26px; box-shadow: 18px 18px 0 #dce204, 0 26px 48px rgba(17,17,17,.14); padding: clamp(18px, 2.5vw, 34px); }.pvp-board-card .game-board { border-radius: 12px; box-shadow: none; max-width: 900px; margin: 0 auto; }.pvp-board-card .game-board cg-board { background-image: linear-gradient(45deg, #464bff 25%, transparent 25%), linear-gradient(-45deg, #464bff 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #464bff 75%), linear-gradient(-45deg, transparent 75%, #464bff 75%); background-color: #faf5f1; }.pvp-panel { box-shadow: 0 16px 34px rgba(17,17,17,.08); }.pvp-clocks { background: #111; border-radius: 10px; margin-top: 16px; padding: 13px 15px; }.pvp-heading { max-width: 760px; }.pvp-heading .eyebrow { color: #464bff; }@media (max-width: 760px) { .pvp-page { padding-left: 18px; padding-right: 18px; }.pvp-layout { gap: 28px; }.pvp-board-card { box-shadow: 9px 9px 0 #dce204, 0 20px 35px rgba(17,17,17,.12); padding: 12px; } }

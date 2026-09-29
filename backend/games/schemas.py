@@ -8,7 +8,7 @@ from games.models import GameStatus, PlayerColor
 
 class GameCreateRequest(BaseModel):
     player_color: PlayerColor = Field(default=PlayerColor.WHITE, description="Цвет фигур игрока")
-    difficulty: int = Field(default=1300, ge=1, le=2500, description="Сложность бота Maia (уровень 1-5 или целевой Elo)")
+    difficulty: int = Field(default=1500, ge=800, le=2600, description="Сложность бота Maia (целевой Elo от 800 до 2600)")
 
 
 class PlayerMoveRequest(BaseModel):

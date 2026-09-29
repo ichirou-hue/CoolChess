@@ -7,9 +7,9 @@ bot_router = APIRouter(prefix="/api/bot", tags=["Шахматный бот Maia"
 
 class BotMoveRequest(BaseModel):
     fen: str = Field(default=chess.STARTING_FEN, description="Текущая позиция партии в FEN")
-    # Тир 1-5 (маппится в 1100-1900) либо Elo напрямую. Мусорные значения
-    # уходили бы в engine.cfg.elo, поэтому диапазон ограничен схемой (422).
-    difficulty: int = Field(default=1500, ge=1, le=3000, description="Тир 1-5 или Elo (1100-1900)")
+    # Диапазон ограничен схемой (иначе 422): мусорные значения
+    # уходили бы в engine.cfg.elo. Единый диапазон с фронтом (800–2600).
+    difficulty: int = Field(default=1500, ge=800, le=2600, description="Уровень сложности Maia (Elo от 800 до 2600)")
 
 @bot_router.post("/move")
 async def get_bot_move(payload: BotMoveRequest):

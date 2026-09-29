@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime, timezone
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
+from sqlalchemy.exc import IntegrityError
 
 from database import get_async_session
 from auth.models import User
@@ -14,6 +15,7 @@ from clans.schemas import (
     ClanResponse,
     ClanDetailResponse,
     ClanMemberResponse,
+    ClanTransferRequest,
 )
 
 clan_router = APIRouter(prefix="/api/clans", tags=["Кланы"])
@@ -27,8 +29,8 @@ async def _get_clan_stats(clan: Clan) -> tuple[int, int]:
 
 @clan_router.get("", response_model=List[ClanResponse])
 async def list_clans(
-    limit: int = 20,
-    offset: int = 0,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Список всех кланов."""
@@ -94,9 +96,18 @@ async def create_clan(
     )
     db.add(membership)
 
-    await db.commit()
-    await db.refresh(clan)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Клан с таким именем или тегом уже существует.",
+        )
 
+    # Ответ строим явно из известных объектов: clan.members после commit
+    # может быть не загружен (lazy-load в async-контексте), а у ClanMember
+    # нет полей email/elo_rating — model_validate(clan) упал бы с 500.
     member_response = [
         ClanMemberResponse(
             user_id=user.id,
@@ -107,11 +118,17 @@ async def create_clan(
         )
     ]
 
-    response = ClanDetailResponse.model_validate(clan)
-    response.members_count = 1
-    response.total_elo = user.elo_rating
-    response.members = member_response
-    return response
+    return ClanDetailResponse(
+        id=clan.id,
+        name=clan.name,
+        tag=clan.tag,
+        description=clan.description,
+        created_at=clan.created_at,
+        leader_id=clan.leader_id,
+        members_count=1,
+        total_elo=user.elo_rating,
+        members=member_response,
+    )
 
 
 @clan_router.post("/{clan_id}/join", response_model=ClanResponse)
@@ -141,7 +158,15 @@ async def join_clan(
         joined_at=datetime.now(timezone.utc),
     )
     db.add(new_member)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Гонка двух параллельных join: уникальный ключ (user_id) сработал.
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Вы уже состоите в клане."
+        )
     await db.refresh(clan)
 
     count, elo = await _get_clan_stats(clan)
@@ -171,3 +196,107 @@ async def leave_clan(
     await db.delete(membership)
     await db.commit()
     return {"message": "Вы успешно вышли из клана."}
+
+
+def _build_detail(clan: Clan) -> ClanDetailResponse:
+    # Строим явно, а не model_validate(clan): у ClanMember нет полей
+    # email/elo_rating (они лежат в связанном User), валидация бы упала.
+    members = [
+        ClanMemberResponse(
+            user_id=m.user_id,
+            email=m.user.email if m.user else "",
+            role=m.role,
+            elo_rating=m.user.elo_rating if m.user else 0,
+            joined_at=m.joined_at,
+        )
+        for m in clan.members
+    ]
+    return ClanDetailResponse(
+        id=clan.id,
+        name=clan.name,
+        tag=clan.tag,
+        description=clan.description,
+        created_at=clan.created_at,
+        leader_id=clan.leader_id,
+        members_count=len(clan.members),
+        total_elo=sum(m.user.elo_rating for m in clan.members if m.user),
+        members=members,
+    )
+
+
+@clan_router.get("/{clan_id}", response_model=ClanDetailResponse)
+async def get_clan(
+    clan_id: uuid.UUID,
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Карточка клана с составом."""
+    clan = (await db.execute(select(Clan).where(Clan.id == clan_id))).scalar_one_or_none()
+    if not clan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Клан не найден.")
+    return _build_detail(clan)
+
+
+@clan_router.post("/disband", status_code=status.HTTP_200_OK)
+async def disband_clan(
+    user: User = Depends(current_active_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Роспуск клана. Только лидер."""
+    member_stmt = select(ClanMember).where(ClanMember.user_id == user.id)
+    membership = (await db.execute(member_stmt)).scalar_one_or_none()
+    if not membership or membership.role != ClanRole.LEADER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Только лидер клана может его распустить."
+        )
+    clan = (
+        await db.execute(select(Clan).where(Clan.id == membership.clan_id))
+    ).scalar_one_or_none()
+    if not clan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Клан не найден.")
+    await db.delete(clan)  # участники удаляются каскадом
+    await db.commit()
+    return {"message": "Клан распущен."}
+
+
+@clan_router.post("/transfer", response_model=ClanDetailResponse)
+async def transfer_leadership(
+    payload: ClanTransferRequest,
+    user: User = Depends(current_active_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Передача лидерства участнику того же клана. Только лидер."""
+    member_stmt = select(ClanMember).where(ClanMember.user_id == user.id)
+    membership = (await db.execute(member_stmt)).scalar_one_or_none()
+    if not membership or membership.role != ClanRole.LEADER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Только лидер клана может передать права."
+        )
+    if payload.new_leader_user_id == user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Вы уже являетесь лидером клана."
+        )
+    new_leader_stmt = select(ClanMember).where(
+        ClanMember.clan_id == membership.clan_id,
+        ClanMember.user_id == payload.new_leader_user_id,
+    )
+    new_leader = (await db.execute(new_leader_stmt)).scalar_one_or_none()
+    if not new_leader:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Новый лидер должен состоять в этом клане."
+        )
+    clan = (
+        await db.execute(select(Clan).where(Clan.id == membership.clan_id))
+    ).scalar_one_or_none()
+    if not clan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Клан не найден.")
+
+    membership.role = ClanRole.OFFICER
+    new_leader.role = ClanRole.LEADER
+    clan.leader_id = payload.new_leader_user_id
+    await db.commit()
+    await db.refresh(clan)
+    return _build_detail(clan)

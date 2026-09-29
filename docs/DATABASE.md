@@ -1,5 +1,15 @@
 # База данных CoolChess
 
+Источник истины схемы — **Alembic-миграции** (`backend/alembic/versions/`).
+Свежие БД поднимаются через `alembic upgrade head` (так делает
+`backend/entrypoint.sh` в Docker). `backend/init_db.py` (`create_all`) —
+dev-путь без истории миграций, `backend/update_schema.py` — legacy для баз,
+созданных до Alembic (только колонки `users`, новые таблицы не создаёт).
+
+UUID-колонки используют backend-агностичный `GUID`
+(`fastapi_users_db_sqlalchemy.generics`) — работает и на PostgreSQL,
+и на SQLite (прежний `postgresql.UUID` ломал SQLite-режим).
+
 ## Таблицы
 
 ### `users`
@@ -53,6 +63,36 @@ Many-to-many «кто что решил», защита от фарма нагр
 | `moves_uci` | Text | ходы через пробел |
 | `created_at`, `updated_at` | DateTime | |
 
+### `clans`
+Кланы (`backend/clans/models.py`).
+
+| Колонка | Тип | Заметка |
+|---|---|---|
+| `id` | UUID | PK |
+| `name` | VARCHAR(50), unique, index | 3–50 символов |
+| `tag` | VARCHAR(6), unique, index | 2–6 символов, хранится в UPPER |
+| `description` | VARCHAR(255), nullable | |
+| `created_at` | DateTime(tz) | |
+| `leader_id` | UUID → `users.id` (RESTRICT) | удаление лидера при живом клане запрещено |
+
+### `clan_members`
+Членство «1 игрок = максимум 1 клан» (`ClanRole`: `leader`/`officer`/`member`).
+
+| Колонка | Тип | Заметка |
+|---|---|---|
+| `id` | UUID | PK |
+| `clan_id` | UUID → `clans.id` (CASCADE) | удаление клана чистит состав |
+| `user_id` | UUID → `users.id` (CASCADE), **unique** | один игрок — один клан |
+| `role` | Enum(`ClanRole`) | по умолчанию `member` |
+| `joined_at` | DateTime(tz) | |
+| `uq_clan_member` | Unique(`clan_id`, `user_id`) | защита от дублей |
+
+### PvP-комнаты (без таблиц)
+`backend/pvp/` состояния в БД не хранит: `ChessGameRoom` (доска, часы
+`white_time_left`/`black_time_left`, `result`, `termination_reason`) живёт
+в `PVPConnectionManager.active_rooms` (in-memory синглтон `pvp_manager`).
+Перезапуск backend обнуляет все PvP-партии — это осознанное решение для прототипа.
+
 ## Подключение
 
 `backend/database.py`: асинхронный engine SQLAlchemy 2.0 + `async_session_maker`,
@@ -69,14 +109,15 @@ DATABASE_URL=sqlite+aiosqlite:///./coolchess.db
 
 | Скрипт | Назначение |
 |---|---|
-| `backend/init_db.py` | `Base.metadata.create_all` — чистая инициализация (требует импорта `auth.models`, `games.models`) |
-| `backend/update_schema.py` | `ALTER TABLE ... ADD COLUMN` для давно созданной БД (список `MISSING_COLUMNS`; в Postgres — `IF NOT EXISTS`) |
-| `backend/schema.sql` | эталонная схема для ревью |
-| `backend/dump_ddl.py` | дамп DDL из метаданных |
+| `backend/alembic/versions/*` | **Источник истины.** История схемы; применяется через `alembic upgrade head` |
+| `backend/init_db.py` | `Base.metadata.create_all` — dev-инициализация без истории (импортирует `auth`/`games`/`clans.models`) |
+| `backend/update_schema.py` | **Legacy.** `ALTER TABLE ... ADD COLUMN` только для `users` на базах до Alembic; новые таблицы не создаёт |
+| `backend/schema.sql` | эталонная схема для ревью (генерируется `python dump_ddl.py > schema.sql`) |
+| `backend/dump_ddl.py` | дамп DDL из метаданных (импортирует `auth`/`games`/`clans.models`) |
 | `backend/load_lichess_puzzles.py` | загрузка задач в таблицу `puzzles` |
 | `scripts/import_lichess_puzzles.py` | компактный `frontend/public/data/puzzles.json` из `lichess_db_puzzle.csv.zst` (исходник вне Git) |
 
-Порядок на свежей БД: поднять `postgres` → `cd backend && python init_db.py` →
-загрузить задачи → старт API. Alembic не используется осознанно:
-схема создаётся через `create_all`, догоняется через `update_schema.py`
-(см. docstring скрипта).
+Порядок на свежей БД: `cp .env.example .env && cp backend/.env.example backend/.env`
+(заполнить секреты) → `docker compose up --build -d` (entrypoint сам сделает
+`alembic upgrade head`) → загрузить задачи → проверка `GET /health`.
+Локально без Docker: `cd backend && alembic upgrade head` (или `python init_db.py`).

@@ -12,6 +12,10 @@ class ClanCreateRequest(BaseModel):
     description: Optional[str] = Field(None, max_length=255)
 
 
+class ClanTransferRequest(BaseModel):
+    new_leader_user_id: uuid.UUID = Field(..., description="Участник, которому передаётся лидерство")
+
+
 class ClanMemberResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

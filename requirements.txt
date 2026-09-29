@@ -17,6 +17,7 @@ PyJWT>=2.8.0                         # JWTStrategy (auth_backend)
 
 # --- База данных и ORM ---
 sqlalchemy[asyncio]>=2.0.0
+alembic>=1.13.0        # миграции: backend/entrypoint.sh делает `alembic upgrade head`
 asyncpg>=0.29.0        # PostgreSQL (продакшен и Docker)
 aiosqlite>=0.20.0      # SQLite (локальная разработка без Docker)
 python-dotenv>=1.0.0   # чтение DATABASE_URL / JWT_SECRET из .env

@@ -49,7 +49,7 @@ def mock_db_session():
     """Мок асинхронной сессии SQLAlchemy."""
     session = AsyncMock()
     session.add = MagicMock()
-    session.delete = MagicMock()  # Нужно для роутов удаления / выхода из клана
+    session.delete = AsyncMock()  # AsyncSession.delete — awaitable (выход из клана)
     session.execute = AsyncMock()
     session.commit = AsyncMock()
     session.refresh = AsyncMock()

@@ -115,6 +115,9 @@ async def test_get_lichess_verification_code_generates_and_reuses(anonymous_clie
     mock_student = create_mock_user(role=UserRole.STUDENT)
     app.dependency_overrides[current_active_user] = lambda: mock_student
     app.dependency_overrides[get_async_session] = lambda: mock_db_session
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = mock_student
+    mock_db_session.execute.return_value = mock_res
 
     try:
         # Первый запрос генерирует случайный код и сохраняет его
@@ -141,6 +144,9 @@ async def test_sync_lichess_requires_issued_code(anonymous_client, mock_db_sessi
     mock_student = create_mock_user(role=UserRole.STUDENT)
     app.dependency_overrides[current_active_user] = lambda: mock_student
     app.dependency_overrides[get_async_session] = lambda: mock_db_session
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = mock_student
+    mock_db_session.execute.return_value = mock_res
 
     try:
         with patch("auth.users_routes.lichess_service.fetch_user_profile", new_callable=AsyncMock) as mock_fetch:
@@ -170,6 +176,9 @@ async def test_sync_lichess_fails_without_verification_code_in_bio(anonymous_cli
     mock_student.lichess_verification_code = "coolchess-abc12345"
     app.dependency_overrides[current_active_user] = lambda: mock_student
     app.dependency_overrides[get_async_session] = lambda: mock_db_session
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = mock_student
+    mock_db_session.execute.return_value = mock_res
 
     fake_lichess_data = {
         "username": "MagnusCarlsen",
@@ -206,6 +215,9 @@ async def test_sync_lichess_success_with_verification_code(anonymous_client, moc
 
     code = "coolchess-abc12345"
     mock_student.lichess_verification_code = code
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = mock_student
+    mock_db_session.execute.return_value = mock_res
     fake_lichess_data = {
         "username": "MagnusCarlsen",
         "bio": f"Hello world! Verifying: {code}",

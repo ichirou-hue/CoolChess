@@ -1,51 +1,29 @@
-(venv) mora@MacBook-Air-mORA CoolChess % cat Dockerfile
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# Системные зависимости для компиляции python-chess / asyncpg
+# Системные зависимости для сборки asyncpg и healthcheck (curl)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Установка Python-библиотек
+# Установка Python-зависимостей (отдельным слоем для кэширования)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копирование исходного кода
-COPY . .
+# Исходники backend (миграции Alembic едут вместе с кодом)
+COPY backend/ ./backend/
+COPY scripts/ ./scripts/
 
-# Делаем скрипт запуска исполняемым внутри контейнера
-RUN chmod +x /app/entrypoint.sh
+WORKDIR /app/backend
 
-EXPOSE 8000
+RUN chmod +x /app/backend/entrypoint.sh
 
-# Запуск через entrypoint (миграции -> uvicorn)
-ENTRYPOINT ["/app/entrypoint.sh"]%                        
-(venv) mora@MacBook-Air-mORA CoolChess % cat docker-compose.yml
-services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: coolchess_pg
-    restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
-      POSTGRES_DB: ${POSTGRES_DB:-coolchess}
-    ports:
-      - "${POSTGRES_PORT:-5433}:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-coolchess}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+EXPOSE 8080
 
-volumes:
-  pgdata:
-(venv) mora@MacBook-Air-mORA CoolChess % 
+# Entrypoint: alembic upgrade head -> uvicorn server:app :8080
+ENTRYPOINT ["/app/backend/entrypoint.sh"]

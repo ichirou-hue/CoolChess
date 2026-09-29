@@ -36,6 +36,18 @@ CREATE TABLE users (
 );
 
 
+CREATE TABLE clans (
+	id UUID NOT NULL, 
+	name VARCHAR(50) NOT NULL, 
+	tag VARCHAR(6) NOT NULL, 
+	description VARCHAR(255), 
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	leader_id UUID NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(leader_id) REFERENCES users (id) ON DELETE RESTRICT
+);
+
+
 CREATE TABLE games (
 	id UUID NOT NULL, 
 	user_id UUID NOT NULL, 
@@ -59,3 +71,18 @@ CREATE TABLE user_solved_puzzles (
 	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, 
 	FOREIGN KEY(puzzle_id) REFERENCES puzzles (id) ON DELETE CASCADE
 );
+
+
+CREATE TABLE clan_members (
+	id UUID NOT NULL, 
+	clan_id UUID NOT NULL, 
+	user_id UUID NOT NULL, 
+	role clanrole NOT NULL, 
+	joined_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_clan_member UNIQUE (clan_id, user_id), 
+	FOREIGN KEY(clan_id) REFERENCES clans (id) ON DELETE CASCADE, 
+	UNIQUE (user_id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+

@@ -1,4 +1,5 @@
 import asyncio
+import time
 import uuid
 import chess
 from dataclasses import dataclass, field
@@ -7,11 +8,21 @@ from typing import Optional, Dict
 from fastapi import WebSocket
 
 
+ROOM_TTL_FINISHED_SECONDS = 15 * 60      # завершённые партии держим 15 минут
+ROOM_TTL_ABANDONED_SECONDS = 30 * 60     # несобранные комнаты без игроков — 30 минут
+
+
+def calculate_pvp_elo_delta(user_elo: int, opponent_elo: int, actual: float, k: int = 32) -> int:
+    """Симметричная дельта Elo FIDE для PvP: actual 1.0/0.5/0.0."""
+    expected = 1.0 / (1.0 + 10.0 ** ((opponent_elo - user_elo) / 400.0))
+    return int(round(k * (actual - expected)))
+
+
 @dataclass
 class PlayerConnection:
-    user_id: uuid.UUID
-    email: str
-    elo: int
+    user_id: Optional[uuid.UUID]  # None = открытое место (ждём соперника)
+    email: str = ""
+    elo: int = 1200
     websocket: Optional[WebSocket] = None
     connected: bool = False
 
@@ -36,7 +47,11 @@ class ChessGameRoom:
         self.board = chess.Board()
         self.white_time_left: float = float(base_time_seconds)
         self.black_time_left: float = float(base_time_seconds)
-        
+
+        # Часы идут по loop.time(); TTL/активность — по wall-clock.
+        self.created_wall = time.time()
+        self.last_activity_wall = time.time()
+
         self.last_move_time: Optional[float] = None
         self.is_active: bool = False
         self.game_over: bool = False
@@ -135,6 +150,23 @@ class ChessGameRoom:
         self.result = result
         self.termination_reason = reason
 
+    @property
+    def black_seat_open(self) -> bool:
+        """Место чёрных ждёт соперника (создано через POST /api/pvp/create)."""
+        return self.black.user_id is None
+
+    def touch(self) -> None:
+        self.last_activity_wall = time.time()
+
+    @staticmethod
+    def _player_dict(player: PlayerConnection) -> dict:
+        return {
+            "user_id": str(player.user_id) if player.user_id else None,
+            "email": player.email,
+            "elo": player.elo,
+            "connected": player.connected,
+        }
+
     def to_dict(self) -> dict:
         return {
             "game_id": self.game_id,
@@ -146,16 +178,7 @@ class ChessGameRoom:
             "game_over": self.game_over,
             "result": self.result,
             "reason": self.termination_reason,
-            "white_player": {
-                "user_id": str(self.white.user_id),
-                "email": self.white.email,
-                "elo": self.white.elo,
-                "connected": self.white.connected,
-            },
-            "black_player": {
-                "user_id": str(self.black.user_id),
-                "email": self.black.email,
-                "elo": self.black.elo,
-                "connected": self.black.connected,
-            },
+            "waiting_opponent": self.black_seat_open,
+            "white_player": self._player_dict(self.white),
+            "black_player": self._player_dict(self.black),
         }

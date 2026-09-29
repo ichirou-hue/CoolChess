@@ -2,11 +2,13 @@
 
 Учебная шахматная платформа для школьников: игра против человекоподобного бота, тактические задачи, курсы и геймификация.
 
-Собирает задачи Lichess, валидирует ходы через `python-chess`, генерирует ответы бота через ML-модель Maia-3 (веса `maia3-5m.pt`, вне Git), начисляет XP/монеты/Elo с защитой от фарма, синхронизирует рейтинги Lichess и отдаёт всё через FastAPI + React SPA (Vite + chessground).
+Собирает задачи Lichess, валидирует ходы через `python-chess`, генерирует ответы бота через ML-модель Maia-3 (веса `maia3-5m.pt`, вне Git), начисляет XP/монеты/Elo с защитой от фарма, синхронизирует рейтинги Lichess, объединяет игроков в кланы, проводит PvP-партии в реальном времени через WebSocket с серверными шахматными часами и отдаёт всё через FastAPI + React SPA (Vite + chessground).
 
 ## Возможности
 
 - **Партии с ботом** — старт/продолжение/сдача, серверная валидация ходов, ответный ход Maia-3 (`1100–1900 Elo`)
+- **PvP в реальном времени** — `POST /api/pvp/create` (создатель — белые, место чёрных открыто), WebSocket `ws://.../ws/pvp/{game_id}?token=<jwt>`: ходы (`move`), сдача (`resign`), ничьи (`draw_offer`/`draw_accept`), серверные часы (база 180с + инкремент 2с, фоновый таймер каждую секунду), зрители, таймаут-поражение, симметричный пересчёт Elo (K=32) в фоне, TTL-чистка комнат (15/30 мин)
+- **Кланы** — создание (`name` 3–50, `tag` 2–6, uppercase), карточка `GET /{id}`, вступление/выход, передача лидерства (`POST /transfer`), роспуск (`POST /disband`, только лидер), роли `leader`/`officer`/`member` (1 игрок = 1 клан), счётчики `members_count`/`total_elo`; лидер не может выйти без передачи прав или роспуска
 - **Тактические задачи** — датасет Lichess (FEN, UCI-цепочки, рейтинг, популярность, темы), фильтры по сложности и теме
 - **Геймификация** — XP, уровни, монеты (`пешки ♟`), Elo; защита от повторного фарма (`user_solved_puzzles`, `IntegrityError` + rollback)
 - **Аутентификация** — `fastapi-users`, JWT Bearer, роли `student` / `coach` / `admin` (смена роли только через superuser)
@@ -48,6 +50,14 @@
 │   ├── 📁 leaderboard/
 │   │   ├── 📄 leaderboard_routes.py    # GET /api/leaderboard?category=elo|level|puzzles
 │   │   └── 📄 schemas.py
+│   ├── 📁 clans/                       # Кланы: Clan, ClanMember (1 игрок = 1 клан)
+│   │   ├── 📄 models.py                # ClanRole leader/officer/member, uq_clan_member
+│   │   ├── 📄 schemas.py               # ClanCreateRequest, ClanResponse, ClanDetailResponse, ClanTransferRequest
+│   │   └── 📄 clan_routes.py           # GET /api/clans|/{id}, POST .../create|{id}/join|/leave|/disband|/transfer
+│   ├── 📁 pvp/                         # PvP в реальном времени (in-memory, без таблиц)
+│   │   ├── 📄 models.py                # ChessGameRoom, часы + инкремент, calculate_pvp_elo_delta, TTL
+│   │   ├── 📄 manager.py               # PVPConnectionManager: комнаты, broadcast, фоновый таймер, settle Elo
+│   │   └── 📄 pvp_routes.py            # HTTP POST /api/pvp/create + WS /ws/pvp/{game_id}?token=<jwt>
 │   ├── 📁 integrations/
 │   │   └── 📄 lichess_service.py       # Lichess API: fetch_user_profile, парсинг perfs
 │   └── 📁 models/
@@ -92,11 +102,13 @@
 │   ├── 📄 product-scope.md             # Scope прототипа, экраны, визуал
 │   └── 📄 puzzle-topic-map.md          # Маппинг урок -> теги Lichess
 │
-├── 📁 tests/                           # pytest (93 теста)
+├── 📁 tests/                           # pytest (124 теста)
 │   ├── 📄 conftest.py                  # mock_user, mock_db_session, authorized_client
+│   ├── 📁 test_pvp/                    # PvP: часы/инкремент/таймаут, HTTP create, claim места, settle, WS flow
 │   └── 📁 test_backend/
 │       ├── 📁 test_auth/               # Роуты, схемы, модель User
-│       ├── 📁 test_bot/                # bot_service, bot_routes
+│       ├── 📁 test_bot/                # bot_service, bot_routes (+валидация difficulty)
+│       ├── 📁 test_clans/              # list/create/join/leave/detail/disband/transfer
 │       ├── 📁 test_games/              # game_routes, game_rewards
 │       ├── 📁 test_puzzles/            # puzzle_routes, rewards
 │       ├── 📁 test_leaderboard/        # leaderboard_routes
@@ -129,9 +141,11 @@ pip install -r requirements.txt
 
 # 3. База данных + схема (из каталога backend/)
 cd backend
-python init_db.py
-# для давно созданной БД — докрутить недостающие колонки:
-python update_schema.py
+alembic upgrade head   # основной путь (миграции)
+# альтернатива для dev без Alembic:
+# python init_db.py
+# для БД, созданной до Alembic, — докрутить колонки users:
+# python update_schema.py
 
 # 4. API (из каталога backend/, слушает порт 8080)
 uvicorn server:app --reload --port 8080
@@ -145,7 +159,7 @@ cd frontend && npm install && npm run dev
 ### Предварительные требования
 
 - Установленные [Docker](https://docs.docker.com/get-docker/) и Docker Compose
-- Файл `.env` в корне проекта с переменными:
+- Файлы `.env` в корне и `backend/.env` (образцы — `.env.example`, `backend/.env.example`):
   ```bash
   POSTGRES_USER=postgres
   POSTGRES_PASSWORD=postgrespassword
@@ -156,18 +170,35 @@ cd frontend && npm install && npm run dev
   VERIFY_SECRET=<секрет_32+_символов>
   CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
   ```
+  В compose backend читает `backend/.env`, `DATABASE_URL` внутри сети перезаписывается на `postgres:5432`.
 - Веса Maia `backend/models/maia3-5m.pt` (в Git не хранятся, правило `*.pt`). Без файла бот работает в fallback-режиме
 
-### Полный запуск (БД в Docker, backend и frontend локально)
+### Полный запуск (всё в Docker, продоподобно)
 
 ```bash
-# Поднять PostgreSQL
+# Образцы окружения -> рабочие файлы, заполнить секреты!
+cp .env.example .env
+cp backend/.env.example backend/.env
+
+# Сборка и запуск: postgres + backend (миграции + uvicorn :8080) + nginx (:80)
+docker compose up --build -d
+
+# Проверка
+curl http://localhost/health
+curl http://localhost/api/leaderboard?category=elo
+
+# Логи
+docker compose logs -f backend
+```
+
+### Только БД в Docker (backend и frontend локально, для разработки)
+
+```bash
 docker compose up -d postgres
-
-# Просмотр логов
-docker compose logs -f postgres
-
-# Дальше — по разделу "Быстрый старт": init_db.py, uvicorn :8080, vite :5173
+cd backend
+alembic upgrade head   # или: python init_db.py
+uvicorn server:app --reload --port 8080
+# отдельный терминал: cd frontend && npm install && npm run dev
 ```
 
 ### Выборочный запуск (без Docker, SQLite)
@@ -187,7 +218,8 @@ uvicorn server:app --reload --port 8080
 | Сервис | Назначение | Порт |
 |--------|-----------|------|
 | `postgres` | PostgreSQL 16 (volume `pgdata`, healthcheck `pg_isready`) | `:5433` -> `5432` |
-| `backend` | FastAPI локально через `uvicorn` (не в compose) | `:8080` |
+| `backend` | FastAPI в compose: `alembic upgrade head` + `uvicorn` 1 воркер (healthcheck `/health`) | `:8080` (наружу через nginx) |
+| `nginx` | Гейтвей: `/api/`, `/docs`, `/ws/`, `/health` → `backend:8080` | `:80` |
 | `frontend` | Vite dev-server локально через `npm run dev` (не в compose) | `:5173` |
 
 ### Доступ к сервисам
@@ -226,7 +258,7 @@ docker compose logs -f postgres
 
 ## Зависимости
 
-**Python:** fastapi, uvicorn[standard], pydantic, python-multipart, fastapi-users[sqlalchemy], fastapi-users-db-sqlalchemy, email-validator, bcrypt, PyJWT, sqlalchemy[asyncio], asyncpg, aiosqlite, python-dotenv, disposable-email-domains, python-chess, httpx, requests, zstandard, pytest, pytest-asyncio, pytest-cov (опционально: torch + maia3 с GitHub — инференс бота)
+**Python:** fastapi, uvicorn[standard], pydantic, python-multipart, fastapi-users[sqlalchemy], fastapi-users-db-sqlalchemy, email-validator, bcrypt, PyJWT, sqlalchemy[asyncio], alembic, asyncpg, aiosqlite, python-dotenv, disposable-email-domains, python-chess, httpx, requests, zstandard, pytest, pytest-asyncio, pytest-cov (опционально: torch + maia3 с GitHub — инференс бота)
 
 **Frontend:** React 18, TypeScript, Vite 8, chessground 9.2, chess.js 1.4, tailwindcss 4.3
 
@@ -270,8 +302,8 @@ XP/монеты масштабируются от силы бота (`bot_elo / 
 .\venv\Scripts\python.exe -m pytest -q
 ```
 
-- 93 теста, 0 failed (mock-сессии БД, `authorized_client` / `anonymous_client`)
-- E2E-направления: auth (роли, схемы), bot (FEN-валидация, инференс), games (награды, resign-экономика), puzzles (тиры наград, anti-farm, `IntegrityError`), leaderboard (маскирование email), lichess (404/429/502/503)
+- 124 теста, 0 failed (mock-сессии БД, `authorized_client` / `anonymous_client`, `TestClient` для WS)
+- E2E-направления: auth (роли, схемы, lichess-bind через перечитывание в сессии), bot (FEN-валидация, инференс, 422 на мусорный difficulty), games (награды, resign-экономика, штраф за брошенную партию при старте), puzzles (тиры наград, anti-farm, `IntegrityError`), leaderboard (маскирование email, tie-break ранга), lichess (404/429/502/503), clans (list/create/join/leave/detail/disband/transfer, `IntegrityError` → 400), pvp (часы + инкремент, фоновый таймаут, claim места, HTTP create, чистка комнат)
 - Проверка базы знаний отдельно: `python scripts/validate_knowledge_base.py` (9 статей `ready`)
 
 ## Примеры
@@ -294,6 +326,22 @@ curl -X POST http://127.0.0.1:8080/api/bot/move -H "Content-Type: application/js
 # Партия: старт -> ход -> сдача
 curl -X POST http://127.0.0.1:8080/api/games/start -H "Authorization: Bearer <jwt>" -H "Content-Type: application/json" -d "{\"bot_difficulty\":1500}"
 curl http://127.0.0.1:8080/api/leaderboard?category=elo -H "Authorization: Bearer <jwt>"
+
+# Кланы: список -> создание -> вступление -> передача -> роспуск
+curl http://127.0.0.1:8080/api/clans
+curl -X POST http://127.0.0.1:8080/api/clans/create -H "Authorization: Bearer <jwt>" -H "Content-Type: application/json" -d "{\"name\":\"Knights\",\"tag\":\"KNT\"}"
+curl http://127.0.0.1:8080/api/clans/<clan_id> -H "Authorization: Bearer <jwt>"
+curl -X POST http://127.0.0.1:8080/api/clans/<clan_id>/join -H "Authorization: Bearer <jwt>"
+curl -X POST http://127.0.0.1:8080/api/clans/transfer -H "Authorization: Bearer <jwt>" -H "Content-Type: application/json" -d "{\"new_leader_user_id\":\"<uuid>\"}"
+curl -X POST http://127.0.0.1:8080/api/clans/disband -H "Authorization: Bearer <jwt>"
+curl -X POST http://127.0.0.1:8080/api/clans/leave -H "Authorization: Bearer <jwt>"
+
+# PvP: создать комнату -> подключиться по WS (токен — в query, не в header):
+# curl -X POST http://127.0.0.1:8080/api/pvp/create -H "Authorization: Bearer <jwt>" -d '{"time_control":300,"increment":5}'
+# wscat -c "ws://127.0.0.1:8080/ws/pvp/<game_id>?token=<jwt>"
+# -> {"action":"ping"} => {"type":"pong"}
+# -> {"action":"move","move":"e2e4"} => {"type":"move_made",...} или {"type":"game_over",...}
+# -> {"action":"resign"} / {"action":"draw_offer"} / {"action":"draw_accept"}
 ```
 
 ## Мониторинг и инфраструктура
@@ -304,6 +352,8 @@ curl http://127.0.0.1:8080/api/leaderboard?category=elo -H "Authorization: Beare
 - **Healthcheck API** — `GET /health` (`{"status": "ok", "app": "CoolChess Server"}`)
 - **Swagger / ReDoc** — `GET /docs`, `GET /redoc` на порту `8080`
 - **Логи Maia** — `[MaiaBot Warning]` при отсутствии весов, `[MaiaBot Error]` при ошибке инференса
+- **PvP-комнаты (in-memory)** — `PVPConnectionManager.active_rooms`, фоновый таймер (1с) списывает часы и закрывает по таймауту, TTL-чистка (15 мин завершённые / 30 мин брошенные), итог пишется в Elo фоном (`settle_ratings`, K=32, пол 100); рестарт стирает партии — поэтому в compose ровно **1 воркер** uvicorn
+- **Кланы** — `clans` + `clan_members` (см. `docs/DATABASE.md`); агрегаты `members_count`/`total_elo` считаются в `_get_clan_stats`
 - **Оффлайн-индекс задач** — `frontend/public/data/puzzles.json` как fallback, если API недоступен
 - **Валидатор контента** — `scripts/validate_knowledge_base.py` в CI перед деплоем статей
 
@@ -311,14 +361,15 @@ curl http://127.0.0.1:8080/api/leaderboard?category=elo -H "Authorization: Beare
 
 | Файл | Назначение |
 |------|------------|
-| `backend/init_db.py` | Создание всех таблиц (`Base.metadata.create_all`). Запуск: `cd backend && python init_db.py` |
+| `backend/init_db.py` | Создание всех таблиц (`Base.metadata.create_all`: users, puzzles, games, clans). Запуск: `cd backend && python init_db.py` |
 | `backend/update_schema.py` | Докрутка недостающих колонок на давно созданной БД |
-| `backend/dump_ddl.py` | Дамп DDL схемы |
+| `backend/dump_ddl.py` | Дамп DDL схемы (`python dump_ddl.py > schema.sql`; импортирует `auth/games/clans.models`) |
 | `backend/load_lichess_puzzles.py` | Загрузка задач Lichess напрямую в БД (таблица `puzzles`) |
 | `scripts/import_lichess_puzzles.py` | Сборка компактного `puzzles.json` из `lichess_db_puzzle.csv.zst`: `python scripts/import_lichess_puzzles.py data/source/lichess_db_puzzle.csv.zst frontend/public/data/puzzles.json --max-per-tag 500` |
 | `scripts/validate_knowledge_base.py` | Проверка `content/manifest.json` + front matter статей. Запуск: `python scripts/validate_knowledge_base.py` |
-| `docker-compose.yml` | Только `postgres:16-alpine` (`${POSTGRES_PORT:-5433}:5432`, volume `pgdata`) |
-| `Dockerfile` | Сборка backend: `python:3.13-slim` + `uvicorn server:app --host 0.0.0.0 --port 8080` |
+| `docker-compose.yml` | `postgres:16-alpine` + `backend` (uvicorn :8080, 1 воркер, healthcheck `/health`) + `nginx:alpine` (:80 → backend). Проверка: `docker compose config`, запуск: `docker compose up --build` |
+| `Dockerfile` | Сборка backend: `python:3.13-slim` + `requirements.txt` + `alembic upgrade head` + `uvicorn server:app --host 0.0.0.0 --port 8080 --workers 1` |
+| `.env.example` / `backend/.env.example` | Образцы окружения (скопировать в `.env` / `backend/.env`, заполнить `JWT_SECRET`/`VERIFY_SECRET`) |
 
 ## Документация
 

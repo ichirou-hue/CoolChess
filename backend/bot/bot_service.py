@@ -1,6 +1,10 @@
+import logging
 import os
+import threading
 import chess
 from typing import Dict, Any
+
+logger = logging.getLogger(__name__)
 
 try:
     import torch
@@ -16,15 +20,16 @@ class MaiaBotService:
         self.model_path = os.path.join(base_dir, "models", "maia3-5m.pt")
         self.device = "cuda" if torch is not None and torch.cuda.is_available() else "cpu"
         self.engine = None
+        self._lock = threading.Lock()
         self._load_engine()
 
     def _load_engine(self):
         if not os.path.exists(self.model_path) or Maia3UCIEngine is None or parse_args is None:
-            print(f"[MaiaBot Warning] Файл весов не найден: {self.model_path}")
+            logger.warning(f"[MaiaBot] Файл весов не найден: {self.model_path} (fallback: первый легальный ход)")
             return
 
         try:
-            print(f"[MaiaBot] Инициализация Maia3UCIEngine на {self.device}...")
+            logger.info(f"[MaiaBot] Инициализация Maia3UCIEngine на {self.device}...")
             cfg = parse_args([
                 "--model", "maia3-5m",
                 "--checkpoint", self.model_path,
@@ -34,9 +39,9 @@ class MaiaBotService:
             ])
             self.engine = Maia3UCIEngine(cfg)
             self.engine.ensure_model_loaded()
-            print("[MaiaBot] Модель Maia-3 5M успешно загружена и готова к игре!")
+            logger.info("[MaiaBot] Модель Maia-3 5M успешно загружена и готова к игре!")
         except Exception as e:
-            print(f"[MaiaBot Error] Ошибка загрузки Maia-3: {e}")
+            logger.error(f"[MaiaBot] Ошибка загрузки Maia-3: {e}")
 
     def predict_move(self, fen: str, target_rating: int = 1500) -> Dict[str, Any]:
         board = chess.Board(fen)
@@ -49,24 +54,29 @@ class MaiaBotService:
             }
 
         chosen_move = None
+        used_fallback = False
 
         if self.engine is not None:
-            try:
-                # Устанавливаем рейтинг для оценки ходов
-                self.engine.cfg.elo = target_rating
-                self.engine.cmd_position(f"position fen {fen}")
-                
-                # score_moves() возвращает кортеж: (best_move, list_of_scored_moves)
-                result = self.engine.score_moves()
-                if isinstance(result, tuple) and len(result) > 0:
-                    chosen_move = result[0]
-                elif isinstance(result, list) and len(result) > 0:
-                    chosen_move = result[0]["move"]
-            except Exception as err:
-                print(f"[MaiaBot Error] Ошибка генерации хода: {err}")
+            # Синглтон движка мутирует cfg.elo: сериализуем инференс,
+            # иначе параллельные запросы испортят друг другу рейтинг.
+            with self._lock:
+                try:
+                    # Устанавливаем рейтинг для оценки ходов
+                    self.engine.cfg.elo = target_rating
+                    self.engine.cmd_position(f"position fen {fen}")
+
+                    # score_moves() возвращает кортеж: (best_move, list_of_scored_moves)
+                    result = self.engine.score_moves()
+                    if isinstance(result, tuple) and len(result) > 0:
+                        chosen_move = result[0]
+                    elif isinstance(result, list) and len(result) > 0:
+                        chosen_move = result[0]["move"]
+                except Exception as err:
+                    logger.error(f"[MaiaBot] Ошибка генерации хода: {err}")
 
         # Резервный ход на случай непредвиденного сбоя
         if chosen_move is None:
+            used_fallback = True
             chosen_move = next(iter(board.legal_moves))
 
         san_move = board.san(chosen_move)
@@ -78,7 +88,8 @@ class MaiaBotService:
             "new_fen": board.fen(),
             "is_check": board.is_check(),
             "is_game_over": board.is_game_over(),
-            "difficulty": target_rating
+            "difficulty": target_rating,
+            "fallback": used_fallback,
         }
 
 maia_engine = MaiaBotService()

@@ -17,6 +17,8 @@
 | `PATCH` | `/api/users/me` | да | обновление профиля (без смены роли) |
 | `POST` | `/api/auth/request-verify-token` | да | запрос письма подтверждения |
 | `POST` | `/api/auth/verify` | нет | подтверждение email по токену |
+| `POST` | `/api/auth/forgot-password` | нет | запрос сброса пароля (без SMTP токен никуда не уходит, событие только логируется) |
+| `POST` | `/api/auth/reset-password` | нет | установка нового пароля по токену |
 
 Email нормализуется (lowercase, `+`-алиасы, точки Gmail) и проверяется против
 списка одноразовых доменов. Подробнее — `docs/auth-contract.md`.
@@ -37,8 +39,8 @@ Email нормализуется (lowercase, `+`-алиасы, точки Gmail)
 |---|---|---|---|
 | `POST` | `/api/bot/move` | нет | ход Maia: `{"fen": "...", "difficulty": 1500}` → `{move_uci, move_san, new_fen, is_check, is_game_over}` |
 
-`difficulty` — целевой Elo (1100–1900) или тир 1–5 в партиях. Невалидный FEN → 400.
-Без весов `maia3-5m.pt` возвращается первый легальный ход (fallback).
+`difficulty` — тир 1–5 или Elo; вне диапазона 1–3000 → `422`.
+Без весов `maia3-5m.pt` возвращается первый легальный ход (fallback, поле `fallback: true` в ответе).
 
 ## Задачи (`/api/puzzles`)
 
@@ -57,7 +59,7 @@ Email нормализуется (lowercase, `+`-алиасы, точки Gmail)
 | Метод | Адрес | Auth | Что делает |
 |---|---|---|---|
 | `GET` | `/api/games/active` | да | текущая незавершённая партия или `null` |
-| `POST` | `/api/games/start` | да | `{"player_color": "white", "difficulty": 1300}` (тир 1–5 или Elo 1–2500) |
+| `POST` | `/api/games/start` | да | `{"player_color": "white", "difficulty": 1300}` (тир 1–5 или Elo 1–2500); висящие активные партии закрываются как сданные — с Elo-штрафом, без XP |
 | `POST` | `/api/games/{game_id}/move` | да | `{"move_uci": "e2e4"}` → обновлённая позиция + ответный ход бота |
 | `POST` | `/api/games/{game_id}/resign` | да | сдача: Elo как за поражение, без XP/монет |
 | `GET` | `/api/games/my` | да | история партий (`id`, `status`, `moves_count`, `created_at`) |
@@ -74,11 +76,66 @@ Email нормализуется (lowercase, `+`-алиасы, точки Gmail)
 
 Email в топе маскируются (`m***@domain`). `limit`: 1–100, по умолчанию 20.
 
+## Кланы (`/api/clans`)
+
+| Метод | Адрес | Auth | Что делает |
+|---|---|---|---|
+| `GET` | `/api/clans?limit=20&offset=0` | нет | список кланов (`members_count`, `total_elo`), сортировка по `created_at` desc; `limit` 1–100 |
+| `GET` | `/api/clans/{clan_id}` | нет | карточка клана с составом (`members[]`) |
+| `POST` | `/api/clans/create` | да | `{"name": "3–50", "tag": "2–6", "description?": "≤255"}` → создатель становится `leader`; тег нормализуется в UPPER; гонка дубля гасится в `400` через `IntegrityError` |
+| `POST` | `/api/clans/{clan_id}/join` | да | вступление (только если игрок не в клане; гонка → `400`) |
+| `POST` | `/api/clans/leave` | да | выход (лидеру запрещён — `400`, нужен роспуск/передача прав) |
+| `POST` | `/api/clans/transfer` | да (лидер) | `{"new_leader_user_id": "<uuid>"}` → старый лидер становится `officer`; чужак → `404` |
+| `POST` | `/api/clans/disband` | да (лидер) | роспуск клана, участники удаляются каскадом |
+
+Правила: 1 игрок = максимум 1 клан (`clan_members.user_id` unique + проверка в ручках);
+дубль имени/тега → `400`; чужой клан → `404`. Ответы: `ClanResponse`
+(`id`, `name`, `tag`, `description`, `created_at`, `leader_id`, `members_count`,
+`total_elo`), детальный — `ClanDetailResponse` (+ `members[]` с `role`/`elo_rating`).
+
+## PvP (`/api/pvp` + `/ws/pvp/{game_id}?token=<jwt>`)
+
+Создание комнаты — HTTP (нужен JWT в header):
+
+| Метод | Адрес | Auth | Что делает |
+|---|---|---|---|
+| `POST` | `/api/pvp/create` | да | `{"time_control": 60–1800, "increment": 0–30}` → `{game_id, color: "white", ws_url, ...}`; создатель — белые, место чёрных открыто |
+| `GET` | `/api/pvp/{game_id}` | да | снапшот комнаты (тот же `room.to_dict()`, что и `game_state`); нет комнаты → `404` |
+
+Место чёрных занимает первый подключившийся по WS чужак (claim), остальные —
+зрители. Без/битый токен — закрытие `1008`; несуществующая комната — закрытие `1008`.
+
+Входящие (`action`):
+
+| `action` | Поле | Что делает |
+|---|---|---|
+| `ping` | — | `{"type": "pong"}` |
+| `move` | `move` (UCI, напр. `e2e4`) | валидация очерёдности + `python-chess`; успех → broadcast `move_made` |
+| `resign` | — | завершение (`1-0`/`0-1`, `resignation`) → broadcast `game_over` |
+| `draw_offer` | — | рассылка `draw_offered` оппоненту |
+| `draw_accept` | — | если было предложение соперника → `1/2-1/2`, `draw_agreement` |
+
+Исходящие (`type`): `game_state` (снапшот при подключении), `move_made`,
+`game_over` (`result`, `reason`, `data`), `draw_offered`, `player_status`
+(`user_id`, `connected`), `pong`, `error`. Снапшот `room.to_dict()`: `fen`,
+`turn`, `is_check`, `white_time`/`black_time` (сек, округление 0.1),
+`game_over`, `result` (`1-0`/`0-1`/`1/2-1/2`), `reason` (`checkmate`/`stalemate`/
+`timeout`/`resignation`/`draw_agreement`/…), `waiting_opponent`, игроки
+(`user_id`, `email`, `elo`, `connected`). Зрители получают состояние, но ходить,
+сдаваться и предлагать/принимать ничью не могут (иначе `error`).
+Часы: база 180с + инкремент 2с, старт после первого хода; фоновый таймер
+(1с, `lifespan` в `server.py`) списывает время зависшим партиям и рассылает
+`game_over` по таймауту. Итог партии засчитывается в Elo фоном
+(`settle_ratings`, симметричный FIDE K=32, пол 100, `games_played` +1 обоим).
+Комнаты in-memory: завершённые чистятся через 15 мин, брошенные без игроков —
+через 30 мин; рестарт backend их сбрасывает (поэтому 1 воркер uvicorn).
+
 ## Коды ошибок
 
-- `400` — невалидный FEN / ход, код привязки не найден в Bio, одноразовый email.
-- `401` — нет/просрочен JWT.
+- `400` — невалидный FEN / ход, код привязки не найден в Bio, одноразовый email,
+  клановые нарушения (уже в клане / дубль имени-тега / выход лидера).
+- `401` — нет/просрочен JWT (REST) или закрытие WS `1008` без токена.
 - `403` — чуждая роль (`coach`-панель, admin-ручка).
-- `404` — партия/пользователь/Lichess-аккаунт не найден.
+- `404` — партия/пользователь/Lichess-аккаунт/клан/комната не найдены.
 - `429` — лимит Lichess API (подождать и повторить).
 - `502/503` — Lichess недоступен.

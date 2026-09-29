@@ -24,6 +24,22 @@ def generate_verification_code() -> str:
     return f"coolchess-{secrets.token_hex(4)}"
 
 
+async def _get_db_user(db: AsyncSession, user_id: uuid.UUID) -> User:
+    """Перечитывает пользователя в текущей сессии.
+
+    current_active_user приходит из сессии fastapi-users: мутации такого
+    объекта и commit через get_async_session могут не сохраниться.
+    """
+    res = await db.execute(select(User).where(User.id == user_id))
+    db_user = res.scalar_one_or_none()
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Пользователь не найден.",
+        )
+    return db_user
+
+
 @users_router.get("/api/me/profile", tags=["Player"])
 async def get_player_profile(user: User = Depends(current_active_user)):
     return {
@@ -60,10 +76,11 @@ async def get_lichess_verification_code(
     который пользователь должен временно добавить в поле 'О себе' (Bio)
     на Lichess для подтверждения владения аккаунтом.
     """
-    code = current_user.lichess_verification_code
+    db_user = await _get_db_user(db, current_user.id)
+    code = db_user.lichess_verification_code
     if not code:
         code = generate_verification_code()
-        current_user.lichess_verification_code = code
+        db_user.lichess_verification_code = code
         await db.commit()
     return LichessVerificationCodeResponse(
         verification_code=code,
@@ -88,9 +105,10 @@ async def sync_lichess_account(
     Синхронизирует профиль с Lichess с проверкой био-кода на владение аккаунтом.
     """
     profile_data = await lichess_service.fetch_user_profile(body.lichess_username)
+    db_user = await _get_db_user(db, current_user.id)
 
     # 1. Проверяем наличие секретного проверочного кода в Bio профиля Lichess
-    expected_code = current_user.lichess_verification_code
+    expected_code = db_user.lichess_verification_code
     if not expected_code:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -111,26 +129,26 @@ async def sync_lichess_account(
         )
 
     # 2. Фиксируем подтвержденные данные
-    current_user.lichess_username = profile_data["username"]
-    current_user.lichess_blitz_rating = profile_data["blitz_rating"]
-    current_user.lichess_rapid_rating = profile_data["rapid_rating"]
-    current_user.lichess_puzzle_rating = profile_data["puzzle_rating"]
+    db_user.lichess_username = profile_data["username"]
+    db_user.lichess_blitz_rating = profile_data["blitz_rating"]
+    db_user.lichess_rapid_rating = profile_data["rapid_rating"]
+    db_user.lichess_puzzle_rating = profile_data["puzzle_rating"]
 
     # 3. Калибровка стартового рейтинга для новичка
     chosen_rating = profile_data["rapid_rating"] or profile_data["blitz_rating"]
-    if chosen_rating and current_user.games_played == 0 and current_user.elo_rating == 1200:
-        current_user.elo_rating = chosen_rating
+    if chosen_rating and db_user.games_played == 0 and db_user.elo_rating == 1200:
+        db_user.elo_rating = chosen_rating
 
     await db.commit()
-    await db.refresh(current_user)
+    await db.refresh(db_user)
 
     return LichessSyncResponse(
-        lichess_username=current_user.lichess_username,
-        lichess_blitz_rating=current_user.lichess_blitz_rating,
-        lichess_rapid_rating=current_user.lichess_rapid_rating,
-        lichess_puzzle_rating=current_user.lichess_puzzle_rating,
-        updated_elo=current_user.elo_rating,
-        message=f"Аккаунт Lichess {current_user.lichess_username} успешно верифицирован и привязан!",
+        lichess_username=db_user.lichess_username,
+        lichess_blitz_rating=db_user.lichess_blitz_rating,
+        lichess_rapid_rating=db_user.lichess_rapid_rating,
+        lichess_puzzle_rating=db_user.lichess_puzzle_rating,
+        updated_elo=db_user.elo_rating,
+        message=f"Аккаунт Lichess {db_user.lichess_username} успешно верифицирован и привязан!",
     )
 
 

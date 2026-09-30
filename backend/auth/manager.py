@@ -12,6 +12,7 @@ from fastapi_users.authentication import (
 )
 from auth.models import User, UserRole
 from auth.db import get_user_db
+from auth.schemas import normalize_and_validate_email
 
 load_dotenv()
 
@@ -57,6 +58,22 @@ auth_backend = AuthenticationBackend(
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = VERIFY_SECRET
     verification_token_secret = VERIFY_SECRET
+
+    async def authenticate(self, credentials):
+        """Логин с той же нормализацией email, что при регистрации.
+
+        Без этого пользователь, зарегистрировавшийся как
+        `Ivan.Petrov+chess@gmail.com` (в БД лежит `ivanpetrov@gmail.com`),
+        не смог бы войти под исходным адресом: поиск шёл бы по
+        ненормализованной строке и возвращал LOGIN_BAD_CREDENTIALS.
+        """
+        try:
+            credentials.username = normalize_and_validate_email(credentials.username)
+        except HTTPException:
+            # Ненормализуемый ввод пропускаем как есть —
+            # штатная проверка вернёт корректную ошибку входа.
+            pass
+        return await super().authenticate(credentials)
 
     async def on_after_register(self, user: User, request: Optional[Request] = None):
         logger.info(f"[CoolChess Auth] Пользователь {user.email} зарегистрирован.")

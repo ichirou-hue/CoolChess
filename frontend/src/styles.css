@@ -171,3 +171,41 @@ h1 em { color: #464bff; font-style: normal; }
 .lichess-link-controls .button { cursor: pointer; }
 .lichess-link-controls .button:disabled { cursor: wait; opacity: .6; }
 @media (max-width: 700px) { .lichess-link-controls { justify-content: flex-start; margin-top: 16px; } .lichess-link-controls input { width: 100%; } .leaderboard-filters { margin-top: 8px; } }
+/* Трекер теории над демо-доской. */
+.theory-tracker { align-items: baseline; display: flex; gap: 10px; margin-bottom: 10px; }
+.theory-tracker > span:last-child { color: #555662; font-size: 11px; }
+/* Итоговое табло темы: отдельные статусы теории и практики. */
+.complete-grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; margin-top: 14px; width: 100%; }
+.complete-card { background: #f6f7fb; border: 1px solid #e4e5ec; border-radius: 12px; padding: 14px 16px; }
+.complete-card.done { background: #effbea; border-color: #bfe6c9; }
+.complete-card > span { color: #464bff; display: block; font-family: Geologica, sans-serif; font-size: 9px; letter-spacing: .6px; }
+.complete-card.done > span { color: #1c7a3d; }
+.complete-card strong { display: block; font-size: 14px; margin: 6px 0 4px; }
+.complete-card.done strong { color: #1c7a3d; }
+.complete-card small { color: #777985; display: block; font-size: 11px; margin-bottom: 10px; }
+.complete-all { background: #25a55a; border-radius: 12px; color: #fff; font-family: Geologica, sans-serif; font-size: 12px; margin-top: 12px; padding: 14px 18px; text-align: center; width: 100%; }
+@media (max-width: 700px) { .complete-grid { grid-template-columns: 1fr; } }
+.learn-complete { align-items: center; background: #fff; border: 1px solid #e4e5ec; border-radius: 15px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; margin-top: 16px; padding: 18px 20px; }
+.learn-complete strong { display: block; font-size: 14px; margin-top: 6px; }
+@media (max-width: 700px) { .learn-complete { align-items: stretch; flex-direction: column; } }
+/* Полученная награда за теорию: зелёная кнопка и карточка. */
+.button-claimed { background: #25a55a; color: #fff; cursor: default; }
+.button-claimed:disabled { opacity: 1; }
+.lesson-reward.claimed { background: #effbea; }
+.lesson-reward small { color: #3c6b47; display: block; font-family: Geologica, sans-serif; font-size: 9px; margin-top: 4px; }
+/* Дерево тем: зелёным горит только полностью закрытая тема (теория + практика). */
+.learn-topic.done-full { background: #effbea; color: #1c7a3d; font-weight: 700; }
+.learn-topic.done-full.active { background: #464bff; color: #fff; }
+.learn-topic.done-practice::after { color: #25a55a; content: '●'; font-size: 8px; margin-left: auto; }
+.learn-topic.done-practice.active::after { color: #dce204; }
+/* Прогресс практики темы: точки квоты и экран прохождения. */
+.practice-progress { align-items: center; display: flex; gap: 12px; margin: 12px 0 4px; }
+.practice-progress span { color: #555662; font-family: Geologica, sans-serif; font-size: 11px; }
+.practice-dots { display: flex; gap: 6px; }
+.practice-dots i { background: #e4e4ed; border-radius: 50%; height: 12px; width: 12px; }
+.practice-dots i.done { background: #25a55a; }
+.practice-done { align-items: center; background: #effbea; border: 1px solid #bfe6c9; border-radius: 15px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; margin-top: 14px; padding: 18px 20px; }
+.practice-done strong { display: block; font-size: 14px; }
+.practice-done small { color: #3c6b47; display: block; font-size: 12px; margin-top: 6px; }
+.practice-done > div:last-child { display: flex; flex-wrap: wrap; gap: 10px; }
+@media (max-width: 700px) { .practice-done { align-items: stretch; flex-direction: column; } }

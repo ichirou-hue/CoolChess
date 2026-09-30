@@ -8,22 +8,18 @@ import type { Key } from 'chessground/types';
 import { courseModules } from './data/course';
 import { lessonContent } from './data/lessonContent';
 import { lessonVisuals, type LessonVisual } from './data/lessonVisuals';
-import { awardPawns } from './shared/lib/studentState';
+import { awardPawns, readStudentState } from './shared/lib/studentState';
 import { AuthPage as FeatureAuthPage } from './features/auth/ui/AuthPage';
 import { AuthProvider } from './features/auth/model/AuthProvider';
 import { useAuth } from './features/auth/model/AuthProvider';
 import * as gameApi from './features/chess-game/api/gameApi';
 import type { GameResponse } from './features/chess-game/api/gameApi';
-<<<<<<< HEAD
-import { getRandomPuzzle, solvePuzzle, hasToken, type ServerPuzzle, type SolveResult } from './features/puzzles/api/puzzleApi';
-=======
 import * as puzzleApi from './features/puzzles/api/puzzleApi';
 import type { Puzzle } from './features/puzzles/api/puzzleApi';
 import * as leaderboardApi from './features/community/api/leaderboardApi';
 import type { LeaderboardCategory, LeaderboardResponse } from './features/community/api/leaderboardApi';
 import * as profileApi from './features/profile/api/profileApi';
 import type { StudentProfile } from './features/profile/api/profileApi';
->>>>>>> 6faf31c4167ec0e785bc9b57b4e8fdeed406c114
 import { useHashRoute } from './app/useHashRoute';
 import 'chessground/assets/chessground.base.css';
 import 'chessground/assets/chessground.cburnett.css';
@@ -129,7 +125,7 @@ function ChessGame() {
   return <section className="game-section" id="play"><div className="game-intro"><p className="eyebrow"><span>03</span> ИГРА ПРОТИВ MAIA</p><h2>Настоящая<br /><span>партия.</span></h2><p>Сервер проверяет каждый ход, сохраняет партию и отвечает ходом Maia.</p><div className="game-controls"><button className="button button-primary" type="button" onClick={newGame} disabled={loading || thinking}>Новая партия <span>↗</span></button><span className="engine-status"><i className={thinking ? 'thinking' : ''} /> {statusText}</span>{(error?.includes('401') || error?.includes('Сначала войдите')) && <a className="source-link" href="#auth">Войти в аккаунт ↗</a>}</div></div><div className="game-layout"><div className="player-row"><span className="avatar black-avatar">♞</span><div><strong>CoolChess Maia</strong><small>Серверная партия · {game?.bot_difficulty ?? 1500}</small></div><span className="clock">∞</span></div><BoardShell game={gameRef.current} boardRef={boardRef} /><div className="player-row user-row"><span className="avatar user-avatar">Е</span><div><strong>Ученик</strong><small>{game?.player_color === 'black' ? 'Чёрные' : 'Белые'}</small></div><span className="clock">∞</span></div></div><aside className="move-panel"><div className="panel-tabs"><button className="selected" type="button">ХОДЫ</button><button type="button">ПАРТИЯ</button></div><div className="move-list">{moves.length ? moves.map((move, index) => <span key={`${move}-${index}`}><b>{index % 2 === 0 ? `${Math.floor(index / 2) + 1}.` : ''}</b> {move}</span>) : <p>{loading ? 'Подключаемся к серверу…' : 'Начните новую партию.'}</p>}</div><div className="game-hint"><span>✦</span><div><strong>Серверная проверка</strong><p>Нелегальный ход не будет принят backend.</p></div></div></aside></section>;
 }
 
-function TheoryBoard({ visual }: { visual: LessonVisual }) {
+function TheoryBoard({ visual, onLineViewed }: { visual: LessonVisual; onLineViewed?: () => void }) {
   const boardRef = useRef<HTMLDivElement>(null);
   const groundRef = useRef<Api | null>(null);
   const gameRef = useRef(new Chess(visual.fen));
@@ -139,7 +135,12 @@ function TheoryBoard({ visual }: { visual: LessonVisual }) {
     const uci = visual.moves[step];
     if (!uci) return;
     const move = gameRef.current.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] as 'q' | 'r' | 'b' | 'n' | undefined });
-    if (move) { setStep((value) => value + 1); groundRef.current?.set({ fen: gameRef.current.fen(), lastMove: [move.from as Key, move.to as Key], turnColor: gameRef.current.turn() === 'w' ? 'white' : 'black' }); }
+    if (move) {
+      const nextStep = step + 1;
+      setStep(nextStep);
+      groundRef.current?.set({ fen: gameRef.current.fen(), lastMove: [move.from as Key, move.to as Key], turnColor: gameRef.current.turn() === 'w' ? 'white' : 'black' });
+      if (nextStep >= visual.moves.length) onLineViewed?.();
+    }
   };
   const playLine = () => {
     resetBoard();
@@ -152,12 +153,12 @@ function TheoryBoard({ visual }: { visual: LessonVisual }) {
       lineStep += 1;
       setStep(lineStep);
       groundRef.current?.set({ fen: gameRef.current.fen(), lastMove: [move.from as Key, move.to as Key], turnColor: gameRef.current.turn() === 'w' ? 'white' : 'black' });
-      if (lineStep >= visual.moves.length) window.clearInterval(timer);
+      if (lineStep >= visual.moves.length) { window.clearInterval(timer); onLineViewed?.(); }
     }, 720);
   };
   useEffect(() => { if (!boardRef.current) return; groundRef.current = Chessground(boardRef.current, { fen: visual.fen, coordinates: true, orientation: 'white', movable: { free: false, color: 'white', dests: new Map() }, highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 260 } }); return () => groundRef.current?.destroy(); }, [visual]);
   useEffect(() => resetBoard(), [visual]);
-  return <div className="theory-board-card"><div className="theory-board-top"><div><span className="block-kicker">НА ДОСКЕ</span><strong>{visual.title}</strong></div><span>{step} / {visual.moves.length} ходов</span></div><div className="theory-board"><div ref={boardRef} className="game-board" aria-label={`Теоретическая позиция: ${visual.title}`} /></div><div className="theory-board-bottom"><p>{visual.caption}</p><div><button className="theory-control" type="button" onClick={resetBoard}>Сначала</button><button className="theory-control" type="button" onClick={playLine} disabled={!visual.moves.length}>Показать линию</button><button className="button button-primary" type="button" onClick={advance} disabled={step >= visual.moves.length}>{step >= visual.moves.length ? 'Позиция разобрана ✓' : 'Следующий ход ↗'}</button></div></div><div className="focus-fields">{visual.focus.split(' ').map((field) => <span key={field}>{field}</span>)}</div></div>;
+  return <div className="theory-board-card"><div className="theory-board-top"><div><span className="block-kicker">ШАГ 2 · СМОТРИ РАЗБОР (ДОСКА-ДЕМО)</span><strong>{visual.title}</strong></div><span>{step} / {visual.moves.length} ходов</span></div><div className="theory-board"><div ref={boardRef} className="game-board" aria-label={`Теоретическая позиция: ${visual.title}`} /></div><div className="theory-board-bottom"><p>{visual.caption} Это демо-доска: ходы показывает она сама. Твой собственный ход — шаг 3, в задаче ниже.</p><div><button className="theory-control" type="button" onClick={resetBoard}>Сначала</button><button className="theory-control" type="button" onClick={playLine} disabled={!visual.moves.length}>Показать линию</button>{step >= visual.moves.length ? <button className="button button-primary" type="button" onClick={() => document.getElementById('lesson-practice')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Шаг 3 — решить задачу самому ↓</button> : <button className="button button-primary" type="button" onClick={advance}>Следующий ход ↗</button>}</div></div><div className="focus-fields">{visual.focus.split(' ').map((field) => <span key={field}>{field}</span>)}</div></div>;
 }
 
 function OriginalLichessPuzzleLibrary() {
@@ -169,25 +170,6 @@ function OriginalLichessPuzzleLibrary() {
   const [error, setError] = useState('');
   const [reward, setReward] = useState('');
   const [index, setIndex] = useState(0);
-<<<<<<< HEAD
-  const [status, setStatus] = useState<'ready' | 'correct' | 'wrong'>('ready');
-  // Серверный режим: авторизованный пользователь решает задачи backend
-  // (/api/puzzles) и получает серверные награды; без токена — локальный индекс.
-  const [serverPuzzle, setServerPuzzle] = useState<ServerPuzzle | null>(null);
-  const [serverReward, setServerReward] = useState<SolveResult | null>(null);
-  const puzzle = library[index];
-
-  const loadLocalLibrary = () => {
-    fetch('/data/puzzles.json').then((response) => response.json() as Promise<ImportedPuzzle[]>).then(setLibrary).catch(() => setLibrary([]));
-  };
-
-  useEffect(() => {
-    if (!hasToken()) { loadLocalLibrary(); return; }
-    getRandomPuzzle()
-      .then((task) => { setServerPuzzle(task); setServerReward(null); setStatus('ready'); })
-      .catch(() => loadLocalLibrary());
-  }, []);
-=======
 
   const loadPuzzle = async () => {
     setStatus('loading');
@@ -206,84 +188,25 @@ function OriginalLichessPuzzleLibrary() {
   };
 
   useEffect(() => { void loadPuzzle(); }, []);
->>>>>>> 6faf31c4167ec0e785bc9b57b4e8fdeed406c114
 
   useEffect(() => {
     if (!boardRef.current || !puzzle) return;
     const game = new Chess(puzzle.fen);
-    if (puzzle.initial_move) game.move({ from: puzzle.initial_move.slice(0, 2), to: puzzle.initial_move.slice(2, 4), promotion: puzzle.initial_move[4] as 'q' | 'r' | 'b' | 'n' | undefined });
+    let lastMove: [Key, Key] | undefined;
+    if (puzzle.initial_move) {
+      try {
+        const played = game.move({ from: puzzle.initial_move.slice(0, 2), to: puzzle.initial_move.slice(2, 4), promotion: puzzle.initial_move[4] as 'q' | 'r' | 'b' | 'n' | undefined });
+        if (played) lastMove = [played.from as Key, played.to as Key];
+      } catch {
+        lastMove = undefined;
+      }
+    }
     gameRef.current = game;
     groundRef.current?.destroy();
-    groundRef.current = Chessground(boardRef.current, { fen: game.fen(), coordinates: false, orientation: game.turn() === 'w' ? 'white' : 'black', turnColor: game.turn() === 'w' ? 'white' : 'black', movable: { free: false, color: game.turn() === 'w' ? 'white' : 'black', dests: legalDests(game), events: { after: (orig, dest) => { void submitMove(orig as Key, dest as Key); } } }, highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 240 } });
+    groundRef.current = Chessground(boardRef.current, { fen: game.fen(), coordinates: false, orientation: game.turn() === 'w' ? 'white' : 'black', turnColor: game.turn() === 'w' ? 'white' : 'black', lastMove, movable: { free: false, color: game.turn() === 'w' ? 'white' : 'black', dests: legalDests(game), events: { after: (orig, dest) => { void submitMove(orig as Key, dest as Key); } } }, highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 240 } });
     return () => groundRef.current?.destroy();
   }, [puzzle]);
 
-<<<<<<< HEAD
-  // Серверный режим: позиция и проверка хода — через backend.
-  useEffect(() => {
-    if (!boardRef.current || !serverPuzzle) return;
-    const task = serverPuzzle;
-    const game = new Chess(task.fen);
-    const first = task.initial_move;
-    if (first) game.move({ from: first.slice(0, 2), to: first.slice(2, 4), promotion: first[4] as 'q' | 'r' | 'b' | 'n' | undefined });
-    setStatus('ready');
-    setServerReward(null);
-    const side = game.turn() === 'w' ? 'white' : 'black';
-    groundRef.current = Chessground(boardRef.current, {
-      fen: game.fen(), coordinates: false, orientation: side, turnColor: side,
-      movable: {
-        free: false, color: side, dests: legalDests(game),
-        events: {
-          after: (orig, dest) => {
-            void (async () => {
-              const uci = `${orig}${dest}`;
-              try {
-                let result = await solvePuzzle(task.id, uci);
-                // Backend сверяет ход строго, включая символ превращения,
-                // поэтому для хода на последнюю горизонталь пробуем и вариант с ферзем.
-                if (!result.is_correct && (dest[1] === '8' || dest[1] === '1')) {
-                  result = await solvePuzzle(task.id, `${uci}q`);
-                }
-                if (!result.is_correct) {
-                  setStatus('wrong');
-                  groundRef.current?.set({ fen: game.fen(), turnColor: side, movable: { color: side, dests: legalDests(game) } });
-                  window.setTimeout(() => setStatus('ready'), 650);
-                  return;
-                }
-                const played = game.move({ from: orig as Square, to: dest as Square, promotion: 'q' });
-                setServerReward(result);
-                setStatus('correct');
-                groundRef.current?.set({ fen: game.fen(), lastMove: played ? [played.from as Key, played.to as Key] : undefined, movable: { color: side, dests: new Map() } });
-              } catch {
-                setStatus('ready');
-                groundRef.current?.set({ fen: game.fen(), turnColor: side, movable: { color: side, dests: legalDests(game) } });
-              }
-            })();
-          },
-        },
-      },
-      highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 180 },
-    });
-    return () => groundRef.current?.destroy();
-  }, [serverPuzzle]);
-
-  const tags = puzzle?.themes.filter((theme) => !['short', 'long', 'veryLong', 'master', 'masterVsMaster'].includes(theme)).slice(0, 4) ?? [];
-  const serverTags = serverPuzzle?.themes.filter((theme) => !['short', 'long', 'veryLong', 'master', 'masterVsMaster'].includes(theme)).slice(0, 4) ?? [];
-
-  const nextTask = () => {
-    if (serverPuzzle) {
-      setStatus('ready');
-      setServerReward(null);
-      getRandomPuzzle().then(setServerPuzzle).catch(() => undefined);
-      return;
-    }
-    if (library.length) setIndex((index + 1) % library.length);
-  };
-
-  const sourceHref = (url: string) => (url.startsWith('http') ? url : `https://${url}`);
-
-  return <section className="puzzle-section" id="puzzles"><div className="section-heading"><span className="section-number">04</span><h2>Одна задача.<br /><span>Один инсайт.</span></h2></div><div className="puzzle-layout"><div className="puzzle-board"><div ref={boardRef} className="game-board" aria-label="Доска шахматной задачи" /></div><div className="puzzle-copy">{serverPuzzle ? <><p className="eyebrow">ЗАДАЧА С СЕРВЕРА · РЕЙТИНГ {serverPuzzle.rating}</p><h3>{serverTags.map((tag) => tag.replace(/([A-Z])/g, ' $1').toLowerCase()).join(' · ') || 'Тактическая идея'}</h3><p>Позиция из базы CoolChess. После хода соперника найди лучший ответ — сервер проверит ход и начислит награду.</p><div className="puzzle-meta"><span><strong>{serverPuzzle.rating}</strong><small>рейтинг задачи</small></span><span><strong>{serverPuzzle.popularity}</strong><small>популярность</small></span></div><div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? (serverReward && serverReward.xp_earned > 0 ? `Отлично! +${serverReward.xp_earned} XP · +${serverReward.coins_earned} монет` : 'Отлично! Ход найден.') : status === 'wrong' ? 'Попробуй ещё раз.' : 'Твой ход'}</strong></div><div className="puzzle-actions"><button className="button button-primary" type="button" onClick={nextTask}>Следующая задача <span>↗</span></button>{serverPuzzle.game_url && <a className="source-link" href={sourceHref(serverPuzzle.game_url)} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a>}</div></> : puzzle ? <><p className="eyebrow">ЗАДАЧА {index + 1} ИЗ {library.length}</p><h3>{tags.map((tag) => tag.replace(/([A-Z])/g, ' $1').toLowerCase()).join(' · ') || 'Тактическая идея'}</h3><p>Позиция из открытой базы Lichess. После хода соперника найди лучший ответ и проверь свою идею.</p><div className="puzzle-meta"><span><strong>{puzzle.rating}</strong><small>рейтинг задачи</small></span><span><strong>{puzzle.plays.toLocaleString('ru-RU')}</strong><small>решений</small></span></div><div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? 'Отлично! Ход найден.' : status === 'wrong' ? 'Попробуй ещё раз.' : 'Твой ход'}</strong></div><div className="puzzle-actions"><button className="button button-primary" type="button" onClick={nextTask}>Следующая задача <span>↗</span></button><a className="source-link" href={`https://${puzzle.gameUrl}`} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a></div></> : <><p className="eyebrow">БАЗА ЗАДАЧ</p><h3>Загрузка задач…</h3><p>Индекс Lichess загружается из локальных данных проекта.</p></>}</div></div></section>;
-=======
   const submitMove = async (orig: Key, dest: Key) => {
     if (!puzzle || !gameRef.current || status !== 'ready') return;
     const current = gameRef.current;
@@ -314,14 +237,66 @@ function OriginalLichessPuzzleLibrary() {
   const tags = puzzle?.themes.filter((theme) => !['short', 'long', 'veryLong', 'master', 'masterVsMaster'].includes(theme)).slice(0, 4) ?? [];
   const gameUrl = puzzle?.game_url ? (puzzle.game_url.startsWith('http') ? puzzle.game_url : `https://${puzzle.game_url}`) : null;
   return <section className="puzzle-section" id="puzzles"><div className="section-heading"><span className="section-number">04</span><h2>Одна задача.<br /><span>Один инсайт.</span></h2></div><div className="puzzle-layout"><div className="puzzle-board"><div ref={boardRef} className="game-board" aria-label="Доска шахматной задачи" /></div><div className="puzzle-copy"><p className="eyebrow">ЗАДАЧА {index}</p><h3>{tags.map((tag) => tag.replace(/([A-Z])/g, ' $1').toLowerCase()).join(' · ') || 'Тактическая идея'}</h3><p>Позиция из базы Lichess. Сервер проверит твой ход и начислит награду.</p>{puzzle && <div className="puzzle-meta"><span><strong>{puzzle.rating}</strong><small>рейтинг задачи</small></span><span><strong>{puzzle.popularity}</strong><small>популярность</small></span></div>}<div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? 'Отлично! Ход найден.' : status === 'wrong' ? 'Неверный ход — попробуй ещё.' : status === 'submitting' ? 'Проверяем ход…' : status === 'loading' ? 'Загружаем задачу…' : status === 'error' ? error : 'Твой ход'}</strong></div>{status === 'error' && <a className="source-link" href="#auth">Войти в аккаунт и повторить ↗</a>}{reward && <p className="puzzle-reward">{reward}</p>}{error && status !== 'error' && <p className="puzzle-reward">{error}</p>}<div className="puzzle-actions"><button className="button button-primary" type="button" onClick={() => void loadPuzzle()} disabled={status === 'loading' || status === 'submitting'}>Следующая задача <span>↗</span></button>{gameUrl && <a className="source-link" href={gameUrl} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a>}</div></div></div></section>;
->>>>>>> 6faf31c4167ec0e785bc9b57b4e8fdeed406c114
 }
 
-function LessonPracticeBoard({ themes }: { themes: string[] }) {
-  // Практика по теме сознательно остается на локальном индексе:
-  // здесь разбираются многоходовые линии с ответами соперника,
-  // а backend /api/puzzles проверяет только один ключевой ход.
-  // Одноходовые задачи раздела «Задачи» уже идут через сервер.
+// Сколько уникальных задач нужно решить, чтобы закрыть практику темы.
+// Зачёт идёт только за первое верное решение каждой позиции (повторы
+// сервер и так не оплачивает: already_solved), прогресс храним локально,
+// чтобы переживал перезагрузку и нельзя было «проходить» тему дважды.
+const PRACTICE_QUOTA = 3;
+// Разовый бонус за закрытую практику темы (помимо XP за каждую задачу).
+const PRACTICE_BONUS = 30;
+const PRACTICE_STORE_KEY = 'coolchess.practice.v1';
+
+function readPracticeStore(): Record<string, string[]> {
+  try {
+    const raw = typeof window === 'undefined' ? null : localStorage.getItem(PRACTICE_STORE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    if (parsed && typeof parsed === 'object') return parsed as Record<string, string[]>;
+  } catch {
+    // Битое хранилище игнорируем и начинаем с чистого прогресса.
+  }
+  return {};
+}
+
+function writePracticeStore(topicId: string, ids: string[]) {
+  try {
+    const store = readPracticeStore();
+    store[topicId] = ids.slice(-3 * PRACTICE_QUOTA);
+    localStorage.setItem(PRACTICE_STORE_KEY, JSON.stringify(store));
+  } catch {
+    // Не удалось сохранить — практика просто не переживёт перезагрузку.
+  }
+}
+
+// Трекер теории: помним, досмотрел ли ученик разбор линии до конца.
+const DEMO_STORE_KEY = 'coolchess.demo.v1';
+
+function readDemoStore(): Record<string, boolean> {
+  try {
+    const raw = typeof window === 'undefined' ? null : localStorage.getItem(DEMO_STORE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    if (parsed && typeof parsed === 'object') return parsed as Record<string, boolean>;
+  } catch {
+    // Игнорируем битое хранилище.
+  }
+  return {};
+}
+
+function writeDemoStore(topicId: string) {
+  try {
+    const store = readDemoStore();
+    store[topicId] = true;
+    localStorage.setItem(DEMO_STORE_KEY, JSON.stringify(store));
+  } catch {
+    // Игнорируем ошибки записи.
+  }
+}
+
+function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: string }) {
+  // Практика по теме идёт через сервер: задача подбирается по тегу темы,
+  // ход соперника уже показан на доске, backend проверяет ключевой ход
+  // и начисляет XP/монеты за первое верное решение.
   const boardRef = useRef<HTMLDivElement>(null);
   const groundRef = useRef<Api | null>(null);
   const gameRef = useRef<Chess | null>(null);
@@ -330,7 +305,24 @@ function LessonPracticeBoard({ themes }: { themes: string[] }) {
   const [error, setError] = useState('');
   const [reward, setReward] = useState('');
   const [requestIndex, setRequestIndex] = useState(0);
+  // Счёт ведём через ref, а не через setState-апдейтер: апдейтеры выполняются
+  // позже вызова, и запись/событие по ним отставали на один ход.
+  const solvedRef = useRef<string[]>(readPracticeStore()[topicId] ?? []);
+  const [, setSolvedTick] = useState(0);
+  const [sessionXp, setSessionXp] = useState(0);
+  // Если тема уже была закрыта раньше — сразу свободный режим:
+  // доска доступна, но повторного «прохождения» и дубля наград нет.
+  // Разовый бонус за практику уже забран — сразу свободный режим.
+  const [practiceBonus, setPracticeBonus] = useState(() => readStudentState().claimed.includes(`practice:${topicId}`));
   const themeKey = themes.join(',');
+  const solvedCount = Math.min(solvedRef.current.length, PRACTICE_QUOTA);
+  // Пока бонус не забран — показываем экран прохождения; после — свободный режим.
+  const done = solvedRef.current.length >= PRACTICE_QUOTA && !practiceBonus;
+  // Сообщаем дереву тем, что квота закрыта, чтобы пункт загорелся зелёным.
+  useEffect(() => { if (done) window.dispatchEvent(new Event('coolchess:practice')); }, [done]);
+  // Бонус за практику — один раз на тему: claimed-защита awardPawns
+  // не даст забрать его повторно, событие обновит дерево тем.
+  // Бонус начисляется прямо в обработчике хода (см. выше).
 
   const loadPuzzle = async (rotation = 0) => {
     setStatus('loading');
@@ -354,10 +346,20 @@ function LessonPracticeBoard({ themes }: { themes: string[] }) {
   useEffect(() => {
     if (!boardRef.current || !puzzle) return;
     const game = new Chess(puzzle.fen);
-    if (puzzle.initial_move) game.move({ from: puzzle.initial_move.slice(0, 2), to: puzzle.initial_move.slice(2, 4), promotion: puzzle.initial_move[4] as 'q' | 'r' | 'b' | 'n' | undefined });
+    // Подсвечиваем ход соперника: иначе позиция выглядит статичной
+    // и непонятно, что только что произошло и чей теперь ход.
+    let lastMove: [Key, Key] | undefined;
+    if (puzzle.initial_move) {
+      try {
+        const played = game.move({ from: puzzle.initial_move.slice(0, 2), to: puzzle.initial_move.slice(2, 4), promotion: puzzle.initial_move[4] as 'q' | 'r' | 'b' | 'n' | undefined });
+        if (played) lastMove = [played.from as Key, played.to as Key];
+      } catch {
+        lastMove = undefined;
+      }
+    }
     gameRef.current = game;
     groundRef.current?.destroy();
-    groundRef.current = Chessground(boardRef.current, { fen: game.fen(), coordinates: false, orientation: game.turn() === 'w' ? 'white' : 'black', turnColor: game.turn() === 'w' ? 'white' : 'black', movable: { free: false, color: game.turn() === 'w' ? 'white' : 'black', dests: legalDests(game), events: { after: (orig, dest) => { void submitMove(orig as Key, dest as Key); } } }, highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 300 } });
+    groundRef.current = Chessground(boardRef.current, { fen: game.fen(), coordinates: false, orientation: game.turn() === 'w' ? 'white' : 'black', turnColor: game.turn() === 'w' ? 'white' : 'black', lastMove, movable: { free: false, color: game.turn() === 'w' ? 'white' : 'black', dests: legalDests(game), events: { after: (orig, dest) => { void submitMove(orig as Key, dest as Key); } } }, highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 300 } });
     return () => groundRef.current?.destroy();
   }, [puzzle]);
 
@@ -376,8 +378,21 @@ function LessonPracticeBoard({ themes }: { themes: string[] }) {
         return;
       }
       const played = current.move({ from: orig as Square, to: dest as Square, promotion: promotion || 'q' });
+      if (!result.already_solved && !solvedRef.current.includes(puzzle.id)) {
+        // Всё делаем синхронно здесь: ref актуален всегда, хранилище пишем
+        // до события — итог шага 4 больше не отстаёт на один ход.
+        setSessionXp((value) => value + result.xp_earned);
+        solvedRef.current = [...solvedRef.current, puzzle.id];
+        writePracticeStore(topicId, solvedRef.current);
+        setSolvedTick((tick) => tick + 1);
+        window.dispatchEvent(new Event('coolchess:practice'));
+        if (solvedRef.current.length >= PRACTICE_QUOTA) {
+          const claimed = awardPawns(`practice:${topicId}`, PRACTICE_BONUS, 'puzzle');
+          setPracticeBonus(claimed.claimed.includes(`practice:${topicId}`));
+        }
+      }
       setStatus('correct');
-      setReward(result.already_solved ? 'Задача уже решена — награда не начисляется повторно.' : `+${result.xp_earned} XP · +${result.coins_earned} ♟`);
+      setReward(result.already_solved ? 'Задача уже была решена — в зачёт не идёт, возьми другую позицию.' : `+${result.xp_earned} XP · +${result.coins_earned} ♟ — засчитано!`);
       groundRef.current?.set({ fen: current.fen(), lastMove: played ? [played.from as Key, played.to as Key] : undefined, movable: { color: current.turn() === 'w' ? 'white' : 'black', dests: new Map() } });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Не удалось проверить ход');
@@ -386,7 +401,15 @@ function LessonPracticeBoard({ themes }: { themes: string[] }) {
     }
   };
 
-  return <div className="lesson-practice"><div className="practice-header"><div><span className="block-kicker">ПРАКТИКА ПО ТЕМЕ</span><strong>{status === 'loading' ? 'Загружаем задачу…' : themes.join(', ') || 'Случайная задача'}</strong></div>{puzzle && <span className="practice-rating">{puzzle.rating} рейтинг</span>}</div><div className="practice-board-wrap"><div ref={boardRef} className="game-board" aria-label="Позиция по текущей теме" /></div><div className="practice-info"><div><strong>{status === 'correct' ? 'Ход найден ✓' : status === 'wrong' ? 'Неверный ход — попробуй ещё' : status === 'submitting' ? 'Проверяем ход…' : status === 'error' ? error : 'Найди лучший ход'}</strong><small>{reward || `Тег задачи: ${puzzle?.themes.join(', ') ?? themes.join(', ')}`}</small></div><button type="button" className="practice-next" onClick={() => void loadPuzzle(1)} disabled={status === 'loading' || status === 'submitting'}>Другая позиция ↗</button></div></div>;
+  // Сторона хода после показанного хода соперника: если initial_move есть,
+  // очередь переходит к противоположной стороне от записанной в FEN.
+  const fenSide = puzzle?.fen.split(' ')[1] ?? 'w';
+  const moveSide = puzzle?.initial_move ? (fenSide === 'w' ? 'b' : 'w') : fenSide;
+  const moveSideLabel = moveSide === 'w' ? 'белые' : 'чёрные';
+  const oppMove = puzzle?.initial_move ?? '';
+  const oppMoveText = oppMove.length >= 4 ? `${oppMove.slice(0, 2)} → ${oppMove.slice(2, 4)}${oppMove[4] ? `=${oppMove[4].toUpperCase()}` : ''}` : '';
+  const needsAuth = /401|авторизац|войдите|войти/i.test(error);
+  return <div className="lesson-practice"><div className="practice-header"><div><span className="block-kicker">ПРАКТИКА ПО ТЕМЕ</span><strong>Реши {PRACTICE_QUOTA} задачи по теме — каждая засчитывается один раз</strong></div>{puzzle && <span className="practice-rating">{puzzle.rating} рейтинг</span>}</div><div className="practice-progress"><div className="practice-dots">{Array.from({ length: PRACTICE_QUOTA }, (_, position) => <i key={position} className={position < solvedCount ? 'done' : ''} />)}</div><span>Решено {solvedCount}/{PRACTICE_QUOTA}{sessionXp > 0 ? ` · +${sessionXp} XP за тему` : ''}{practiceBonus ? ' · пройдено ✓' : ''}</span></div><div className="practice-board-wrap"><div ref={boardRef} className="game-board" aria-label="Позиция по текущей теме" /></div>  {done && <div className="practice-done"><div><strong>{practiceBonus ? `Практика пройдена ✓ +${PRACTICE_BONUS} ♟` : `Практика пройдена ✓ ${solvedCount}/${PRACTICE_QUOTA}`}</strong><small>{practiceBonus ? `+${sessionXp} XP за задачи уже на твоём счёте.` : 'Начисляем бонус за практику…'}</small></div></div>}<div className="practice-info"><div><strong>{status === 'correct' ? 'Ход найден ✓' : status === 'wrong' ? 'Неверный ход — попробуй ещё' : status === 'submitting' ? 'Проверяем ход…' : status === 'error' ? (needsAuth ? 'Нужно войти в аккаунт' : error) : status === 'loading' ? 'Загружаем задачу…' : `Твой ход, ${moveSideLabel} — найди лучший ход`}</strong><small>{status === 'error' && needsAuth ? 'Задачи и награды XP доступны после входа.' : (reward || (oppMoveText ? `Ход соперника: ${oppMoveText}. ` : '') + `Тег задачи: ${puzzle?.themes.join(', ') ?? themes.join(', ')}`)}</small></div>{status === 'error' && needsAuth && <a className="source-link" href="#auth">Войти и решать за XP ↗</a>}<button type="button" className="practice-next" onClick={() => void loadPuzzle(1)} disabled={status === 'loading' || status === 'submitting'}>Другая позиция ↗</button></div></div>;
 }
 
 function LichessPuzzleLibrary() {
@@ -412,19 +435,73 @@ function CommunityPage() {
 }
 
 function StartLearningPanel() {
-  return <section className="start-panel" id="start-learning"><div className="start-copy"><span className="eyebrow"><span>01</span> СЕГОДНЯ В COOLCHESS</span><h1>Начни с идеи.<br /><em>Увидь её на доске.</em></h1><p>Короткие объяснения, настоящие позиции и задачи, которые продолжают каждый урок. Твой маршрут уже готов — осталось сделать первый ход.</p><div className="start-stats"><span><strong>39</strong><small>тем в курсе</small></span><span><strong>6 000</strong><small>задач в базе</small></span><span><strong>12</strong><small>учеников онлайн</small></span></div><div className="flex flex-wrap items-center gap-4"><a className="button button-primary" href="#theory">Открыть первый урок <span>↘</span></a><a className="button button-link" href="#auth">Войти / регистрация ↗</a></div></div><div className="start-board"><TheoryBoard visual={lessonVisuals['opening-principles']} /></div></section>;
+  return <section className="start-panel" id="start-learning"><div className="start-copy"><span className="eyebrow"><span>01</span> СЕГОДНЯ В COOLCHESS</span><h1>Начни с идеи.<br /><em>Увидь её на доске.</em></h1><p>Короткие объяснения, настоящие позиции и задачи, которые продолжают каждый урок. Твой маршрут уже готов — осталось сделать первый ход.</p><div className="start-stats"><span><strong>39</strong><small>тем в курсе</small></span><span><strong>6 000</strong><small>задач в базе</small></span><span><strong>12</strong><small>учеников онлайн</small></span></div><div className="flex flex-wrap items-center gap-4"><a className="button button-primary" href="#learn/basics-history">Открыть первый урок <span>↘</span></a><a className="button button-link" href="#auth">Войти / регистрация ↗</a></div></div><div className="start-board"><TheoryBoard visual={lessonVisuals['opening-principles']} /></div></section>;
 }
 
 function LearnPage() {
-  const topicFromHash = () => window.location.hash.startsWith('#learn/') ? window.location.hash.split('/')[1] : 'basics-moves';
+  // Первый урок берём из данных курса, а не хардкодим:
+  // иначе кнопка «Открыть первый урок» и дефолт могут разъехаться.
+  const firstTopicId = courseModules[0].topics[0].id;
+  const topicFromHash = () => window.location.hash.startsWith('#learn/') ? window.location.hash.split('/')[1] : firstTopicId;
   const [topicId, setTopicId] = useState(topicFromHash);
-  useEffect(() => { const syncTopic = () => { const next = topicFromHash(); if (next !== 'basics-moves' || window.location.hash === '#learn') setTopicId(next); }; window.addEventListener('hashchange', syncTopic); return () => window.removeEventListener('hashchange', syncTopic); }, []);
+  useEffect(() => { const syncTopic = () => { const next = topicFromHash(); if (next !== firstTopicId || window.location.hash === '#learn') setTopicId(next); }; window.addEventListener('hashchange', syncTopic); return () => window.removeEventListener('hashchange', syncTopic); }, []);
   const module = courseModules.find((item) => item.topics.some((topic) => topic.id === topicId)) ?? courseModules[0];
   const topic = module.topics.find((item) => item.id === topicId) ?? module.topics[0];
+  // Награда за теорию выдаётся один раз на тему (claimed в localStorage).
+  // Показываем состояние кнопки и баланс, чтобы получение +20 было видно.
+  const [theoryClaimed, setTheoryClaimed] = useState(() => readStudentState().claimed.includes(`theory:${topic.id}`));
+  const [pawnBalance, setPawnBalance] = useState(() => readStudentState().pawns);
+  useEffect(() => {
+    const syncClaim = () => {
+      const state = readStudentState();
+      setTheoryClaimed(state.claimed.includes(`theory:${topic.id}`));
+      setPawnBalance(state.pawns);
+    };
+    syncClaim();
+    window.addEventListener('coolchess:state', syncClaim);
+    return () => window.removeEventListener('coolchess:state', syncClaim);
+  }, [topic.id]);
+  // Статусы для дерева тем: перечитываем localStorage при каждом
+  // событии теории/практики, чтобы пункты зеленели сразу после прохождения.
+  const [statusTick, setStatusTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setStatusTick((value) => value + 1);
+    window.addEventListener('coolchess:state', bump);
+    window.addEventListener('coolchess:practice', bump);
+    return () => { window.removeEventListener('coolchess:state', bump); window.removeEventListener('coolchess:practice', bump); };
+  }, []);
+  void statusTick;
+  const claimedTopics = readStudentState().claimed;
+  const theoryDone = (id: string) => claimedTopics.includes(`theory:${id}`);
+  // Практика закрыта, когда забран разовый бонус за квоту 3/3.
+  const practiceDone = (id: string) => claimedTopics.includes(`practice:${id}`);
   const article = lessonContent[topic.id];
   const visual = lessonVisuals[topic.id] ?? { fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', moves: [], title: topic.title, caption: 'Разбери позицию и назови главную идею.', focus: 'e4 d4' };
-  const completeTheory = () => awardPawns(`theory:${topic.id}`, 20, 'theory');
-  return <section className="learn-page"><aside className="learn-page-sidebar"><div className="sidebar-title"><span className="sidebar-logo">♟</span><div><strong>Курс ученика</strong><small>Выбери тему для изучения</small></div></div>{courseModules.map((item) => <div className="learn-module" key={item.id}><strong>{item.title}</strong>{item.topics.map((itemTopic) => <button className={itemTopic.id === topic.id ? 'learn-topic active' : 'learn-topic'} key={itemTopic.id} type="button" onClick={() => setTopicId(itemTopic.id)}><span>{itemTopic.id === topic.id ? '→' : '·'}</span>{itemTopic.title}</button>)}</div>)}</aside><main className="learn-page-main"><div className="learn-page-heading"><div><span className="eyebrow"><span>01</span> УЧЕБНАЯ СТРАНИЦА</span><h1>{topic.title}</h1><p>{article.lead}</p></div><div className="lesson-reward"><span>НАГРАДА ЗА ТЕМУ</span><strong>♟ +20</strong></div></div><article className="learn-article"><div className="learn-article-text"><div className="article-breadcrumb">{module.title.toUpperCase()} / ТЕМА</div><h2>Пойми идею,<br /><em>а не только правило.</em></h2><div className="learn-callout"><span className="block-kicker">ПОНЯТНАЯ АНАЛОГИЯ</span><p>{article.analogy}</p></div><div className="learn-example"><span className="block-kicker">РАЗБЕРЁМ НА ПРИМЕРЕ</span><p>{article.example}</p></div><ol>{article.steps.map((step) => <li key={step}>{step}</li>)}</ol><button className="button button-primary" type="button" onClick={completeTheory}>Завершить теорию · ♟ +20 <span>↗</span></button></div><div className="learn-article-board"><TheoryBoard visual={visual} /></div></article><section className="learn-practice"><div className="learn-practice-heading"><div><span className="block-kicker">ПРАКТИКА ЭТОЙ ТЕМЫ</span><h2>Теперь проверь идею на задаче.</h2><p>Подборка загружается только по тегам выбранной темы: {topic.puzzleThemes.join(', ') || 'базовая позиция'}.</p></div></div><LessonPracticeBoard themes={topic.puzzleThemes} /></section></main></section>;
+  const completeTheory = () => {
+    const next = awardPawns(`theory:${topic.id}`, 20, 'theory');
+    setTheoryClaimed(next.claimed.includes(`theory:${topic.id}`));
+    setPawnBalance(next.pawns);
+  };
+  // Трекер теории: разбор считается досмотренным, когда линия на демо-доске
+  // проиграна до конца (или если ходов в ней нет вовсе).
+  const [demoViewed, setDemoViewed] = useState(() => readDemoStore()[topic.id] ?? visual.moves.length === 0);
+  useEffect(() => {
+    setDemoViewed(readDemoStore()[topic.id] ?? (lessonVisuals[topic.id]?.moves.length ?? 0) === 0);
+  }, [topic.id]);
+  const markDemoViewed = () => { writeDemoStore(topic.id); setDemoViewed(true); };
+  // Данные для итогового табло шага 4: бонус практики и текущий счёт квоты.
+  // Практика пишет счёт синхронно и шлёт событие coolchess:practice
+  // о каждом зачтённом решении — по нему перечитываем хранилище.
+  const practiceBonusClaimed = claimedTopics.includes(`practice:${topic.id}`);
+  const practiceSolved = Math.min((readPracticeStore()[topic.id] ?? []).length, PRACTICE_QUOTA);
+  return <section className="learn-page"><aside className="learn-page-sidebar"><div className="sidebar-title"><span className="sidebar-logo">♟</span><div><strong>Курс ученика</strong><small>Выбери тему для изучения</small></div></div>{courseModules.map((item) => <div className="learn-module" key={item.id}><strong>{item.title}</strong>{item.topics.map((itemTopic) => {
+    const topicActive = itemTopic.id === topic.id;
+    const topicTheoryDone = theoryDone(itemTopic.id);
+    const topicPracticeDone = practiceDone(itemTopic.id);
+    // Зелёным горит только полностью закрытая тема: теория + практика 3/3.
+    const topicFullDone = topicTheoryDone && topicPracticeDone;
+    return <button className={`learn-topic${topicActive ? ' active' : ''}${topicFullDone ? ' done-full' : ''}${topicPracticeDone ? ' done-practice' : ''}`} key={itemTopic.id} type="button" onClick={() => setTopicId(itemTopic.id)} title={topicFullDone ? 'Тема пройдена полностью ✓' : topicTheoryDone ? 'Теория пройдена — осталось решить практику 3/3' : topicPracticeDone ? 'Практика пройдена — осталось завершить теорию' : itemTopic.title}><span>{topicFullDone ? '✓' : topicActive ? '→' : '·'}</span>{itemTopic.title}</button>;
+  })}</div>)}</aside><main className="learn-page-main"><div className="learn-page-heading"><div><span className="eyebrow"><span>01</span> УЧЕБНАЯ СТРАНИЦА</span><h1>{topic.title}</h1><p>{article.lead}</p></div><div className={theoryClaimed ? 'lesson-reward claimed' : 'lesson-reward'}><span>{theoryClaimed ? 'ТЕОРИЯ ПРОЙДЕНА ✓' : 'НАГРАДА ЗА ТЕМУ'}</span><strong>♟ +20</strong>{theoryClaimed && <small>получено · баланс {pawnBalance}</small>}</div></div><article className="learn-article"><div className="learn-article-text"><div className="article-breadcrumb">{module.title.toUpperCase()} / ТЕМА</div><span className="block-kicker">ШАГ 1 · ПРОЧИТАЙ ТЕОРИЮ</span><h2>Пойми идею,<br /><em>а не только правило.</em></h2><div className="learn-callout"><span className="block-kicker">ПОНЯТНАЯ АНАЛОГИЯ</span><p>{article.analogy}</p></div><div className="learn-example"><span className="block-kicker">РАЗБЕРЁМ НА ПРИМЕРЕ</span><p>{article.example}</p></div><ol>{article.steps.map((step) => <li key={step}>{step}</li>)}</ol></div><div className="learn-article-board"><div className="theory-tracker"><span className="block-kicker">ТРЕКЕР ТЕОРИИ</span><span>{demoViewed ? 'Разбор просмотрен ✓' : 'Разбор ещё не досмотрен'} · {theoryClaimed ? 'Теория завершена ✓' : 'Теория не завершена'}</span></div><TheoryBoard visual={visual} onLineViewed={markDemoViewed} /></div></article><section className="learn-practice" id="lesson-practice"><div className="learn-practice-heading"><div><span className="block-kicker">ШАГ 3 · ТВОЙ ХОД — ПРАКТИКА ЭТОЙ ТЕМЫ</span><h2>Теперь проверь идею на задаче.</h2><p>Ход соперника уже показан на доске. Найди лучший ответ: сервер проверит ход и начислит XP и монеты. Подборка — только по тегам выбранной темы: {topic.puzzleThemes.join(', ') || 'базовая позиция'}.</p></div></div><LessonPracticeBoard key={topic.id} topicId={topic.id} themes={topic.puzzleThemes} /><div className="learn-complete" id="learn-complete"><div><span className="block-kicker">ШАГ 4 · ИТОГ ТЕМЫ</span><strong>Что уже закрыто, а что осталось.</strong></div><div className="complete-grid"><div className={theoryClaimed ? 'complete-card done' : 'complete-card'}><span>ТЕОРИЯ · ♟ +20</span><strong>{theoryClaimed ? 'Теория пройдена ✓' : 'Теория не пройдена'}</strong><small>{theoryClaimed ? '+20 получено' : 'Прочитай разбор выше'}{` · Разбор: ${demoViewed ? 'просмотрен ✓' : 'не досмотрен'}`}</small>{!theoryClaimed && <button className="button button-primary" type="button" onClick={completeTheory}>Завершить теорию ↗</button>}</div><div className={practiceBonusClaimed ? 'complete-card done' : 'complete-card'}><span>ПРАКТИКА · ♟ +{PRACTICE_BONUS}</span><strong>{practiceBonusClaimed ? 'Практика пройдена ✓' : practiceSolved > 0 ? `Практика ${practiceSolved}/${PRACTICE_QUOTA}` : 'Практика не пройдена'}</strong><small>{practiceBonusClaimed ? `+${PRACTICE_BONUS} ♟ получено · XP за задачи на счёте` : 'Реши задачи по теме выше'}</small></div></div>{theoryClaimed && practiceBonusClaimed && <div className="complete-all">Тема пройдена полностью ✓ — пункт в дереве горит зелёным</div>}</div></section></main></section>;
 }
 
 function ProfilePage() {

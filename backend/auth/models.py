@@ -10,7 +10,7 @@ from sqlalchemy import (
     Enum as SQLEnum,
     Index,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from fastapi_users_db_sqlalchemy.generics import GUID
 from sqlalchemy.orm import relationship
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
 from database import Base
@@ -28,7 +28,7 @@ user_solved_puzzles = Table(
     Base.metadata,
     Column(
         "user_id",
-        UUID(as_uuid=True),
+        GUID(),
         ForeignKey("users.id", ondelete="CASCADE"),
         primary_key=True,
     ),

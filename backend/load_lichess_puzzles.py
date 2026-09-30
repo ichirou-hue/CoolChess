@@ -3,12 +3,20 @@ import io
 import asyncio
 import zstandard as zstd
 import requests
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
-from database import engine, async_session_maker, Base
+from database import engine, async_session_maker
 from auth.models import Puzzle
 
 LICHESS_PUZZLES_URL = "https://database.lichess.org/lichess_db_puzzle.csv.zst"
+
+async def insert_batch(records: list):
+    if not records:
+        return
+    async with async_session_maker() as session:
+        stmt = insert(Puzzle).values(records)
+        stmt = stmt.on_conflict_do_nothing(index_elements=["id"])
+        await session.execute(stmt)
+        await session.commit()
 
 async def download_and_import_puzzles(
     limit: int = 5000,
@@ -17,15 +25,12 @@ async def download_and_import_puzzles(
     min_popularity: int = 70,
 ):
     print(f"[Lichess] Подключение к источнику: {LICHESS_PUZZLES_URL}")
-    
-    # Создаем таблицы, если их еще нет
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
-    # Запуск потоковой загрузки
-    response = requests.get(LICHESS_PUZZLES_URL, stream=True)
+    # Потоковый GET-запрос с таймаутом на установку соединения
+    response = requests.get(LICHESS_PUZZLES_URL, stream=True, timeout=30)
+    response.raise_for_status()
+
     dctx = zstd.ZstdDecompressor()
-    
     records = []
     total_imported = 0
 
@@ -33,9 +38,8 @@ async def download_and_import_puzzles(
         text_stream = io.TextIOWrapper(stream, encoding="utf-8")
         reader = csv.reader(text_stream)
         
-        # Заголовок Lichess: PuzzleId,FEN,Moves,Rating,RatingDeviation,Popularity,NbPlays,Themes,GameUrl,OpeningTags
         header = next(reader)
-        print(f"[Lichess] Колонки: {header}")
+        print(f"[Lichess] Заголовок архива: {header}")
 
         for row in reader:
             if not row or len(row) < 9:
@@ -54,12 +58,12 @@ async def download_and_import_puzzles(
             themes = row[7]
             game_url = row[8]
 
-            # Фильтрация по качеству и диапазону Elo
+            # Фильтрация
             if not (min_rating <= rating <= max_rating):
                 continue
             if popularity < min_popularity:
                 continue
-            if rating_dev > 90:  # Исключаем задачи с неточным рейтингом
+            if rating_dev > 90:
                 continue
 
             records.append({
@@ -73,12 +77,11 @@ async def download_and_import_puzzles(
                 "game_url": game_url,
             })
 
-            # Вставляем пачками по 500 штук
             if len(records) >= 500:
                 await insert_batch(records)
                 total_imported += len(records)
                 records.clear()
-                print(f"[Lichess] Импортировано задач: {total_imported} / {limit}")
+                print(f"[Lichess] Импортировано: {total_imported} / {limit}")
 
             if total_imported >= limit:
                 break
@@ -87,17 +90,8 @@ async def download_and_import_puzzles(
             await insert_batch(records)
             total_imported += len(records)
 
-    print(f"[Lichess] Загрузка успешно завершена! Всего в базе: {total_imported} качественных задач.")
+    print(f"[Lichess] Импорт завершен! Успешно загружено: {total_imported} задач.")
     await engine.dispose()
 
-async def insert_batch(records: list):
-    async with async_session_maker() as session:
-        stmt = insert(Puzzle).values(records)
-        # Если задача с таким ID уже есть — пропускаем
-        stmt = stmt.on_conflict_do_nothing(index_elements=["id"])
-        await session.execute(stmt)
-        await session.commit()
-
 if __name__ == "__main__":
-    # По умолчанию для старта загрузим 3000 отобранных задач рейтинга 800-2400
     asyncio.run(download_and_import_puzzles(limit=3000))

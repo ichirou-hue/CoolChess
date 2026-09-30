@@ -69,3 +69,18 @@ async def test_bot_move_terminal_game_over_fen(anonymous_client):
     data = response.json()
     assert data["game_over"] is True
     assert data["move_uci"] is None
+
+@pytest.mark.asyncio
+async def test_bot_move_invalid_difficulty_returns_422(anonymous_client):
+    """Мусорная сложность не должна уходить в engine.cfg.elo."""
+    response = await anonymous_client.post(
+        "/api/bot/move",
+        json={"fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "difficulty": 99999}
+    )
+    assert response.status_code == 422
+
+    response2 = await anonymous_client.post(
+        "/api/bot/move",
+        json={"fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "difficulty": 0}
+    )
+    assert response2.status_code == 422

@@ -264,3 +264,26 @@ async def test_get_my_games_history(authorized_client):
     assert items[0]["id"] == str(fake_game.id)
     assert items[0]["moves_count"] == 2
     assert items[0]["status"] == "player_won"
+
+# --- СТАРТ С АКТИВНОЙ ПАРТИЕЙ: ШТРАФ КАК ЗА СДАЧУ ---
+
+@pytest.mark.asyncio
+async def test_start_game_penalizes_abandoned_active_game(authorized_client):
+    client, user, db = authorized_client
+    assert user.elo_rating == 1200
+
+    old_game = make_fake_game(user_id=user.id, bot_difficulty=1500)
+    mock_active_res = MagicMock()
+    mock_active_res.scalars.return_value.all.return_value = [old_game]
+    db.execute.return_value = mock_active_res
+
+    response = await client.post(
+        "/api/games/start",
+        json={"player_color": "white", "difficulty": 1500}
+    )
+    assert response.status_code == 200
+    # Старая партия закрыта как сданная, Elo снят как за поражение, XP не начислен
+    assert old_game.status == GameStatus.RESIGNED
+    assert user.elo_rating < 1200
+    assert user.xp == 0
+    assert user.games_played == 1

@@ -110,9 +110,14 @@ async def get_leaderboard(
         my_solved_cnt = user_puzzles_res.scalar_one_or_none() or 0
 
         if category == LeaderboardCategory.ELO:
+            # Тот же tie-break, что и в топе: elo desc, xp desc.
             rank_stmt = select(func.count(User.id)).where(
                 User.is_active == True,
-                User.elo_rating > current_user.elo_rating,
+                (User.elo_rating > current_user.elo_rating)
+                | (
+                    (User.elo_rating == current_user.elo_rating)
+                    & (User.xp > current_user.xp)
+                ),
             )
         elif category == LeaderboardCategory.LEVEL:
             rank_stmt = select(func.count(User.id)).where(
@@ -120,14 +125,31 @@ async def get_leaderboard(
                 (User.level > current_user.level)
                 | ((User.level == current_user.level) & (User.xp > current_user.xp)),
             )
-        else:  # PUZZLES
-            better_puzzles_subq = (
-                select(user_solved_puzzles.c.user_id)
+        else:  # PUZZLES — tie-break топа: solved desc, elo desc
+            user_counts_subq = (
+                select(
+                    user_solved_puzzles.c.user_id.label("user_id"),
+                    func.count(user_solved_puzzles.c.puzzle_id).label("solved_count"),
+                )
                 .group_by(user_solved_puzzles.c.user_id)
-                .having(func.count(user_solved_puzzles.c.puzzle_id) > my_solved_cnt)
                 .subquery()
             )
-            rank_stmt = select(func.count()).select_from(better_puzzles_subq)
+            better_stmt = (
+                select(func.count(User.id))
+                .outerjoin(user_counts_subq, User.id == user_counts_subq.c.user_id)
+                .where(
+                    User.is_active == True,
+                    User.id != current_user.id,
+                    (
+                        func.coalesce(user_counts_subq.c.solved_count, 0) > my_solved_cnt
+                    )
+                    | (
+                        (func.coalesce(user_counts_subq.c.solved_count, 0) == my_solved_cnt)
+                        & (User.elo_rating > current_user.elo_rating)
+                    ),
+                )
+            )
+            rank_stmt = better_stmt
 
         rank_res = await db.execute(rank_stmt)
         higher_count = rank_res.scalar_one_or_none() or 0

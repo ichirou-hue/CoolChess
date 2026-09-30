@@ -1,8 +1,14 @@
+import os
 import uuid
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, MagicMock
+from httpx import AsyncClient, ASGITransport
+
+# 1. Гарантируем наличие тестовых секретов ДО импорта приложения
+os.environ.setdefault("JWT_SECRET", "test_jwt_secret_coolchess_at_least_32_characters_long_123456")
+os.environ.setdefault("VERIFY_SECRET", "test_verify_secret_coolchess_at_least_32_characters_long_123456")
+os.environ.setdefault("ENV", "development")
 
 from server import app
 from auth.models import User, UserRole
@@ -18,6 +24,7 @@ def mock_user():
     user.email = "testplayer@coolchess.com"
     user.is_active = True
     user.is_verified = True
+    user.is_superuser = False
     
     # Безопасное определение роли вне зависимости от регистра Enum
     if hasattr(UserRole, "STUDENT"):
@@ -42,6 +49,7 @@ def mock_db_session():
     """Мок асинхронной сессии SQLAlchemy."""
     session = AsyncMock()
     session.add = MagicMock()
+    session.delete = AsyncMock()  # AsyncSession.delete — awaitable (выход из клана)
     session.execute = AsyncMock()
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
@@ -61,15 +69,21 @@ async def authorized_client(mock_user, mock_db_session):
     ) as client:
         yield client, mock_user, mock_db_session
 
-    app.dependency_overrides.clear()
+    # Точечная очистка только своих зависимостей
+    app.dependency_overrides.pop(current_active_user, None)
+    app.dependency_overrides.pop(get_async_session, None)
 
 
 @pytest_asyncio.fixture
 async def anonymous_client():
     """Асинхронный клиент без авторизации."""
-    app.dependency_overrides.clear()
+    # Удаляем только текущего пользователя, чтобы эндпоинты оставались анонимными
+    app.dependency_overrides.pop(current_active_user, None)
+
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://testserver"
     ) as client:
         yield client
+
+    app.dependency_overrides.pop(current_active_user, None)

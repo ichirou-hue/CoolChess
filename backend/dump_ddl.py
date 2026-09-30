@@ -7,6 +7,7 @@
 
 import auth.models  # noqa: F401 — регистрирует таблицы в Base.metadata
 import games.models  # noqa: F401
+import clans.models  # noqa: F401
 from database import Base
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable

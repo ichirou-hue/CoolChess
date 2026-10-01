@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 import chess
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -76,15 +76,22 @@ async def start_game(
     db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user)
 ):
-    """Начинает новую партию. Если была активная — автоматически помечает её как сданную."""
+    """Начинает новую партию. Активные партии закрываются как сданные (с Elo-штрафом, без XP)."""
     stmt = select(Game).where(
         and_(Game.user_id == user.id, Game.status == GameStatus.IN_PROGRESS)
     )
     res = await db.execute(stmt)
     active_games = res.scalars().all()
     for ag in active_games:
+        # Тот же учёт, что и resign: поражение для Elo, без XP/монет.
+        # Иначе старт новой партии обходил бы штраф за сдачу.
+        penalty = calculate_match_rewards(user.elo_rating, ag.bot_difficulty, "loss")
+        user.elo_rating = max(100, user.elo_rating + penalty["elo_delta"])
+        user.games_played += 1
         ag.status = GameStatus.RESIGNED
-        ag.updated_at = datetime.utcnow()
+        ag.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    if active_games:
+        user.level = calculate_level(user.xp)
 
     new_game = Game(
         id=uuid.uuid4(),

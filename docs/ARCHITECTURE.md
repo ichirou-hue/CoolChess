@@ -12,15 +12,21 @@ FastAPI (backend/server.py, :8080)
   ├── puzzles/       задачи Lichess + награды
   ├── games/         партии с ботом + награды
   ├── leaderboard/   топы и позиция игрока
+  ├── clans/         кланы (REST)
+  ├── pvp/           PvP-комнаты + WS + серверные часы (in-memory)
   └── integrations/  Lichess API
   ▼
 PostgreSQL (compose, :5433) или SQLite (aiosqlite, dev-режим)
+  (PvP-состояние в памяти процесса, в БД не пишется)
 ```
 
-Точка входа backend — `backend/server.py`: создаёт `FastAPI(title="CoolChess API")`,
-настраивает CORS из `CORS_ORIGINS`, подключает 5 доменных роутеров и стандартные
-роутеры `fastapi-users` (auth / register / verify / users). Запуск из каталога
-`backend/`: `uvicorn server:app --reload --port 8080`.
+Точка входа backend — `backend/server.py`: создаёт `FastAPI(title="CoolChess API")`
+с `lifespan` (старт/стоп фонового таймера PvP), настраивает CORS из
+`CORS_ORIGINS`, подключает 8 доменных роутеров
+(`puzzle`, `game`, `leaderboard`, `bot`, `users`, `clan`, `pvp-ws`, `pvp-http`)
+и стандартные роутеры `fastapi-users` (auth / register / reset-password /
+verify / users). Запуск из каталога `backend/`:
+`uvicorn server:app --reload --port 8080` (в compose — 1 воркер, см. ниже).
 
 ## Backend-модули
 
@@ -31,6 +37,8 @@ PostgreSQL (compose, :5433) или SQLite (aiosqlite, dev-режим)
 | `puzzles/` | `puzzle_routes.py`, `rewards.py` | выдача случайной задачи, проверка решения, `REWARD_TIERS`, `calculate_level` |
 | `games/` | `models.py`, `schemas.py`, `game_routes.py`, `rewards.py` | жизненный цикл партии, валидация ходов, ход Maia в ответ, `calculate_match_rewards` |
 | `leaderboard/` | `leaderboard_routes.py`, `schemas.py` | топ по `elo`/`level`/`puzzles`, `my_rank`, маскирование email |
+| `clans/` | `models.py`, `schemas.py`, `clan_routes.py` | `Clan`/`ClanMember`, роли `leader`/`officer`/`member`, REST `GET /api/clans`, `GET .../{id}`, `POST .../create`, `.../{id}/join`, `.../leave`, `.../disband`, `.../transfer`; гонки гасятся через `IntegrityError` |
+| `pvp/` | `models.py`, `manager.py`, `pvp_routes.py` | `ChessGameRoom` (доска `python-chess`, часы, инкремент, TTL), `PVPConnectionManager` (синглтон `pvp_manager`, фоновый таймер 1с, `settle_ratings`), HTTP `POST /api/pvp/create` + WS `/ws/pvp/{game_id}?token=` |
 | `integrations/` | `lichess_service.py` | `fetch_user_profile`, парсинг `perfs`, обработка 404/429/502/503 |
 | корень | `database.py`, `init_db.py`, `update_schema.py`, `schema.sql`, `dump_ddl.py`, `load_lichess_puzzles.py` | engine/сессии, создание и миграция схемы, загрузка задач |
 
@@ -59,6 +67,33 @@ PostgreSQL (compose, :5433) или SQLite (aiosqlite, dev-режим)
 3. `POST /api/users/sync-lichess` — сервер читает публичный профиль через
    Lichess API, ищет код в Bio, при успехе сохраняет рейтинги; новичку
    (`games_played == 0`, `elo == 1200`) калибрует стартовый Elo из rapid/blitz.
+
+### Создание клана (`POST /api/clans/create`)
+1. Проверка JWT (`current_active_user`); отказ `400`, если `ClanMember`
+   с таким `user_id` уже существует (1 игрок = 1 клан).
+2. Проверка уникальности `name` / `tag` (тег — `strip().upper()`); дубль → `400`
+   (включая гонку: `commit` обёрнут в `except IntegrityError`).
+3. Вставка `Clan` + `ClanMember(role=leader)` в одной транзакции (`commit`).
+   Жизненный цикл замыкают `POST /transfer` (лидер → officer, новый → leader)
+   и `POST /disband` (удаление клана каскадом) — оба только для лидера.
+
+### PvP-партия (HTTP create → WS)
+1. `POST /api/pvp/create` (JWT в header) — комната `pvp-<hex12>`, создатель —
+   белые, место чёрных открыто (`black.user_id=None`, `waiting_opponent=true`).
+2. WS `GET /ws/pvp/{id}?token=` (`decode_jwt`, audience `fastapi-users:auth`);
+   неуспех — закрытие `1008`. Первый чужак занимает место чёрных (`claim_black_seat`
+   с подгрузкой email/elo из БД), остальные — зрители в `room.spectators`.
+3. `{"action": "move"}`: проверка очерёдности (`board.turn` vs цвет), зрителям —
+   `error`. `room.apply_move(uci, loop.time())`: списание времени, валидация
+   через `python-chess`, инкремент сделавшему ход, проверка конца партии.
+   Партия, завершённая ходом, рассылается как `game_over` (а не `move_made`).
+4. `resign`/`draw_accept` — только игроки; `game_over` + `schedule_settle(room)`:
+   симметричный Elo K=32 пишется в БД фоном (не блокирует WS-цикл).
+5. Фоновый таймер (`lifespan` → `start_background_tasks`, тик 1с): списывает
+   время активным партиям (таймаут → `game_over` + settle), чистит завершённые
+   (>15 мин) и брошенные без игроков (>30 мин) комнаты.
+6. Комнаты in-memory ⇒ строго 1 воркер uvicorn (`entrypoint.sh --workers 1`);
+   рестарт backend сбрасывает партии.
 
 ## Frontend
 

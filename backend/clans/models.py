@@ -10,7 +10,7 @@ from sqlalchemy import (
     Enum as SQLEnum,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from fastapi_users_db_sqlalchemy.generics import GUID
 from sqlalchemy.orm import relationship
 
 from database import Base
@@ -25,7 +25,7 @@ class ClanRole(str, enum.Enum):
 class Clan(Base):
     __tablename__ = "clans"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     name = Column(String(50), unique=True, nullable=False, index=True)
     tag = Column(String(6), unique=True, nullable=False, index=True)
     description = Column(String(255), nullable=True)
@@ -36,7 +36,7 @@ class Clan(Base):
     )
 
     leader_id = Column(
-        UUID(as_uuid=True),
+        GUID(),
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
@@ -54,14 +54,14 @@ class Clan(Base):
 class ClanMember(Base):
     __tablename__ = "clan_members"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     clan_id = Column(
-        UUID(as_uuid=True),
+        GUID(),
         ForeignKey("clans.id", ondelete="CASCADE"),
         nullable=False,
     )
     user_id = Column(
-        UUID(as_uuid=True),
+        GUID(),
         ForeignKey("users.id", ondelete="CASCADE"),
         unique=True,  # 1 игрок = максимум 1 клан
         nullable=False,

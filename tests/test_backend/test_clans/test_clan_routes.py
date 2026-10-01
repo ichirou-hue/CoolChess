@@ -314,3 +314,158 @@ async def test_leave_clan_regular_member_success(anonymous_client, mock_db_sessi
     finally:
         app.dependency_overrides.pop(current_active_user, None)
         app.dependency_overrides.pop(get_async_session, None)
+
+# --- 5. Карточка клана ---
+
+@pytest.mark.asyncio
+async def test_get_clan_detail_success(anonymous_client, mock_db_session):
+    from server import app as _app  # noqa: F401 (app уже импортирован сверху)
+    clan = make_fake_clan(leader_id=uuid.uuid4())
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = clan
+    mock_db_session.execute.return_value = mock_res
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+
+    try:
+        response = await anonymous_client.get(f"/api/clans/{clan.id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == str(clan.id)
+        assert len(data["members"]) == 1
+        assert data["members"][0]["role"] == ClanRole.LEADER.value
+    finally:
+        app.dependency_overrides.pop(get_async_session, None)
+
+
+@pytest.mark.asyncio
+async def test_get_clan_not_found(anonymous_client, mock_db_session):
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = None
+    mock_db_session.execute.return_value = mock_res
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+
+    try:
+        response = await anonymous_client.get(f"/api/clans/{uuid.uuid4()}")
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_async_session, None)
+
+
+# --- 6. Роспуск клана ---
+
+def _leader_membership(clan_id, user_id):
+    m = MagicMock(spec=ClanMember)
+    m.clan_id = clan_id
+    m.user_id = user_id
+    m.role = ClanRole.LEADER
+    return m
+
+
+@pytest.mark.asyncio
+async def test_disband_forbidden_for_member(anonymous_client, mock_db_session):
+    from auth.manager import current_active_user as _cau
+    user = make_fake_user()
+    app.dependency_overrides[_cau] = lambda: user
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+
+    member = MagicMock(spec=ClanMember)
+    member.role = ClanRole.MEMBER
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = member
+    mock_db_session.execute.return_value = mock_res
+
+    try:
+        response = await anonymous_client.post("/api/clans/disband")
+        assert response.status_code == 403
+    finally:
+        app.dependency_overrides.pop(_cau, None)
+        app.dependency_overrides.pop(get_async_session, None)
+
+
+@pytest.mark.asyncio
+async def test_disband_success_leader(anonymous_client, mock_db_session):
+    from auth.manager import current_active_user as _cau
+    user = make_fake_user()
+    clan = make_fake_clan(leader_id=user.id)
+    app.dependency_overrides[_cau] = lambda: user
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+
+    res_member = MagicMock()
+    res_member.scalar_one_or_none.return_value = _leader_membership(clan.id, user.id)
+    res_clan = MagicMock()
+    res_clan.scalar_one_or_none.return_value = clan
+    mock_db_session.execute.side_effect = [res_member, res_clan]
+
+    try:
+        response = await anonymous_client.post("/api/clans/disband")
+        assert response.status_code == 200
+        assert "распущен" in response.json()["message"]
+        assert mock_db_session.delete.called
+    finally:
+        app.dependency_overrides.pop(_cau, None)
+        app.dependency_overrides.pop(get_async_session, None)
+
+
+# --- 7. Передача лидерства ---
+
+@pytest.mark.asyncio
+async def test_transfer_success(anonymous_client, mock_db_session):
+    from auth.manager import current_active_user as _cau
+    leader = make_fake_user()
+    newcomer_id = uuid.uuid4()
+    clan = make_fake_clan(leader_id=leader.id)
+
+    newcomer = MagicMock(spec=ClanMember)
+    newcomer.clan_id = clan.id
+    newcomer.user_id = newcomer_id
+    newcomer.role = ClanRole.MEMBER
+    newcomer.joined_at = clan.members[0].joined_at
+    newcomer.user = make_fake_user(elo=1300)
+    newcomer.user.id = newcomer_id
+    clan.members.append(newcomer)
+
+    app.dependency_overrides[_cau] = lambda: leader
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+
+    res_me = MagicMock()
+    res_me.scalar_one_or_none.return_value = _leader_membership(clan.id, leader.id)
+    res_new = MagicMock()
+    res_new.scalar_one_or_none.return_value = newcomer
+    res_clan = MagicMock()
+    res_clan.scalar_one_or_none.return_value = clan
+    mock_db_session.execute.side_effect = [res_me, res_new, res_clan]
+
+    try:
+        response = await anonymous_client.post(
+            "/api/clans/transfer", json={"new_leader_user_id": str(newcomer_id)}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["leader_id"] == str(newcomer_id)
+    finally:
+        app.dependency_overrides.pop(_cau, None)
+        app.dependency_overrides.pop(get_async_session, None)
+
+
+@pytest.mark.asyncio
+async def test_transfer_new_leader_must_be_member(anonymous_client, mock_db_session):
+    from auth.manager import current_active_user as _cau
+    leader = make_fake_user()
+    clan = make_fake_clan(leader_id=leader.id)
+    app.dependency_overrides[_cau] = lambda: leader
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+
+    res_me = MagicMock()
+    res_me.scalar_one_or_none.return_value = _leader_membership(clan.id, leader.id)
+    res_new = MagicMock()
+    res_new.scalar_one_or_none.return_value = None
+    mock_db_session.execute.side_effect = [res_me, res_new]
+
+    try:
+        response = await anonymous_client.post(
+            "/api/clans/transfer", json={"new_leader_user_id": str(uuid.uuid4())}
+        )
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides.pop(_cau, None)
+        app.dependency_overrides.pop(get_async_session, None)

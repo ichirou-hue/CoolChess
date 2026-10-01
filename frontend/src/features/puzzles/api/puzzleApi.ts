@@ -19,7 +19,13 @@ export type PuzzleSolveResult = {
   new_level: number | null;
 };
 
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8081').replace(/\/$/, '');
+const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
+
+const tokenKey = 'coolchess.accessToken';
+
+export function hasToken() {
+  return typeof window !== 'undefined' && sessionStorage.getItem(tokenKey) !== null;
+}
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem('coolchess.accessToken');
@@ -55,4 +61,13 @@ export function submitPuzzleMove(puzzleId: string, moveUci: string) {
     method: 'POST',
     body: JSON.stringify({ user_moves: moveUci }),
   });
+}
+
+// --- Backward-compatible aliases (pre-merge API names) ---
+// Старые имена из ветки HEAD: ServerPuzzle / SolveResult / solvePuzzle.
+// Оставлены как алиасы, чтобы не ломать импорты после слияния.
+export type ServerPuzzle = Puzzle;
+export type SolveResult = PuzzleSolveResult;
+export function solvePuzzle(puzzleId: string, moveUci: string) {
+  return submitPuzzleMove(puzzleId, moveUci);
 }

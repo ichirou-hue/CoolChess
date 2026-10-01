@@ -12,6 +12,7 @@ from fastapi_users.authentication import (
 )
 from auth.models import User, UserRole
 from auth.db import get_user_db
+from auth.schemas import normalize_and_validate_email
 
 load_dotenv()
 
@@ -58,6 +59,22 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = VERIFY_SECRET
     verification_token_secret = VERIFY_SECRET
 
+    async def authenticate(self, credentials):
+        """Логин с той же нормализацией email, что при регистрации.
+
+        Без этого пользователь, зарегистрировавшийся как
+        `Ivan.Petrov+chess@gmail.com` (в БД лежит `ivanpetrov@gmail.com`),
+        не смог бы войти под исходным адресом: поиск шёл бы по
+        ненормализованной строке и возвращал LOGIN_BAD_CREDENTIALS.
+        """
+        try:
+            credentials.username = normalize_and_validate_email(credentials.username)
+        except HTTPException:
+            # Ненормализуемый ввод пропускаем как есть —
+            # штатная проверка вернёт корректную ошибку входа.
+            pass
+        return await super().authenticate(credentials)
+
     async def on_after_register(self, user: User, request: Optional[Request] = None):
         logger.info(f"[CoolChess Auth] Пользователь {user.email} зарегистрирован.")
 
@@ -66,6 +83,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     ):
         # Токен намеренно не логируем: это секрет, эквивалентный паролю.
         logger.info(f"[CoolChess Auth] Запрошена верификация для {user.email}.")
+
+    async def on_after_forgot_password(
+        self, user: User, token: str, request: Optional[Request] = None
+    ):
+        # SMTP не настроен: токен никуда не отправляется (см. POST /api/auth/forgot-password).
+        # Токен намеренно не логируем. После подключения почты — отправить письмо здесь.
+        logger.info(
+            f"[CoolChess Auth] Запрошен сброс пароля для {user.email} "
+            "(email-отправка не настроена, настройте SMTP)."
+        )
 
 
 async def get_user_manager(user_db=Depends(get_user_db)):

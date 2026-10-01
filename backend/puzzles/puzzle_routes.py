@@ -59,6 +59,7 @@ async def get_random_puzzle(
     max_rating: Optional[int] = Query(None, description="Точный максимальный Elo"),
     theme: Optional[str] = Query(None, description="Концепция/тема (mateIn1, fork, pin, defensiveMove...)"),
     exclude_solved: bool = Query(True, description="Исключить уже решенные пользователем задачи"),
+    solved_only: bool = Query(False, description="Показывать только уже решенные пользователем задачи"),
     db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
 ):
@@ -80,7 +81,13 @@ async def get_random_puzzle(
         query = query.where(Puzzle.themes.ilike(f"%{theme.strip()}%"))
 
     # Исключение уже решенных
-    if exclude_solved:
+    if solved_only:
+        solved_subquery = (
+            select(user_solved_puzzles.c.puzzle_id)
+            .where(user_solved_puzzles.c.user_id == user.id)
+        )
+        query = query.where(Puzzle.id.in_(solved_subquery))
+    elif exclude_solved:
         solved_subquery = (
             select(user_solved_puzzles.c.puzzle_id)
             .where(user_solved_puzzles.c.user_id == user.id)

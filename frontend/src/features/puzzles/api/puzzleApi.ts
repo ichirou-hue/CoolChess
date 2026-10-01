@@ -50,9 +50,19 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function getRandomPuzzle(theme?: string) {
-  const query = new URLSearchParams({ exclude_solved: 'true' });
-  if (theme) query.set('theme', theme);
+export type PuzzleFilters = {
+  theme?: string;
+  difficulty?: 'beginner' | 'intermediate' | 'advanced' | 'master' | 'grandmaster';
+  progress?: 'unsolved' | 'solved' | 'all';
+};
+
+export function getRandomPuzzle(filters: string | PuzzleFilters = {}) {
+  const normalized: PuzzleFilters = typeof filters === 'string' ? { theme: filters } : filters;
+  const query = new URLSearchParams();
+  if (normalized.theme) query.set('theme', normalized.theme);
+  if (normalized.difficulty) query.set('difficulty', normalized.difficulty);
+  if (normalized.progress === 'solved') query.set('solved_only', 'true');
+  else if (normalized.progress !== 'all') query.set('exclude_solved', 'true');
   return request<Puzzle>(`/api/puzzles/random?${query.toString()}`);
 }
 

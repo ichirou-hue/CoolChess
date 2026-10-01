@@ -148,6 +148,8 @@ async def make_move(
 
     board.push(player_move)
     moves_list = game.moves_uci.split() if game.moves_uci else []
+    if not moves_list and payload.difficulty is not None:
+        game.bot_difficulty = payload.difficulty
     moves_list.append(payload.move_uci.strip())
 
     xp_earned = 0

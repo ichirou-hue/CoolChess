@@ -60,10 +60,10 @@ export function getActiveGame() {
   return request<GameResponse | null>('/api/games/active');
 }
 
-export function makeMove(gameId: string, moveUci: string) {
+export function makeMove(gameId: string, moveUci: string, difficulty?: number) {
   return request<GameResponse>(`/api/games/${gameId}/move`, {
     method: 'POST',
-    body: JSON.stringify({ move_uci: moveUci }),
+    body: JSON.stringify({ move_uci: moveUci, ...(difficulty === undefined ? {} : { difficulty }) }),
   });
 }
 

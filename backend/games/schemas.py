@@ -13,6 +13,7 @@ class GameCreateRequest(BaseModel):
 
 class PlayerMoveRequest(BaseModel):
     move_uci: str = Field(..., description="Ход в нотации UCI, например 'e2e4'")
+    difficulty: Optional[int] = Field(None, ge=800, le=2600, description="Выбранная сила Maia для новой партии")
 
 
 class GameResponse(BaseModel):

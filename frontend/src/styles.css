@@ -482,3 +482,94 @@ small { font-size: .8rem; }
 .topbar-user > .auth-nav-link { background: transparent; border: 0; border-radius: 0; color: #30354a; font-size: 13px; font-weight: 700; padding: 8px 0; text-decoration: none; }
 .topbar-user > .auth-nav-link:hover { color: #464bff; text-decoration: underline; text-underline-offset: 4px; }
 .topbar-user > .auth-nav-link:focus-visible { border-radius: 4px; outline: 3px solid rgba(70, 75, 255, .32); outline-offset: 3px; }
+
+/* --- Learn: Stepik-концепция (степпер + квиз). Только новые классы. --- */
+.lesson-stepper button.done { background: #effbea; border-color: #bfe6c9; color: #1c7a3d; }
+.lesson-stepper button.done span { background: #1c7a3d; color: #fff; }
+.lesson-stepper button:disabled { cursor: not-allowed; opacity: .55; }
+.learn-theory { grid-template-columns: minmax(230px, .62fr) minmax(440px, 1.38fr); }
+.learn-theory .theory-tracker { align-items: baseline; display: flex; gap: 10px; justify-content: space-between; margin-bottom: 10px; }
+.learn-theory .theory-tracker > span:last-child { color: #555662; font-size: 11px; }
+.learn-theory .article-completion { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; }
+.quiz-card { background: #fff; border: 1px solid #e4e5ec; border-radius: 20px; padding: clamp(18px, 2vw, 30px); }
+.quiz-heading { align-items: end; display: flex; justify-content: space-between; margin-bottom: 18px; }
+.quiz-heading h2 { font-size: clamp(22px, 2.4vw, 34px); letter-spacing: -2px; line-height: 1; margin: 12px 0 8px; }
+.quiz-heading h2 em { color: #464bff; font-style: normal; }
+.quiz-heading p { color: #555662; font-size: 13px; line-height: 1.6; max-width: 560px; }
+.quiz-progress { background: #f3eff9; border-radius: 12px; color: #464bff; font-family: Geologica, sans-serif; font-size: 10px; padding: 10px 14px; white-space: nowrap; }
+.quiz-layout { display: grid; gap: 22px; grid-template-columns: minmax(280px, 420px) 1fr; }
+.quiz-board-wrap { margin-inline: auto; max-width: 420px; width: 100%; }
+.quiz-board-wrap .game-board { box-shadow: 8px 8px 0 #dce204; }
+.quiz-questions { display: flex; flex-direction: column; gap: 16px; }
+.quiz-question { background: #f6f7fb; border: 1px solid #e4e5ec; border-radius: 14px; padding: 16px; }
+.quiz-question > strong { display: flex; font-size: 14px; gap: 10px; line-height: 1.45; }
+.quiz-question > strong span { align-items: center; background: #464bff; border-radius: 50%; color: #fff; display: inline-flex; flex: 0 0 24px; font-family: Geologica, sans-serif; font-size: 10px; height: 24px; justify-content: center; }
+.quiz-question.right { background: #effbea; border-color: #bfe6c9; }
+.quiz-question.wrong { background: #fff0f0; border-color: #f1b8b8; }
+.quiz-options { display: grid; gap: 8px; margin-top: 12px; }
+.quiz-options button { align-items: center; background: #fff; border: 1px solid #e0e2eb; border-radius: 10px; cursor: pointer; display: flex; font: inherit; font-size: 13px; gap: 10px; padding: 10px 12px; text-align: left; }
+.quiz-options button:hover:not(:disabled) { border-color: #464bff; }
+.quiz-options button.selected { border-color: #464bff; box-shadow: 0 0 0 3px rgba(70,75,255,.12); }
+.quiz-options button.correct { background: #effbea; border-color: #1c7a3d; color: #1c7a3d; font-weight: 700; }
+.quiz-options button.wrong { background: #fff0f0; border-color: #a32929; color: #a32929; }
+.quiz-options button i { align-items: center; background: #f3eff9; border-radius: 50%; color: #464bff; display: inline-flex; flex: 0 0 24px; font-family: Geologica, sans-serif; font-size: 10px; font-style: normal; height: 24px; justify-content: center; }
+.quiz-options button.correct i { background: #1c7a3d; color: #fff; }
+.quiz-feedback { font-size: 12px; line-height: 1.55; margin: 10px 0 0; }
+.quiz-feedback.ok { color: #1c7a3d; }
+.quiz-feedback.bad { color: #a32929; }
+.quiz-feedback button { background: none; border: 0; color: #464bff; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
+.quiz-unlocked { background: #25a55a; border-radius: 12px; color: #fff; font-family: Geologica, sans-serif; font-size: 12px; margin-top: 16px; padding: 14px 18px; text-align: center; }
+.lesson-tab-practice .lesson-practice { background: transparent; max-width: none; padding: 0; }
+.lesson-tab-practice .practice-board-wrap { max-width: 600px; }
+.lesson-tab-practice .complete-grid { grid-template-columns: repeat(3, 1fr); }
+.practice-success { align-items: center; background: #effbea; border: 1px solid #bfe6c9; border-radius: 15px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; margin-top: 16px; padding: 18px 20px; }
+.practice-success strong { color: #1c7a3d; display: block; font-size: 15px; }
+.practice-success small { color: #555662; display: block; font-size: 12px; margin-top: 4px; }
+@media (max-width: 1000px) { .quiz-layout { grid-template-columns: 1fr; } .lesson-tab-practice .complete-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px) {
+  /* Полное дерево видно и на мобильных: показываем все модули и темы целиком. */
+  .learn-page-sidebar { max-height: none; }
+  .learn-module { display: block; }
+  .quiz-heading { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .quiz-board-wrap { max-width: 100%; }
+  .lesson-tab-practice .complete-grid { grid-template-columns: 1fr; }
+  .practice-success .button { width: 100%; }
+}
+
+@media (max-width: 700px) {
+  /* Полное дерево вместо старого усечения сайдбара: все модули и темы видны. */
+  .learn-module:first-of-type .learn-topic:nth-of-type(n+5) { display: flex; }
+}
+
+/* Единый формат текста вкладок урока: один кегль и цвет везде, акценты — только цветом. */
+.learn-topic-title, .quiz-heading h2, .learn-practice-heading h2 { color: #111; font-size: clamp(24px, 2.6vw, 36px); letter-spacing: -2px; line-height: 1.05; margin: 12px 0 8px; }
+.learn-topic-title { margin: 10px 0 12px; }
+.learn-topic-lead, .learn-article-text p, .quiz-heading p, .quiz-options button, .quiz-feedback, .learn-practice-heading p { color: #3f404c; font-size: 14px; line-height: 1.65; }
+.learn-article-text p { margin: 0 0 14px; max-width: 680px; }
+.learn-topic-lead { margin: 0 0 4px; max-width: 680px; }
+.quiz-question > strong { color: #111; font-size: 15px; line-height: 1.5; }
+.lesson-tab-practice .practice-info strong { color: #111; font-size: 14px; }
+.lesson-tab-practice .practice-info small { color: #3f404c; font-size: 12px; line-height: 1.55; }
+
+/* Интерактив демо-доски теории: мини-игра «найди поле». */
+.demo-ask { background: #fffce7; border-radius: 12px; color: #4e5000; font-size: 13px; line-height: 1.55; margin: 14px 0 0; padding: 12px 14px; }
+.demo-ask small { color: #a32929; display: block; font-size: 12px; margin-top: 4px; }
+.demo-ask-ok { color: #1c7a3d; font-weight: 700; }
+
+/* Практика: офлайн-бейдж и кнопка перехода в разблокированном квизе. */
+.practice-offline { background: #fffce7; border: 1px solid #e3d97e; border-radius: 15px; color: #6b6200; font-family: Geologica, sans-serif; font-size: 9px; margin-left: 8px; padding: 8px 10px; }
+.quiz-unlocked { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.quiz-unlocked .button { padding: 12px 16px; }
+
+/* Теория: доска, мини-игра и кнопки — одна колонка строго по ширине доски. */
+.theory-board-col { margin: 0 auto; max-width: 690px; width: 100%; }
+.theory-board-col .theory-board { margin: 22px auto 0; }
+.theory-board-col .demo-ask { display: inline-block; margin: 12px 0 0; max-width: 100%; }
+.theory-board-col .theory-board-bottom { display: block; margin-top: 18px; }
+.theory-board-bottom > div { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
+.theory-board-bottom .button { width: auto; }
+.theory-board-bottom .theory-control { padding: 10px 4px; width: auto; }
+/* Кнопки завершения теории: равная ширина, одинаковый отступ. */
+.learn-theory .article-completion .button { align-items: center; display: inline-flex; flex: 1 1 240px; justify-content: center; }
+
+.theory-line-done { color: #1c7a3d; font-size: 13px; font-weight: 700; }

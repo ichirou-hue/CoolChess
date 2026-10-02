@@ -1,4 +1,6 @@
 /** Reads the public leaderboard and the signed-in student's rank. */
+import { fetchApi, readApiError } from '../../../shared/api/apiBase';
+
 export type LeaderboardCategory = 'elo' | 'level' | 'puzzles';
 
 export type LeaderboardPlayer = {
@@ -17,22 +19,13 @@ export type LeaderboardResponse = {
   my_rank: Omit<LeaderboardPlayer, 'user_id' | 'email'> | null;
 };
 
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
-
 export async function getLeaderboard(category: LeaderboardCategory = 'elo', limit = 20) {
   const token = sessionStorage.getItem('coolchess.accessToken');
-  const response = await fetch(`${apiUrl}/api/leaderboard?${new URLSearchParams({ category, limit: String(limit) })}`, {
+  const response = await fetchApi(`/api/leaderboard?${new URLSearchParams({ category, limit: String(limit) })}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!response.ok) {
-    let message = `Ошибка сервера (${response.status})`;
-    try {
-      const body = await response.json() as { detail?: string };
-      if (body.detail) message = body.detail;
-    } catch {
-      // Keep the status message if the server did not return JSON.
-    }
-    throw new Error(message);
+    throw new Error(await readApiError(response));
   }
   return response.json() as Promise<LeaderboardResponse>;
 }

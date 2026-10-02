@@ -1,4 +1,6 @@
 /** Reads the student's profile and manages Lichess account linking. */
+import { fetchApi, readApiError } from '../../../shared/api/apiBase';
+
 export type StudentProfile = {
   email: string;
   role: string;
@@ -29,11 +31,9 @@ export type LichessSyncResult = {
   message: string;
 };
 
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
-
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem('coolchess.accessToken');
-  const response = await fetch(`${apiUrl}${path}`, {
+  const response = await fetchApi(path, {
     ...init,
     headers: {
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
@@ -42,14 +42,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   if (!response.ok) {
-    let message = `Ошибка сервера (${response.status})`;
-    try {
-      const body = await response.json() as { detail?: string };
-      if (body.detail) message = body.detail;
-    } catch {
-      // Keep the status message if the server did not return JSON.
-    }
-    throw new Error(message);
+    throw new Error(await readApiError(response));
   }
   return response.json() as Promise<T>;
 }

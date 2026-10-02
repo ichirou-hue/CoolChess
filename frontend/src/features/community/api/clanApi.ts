@@ -1,4 +1,6 @@
 /** Client for the server-backed clan feature. */
+import { fetchApi, readApiError } from '../../../shared/api/apiBase';
+
 export type Clan = {
   id: string;
   name: string;
@@ -20,11 +22,9 @@ export type ClanMember = {
 
 export type ClanDetails = Clan & { members: ClanMember[] };
 
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
-
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem('coolchess.accessToken');
-  const response = await fetch(`${apiUrl}${path}`, {
+  const response = await fetchApi(path, {
     ...init,
     headers: {
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
@@ -33,14 +33,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   if (!response.ok) {
-    let message = `Ошибка сервера (${response.status})`;
-    try {
-      const body = await response.json() as { detail?: string };
-      if (body.detail) message = body.detail;
-    } catch {
-      // Keep the status message when the server did not return JSON.
-    }
-    throw new Error(message);
+    throw new Error(await readApiError(response));
   }
   return response.json() as Promise<T>;
 }

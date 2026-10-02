@@ -1,5 +1,5 @@
 /** Browser entry point: starts CoolChess and connects its main screens. */
-import { StrictMode, useEffect, useRef, useState } from 'react';
+import { StrictMode, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Chess, type Square } from 'chess.js';
 import { Chessground } from 'chessground';
@@ -8,6 +8,7 @@ import type { Key } from 'chessground/types';
 import { courseModules } from './data/course';
 import { lessonContent } from './data/lessonContent';
 import { lessonVisuals, type LessonVisual } from './data/lessonVisuals';
+import { lessonQuiz, type LessonQuizQuestion } from './data/lessonQuiz';
 import { awardPawns, readStudentState } from './shared/lib/studentState';
 import { AuthPage as FeatureAuthPage } from './features/auth/ui/AuthPage';
 import { AuthProvider } from './features/auth/model/AuthProvider';
@@ -218,11 +219,38 @@ function ChessGame() {
   </section>;
 }
 
-function TheoryBoard({ visual, onLineViewed }: { visual: LessonVisual; onLineViewed?: () => void }) {
+function TheoryBoard({ visual, onLineViewed, kicker }: { visual: LessonVisual; onLineViewed?: () => void; kicker?: string }) {
   const boardRef = useRef<HTMLDivElement>(null);
   const groundRef = useRef<Api | null>(null);
   const gameRef = useRef(new Chess(visual.fen));
   const [step, setStep] = useState(0);
+  // Мини-игра «найди поле»: клики по доске проверяем сами по координатам
+  // (доска всегда в ориентации белых). Ответ прячем, пока не найден:
+  // стрелки и подсветка с загаданным полем появляются только после успеха.
+  const [askSolved, setAskSolved] = useState(false);
+  const [askMiss, setAskMiss] = useState<string | null>(null);
+  const askHidden = Boolean(visual.askSquare) && !askSolved;
+  const boardShapes = () => {
+    const arrows = (visual.arrows ?? [])
+      .filter(([from, to]) => !askHidden || (from !== visual.askSquare && to !== visual.askSquare))
+      .map(([from, to]) => ({ orig: from as Key, dest: to as Key, brush: 'green' as const }));
+    const marks = (visual.highlight ?? [])
+      .filter((square) => !askHidden || square !== visual.askSquare)
+      .map((square) => ({ orig: square as Key, brush: 'yellow' as const }));
+    return [...arrows, ...marks];
+  };
+  useEffect(() => { groundRef.current?.set({ drawable: { shapes: boardShapes() } }); }, [askSolved, visual]);
+  useEffect(() => { setAskSolved(false); setAskMiss(null); }, [visual]);
+  const boardClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!visual.askSquare || askSolved || !boardRef.current) return;
+    const rect = boardRef.current.getBoundingClientRect();
+    const file = Math.floor(((event.clientX - rect.left) / rect.width) * 8);
+    const row = Math.floor(((event.clientY - rect.top) / rect.height) * 8);
+    if (file < 0 || file > 7 || row < 0 || row > 7) return;
+    const square = `${'abcdefgh'[file]}${8 - row}`;
+    if (square === visual.askSquare) setAskSolved(true);
+    else setAskMiss(square);
+  };
   const resetBoard = () => { gameRef.current = new Chess(visual.fen); setStep(0); groundRef.current?.set({ fen: visual.fen, lastMove: undefined, turnColor: 'white', movable: { color: 'white', dests: new Map() } }); };
   const advance = () => {
     const uci = visual.moves[step];
@@ -251,7 +279,120 @@ function TheoryBoard({ visual, onLineViewed }: { visual: LessonVisual; onLineVie
   };
   useEffect(() => { if (!boardRef.current) return; groundRef.current = Chessground(boardRef.current, { fen: visual.fen, coordinates: true, orientation: 'white', movable: { free: false, color: 'white', dests: new Map() }, highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 260 } }); return () => groundRef.current?.destroy(); }, [visual]);
   useEffect(() => resetBoard(), [visual]);
-  return <div className="theory-board-card"><div className="theory-board-top"><div><span className="block-kicker">ШАГ 2 · СМОТРИ РАЗБОР (ДОСКА-ДЕМО)</span><strong>{visual.title}</strong></div><span>{step} / {visual.moves.length} ходов</span></div><div className="theory-board"><div ref={boardRef} className="game-board" aria-label={`Теоретическая позиция: ${visual.title}`} /></div><div className="theory-board-bottom"><p>{visual.caption} Это демо-доска: ходы показывает она сама. Твой собственный ход — шаг 3, в задаче ниже.</p><div><button className="theory-control" type="button" onClick={resetBoard}>Сначала</button><button className="theory-control" type="button" onClick={playLine} disabled={!visual.moves.length}>Показать линию</button>{step >= visual.moves.length ? <button className="button button-primary" type="button" onClick={() => document.getElementById('lesson-practice')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Шаг 3 — решить задачу самому ↓</button> : <button className="button button-primary" type="button" onClick={advance}>Следующий ход ↗</button>}</div></div><div className="focus-fields">{visual.focus.split(' ').map((field) => <span key={field}>{field}</span>)}</div></div>;
+  return <div className="theory-board-card"><div className="theory-board-top"><div><span className="block-kicker">{kicker ?? 'ШАГ 2 · СМОТРИ РАЗБОР (ДОСКА-ДЕМО)'}</span><strong>{visual.title}</strong></div>{visual.moves.length > 0 && <span>{step} / {visual.moves.length} ходов</span>}</div><div className="theory-board-col"><div className="theory-board"><div ref={boardRef} className="game-board" onClick={boardClick} aria-label={`Теоретическая позиция: ${visual.title}`} /></div>{visual.askSquare && <div className="demo-ask">{askSolved ? <span className="demo-ask-ok">Верно ✓</span> : <span>🔎 {visual.askText}</span>}{!askSolved && askMiss && <small>Это поле {askMiss} — смотри внимательнее и кликни ещё раз.</small>}</div>}<div className="theory-board-bottom"><div>{visual.moves.length > 0 && <><button className="theory-control" type="button" onClick={resetBoard}>Сначала</button><button className="theory-control" type="button" onClick={playLine}>Показать линию</button></>}{visual.moves.length > 0 && (step >= visual.moves.length ? <span className="theory-line-done">Разбор просмотрен ✓</span> : <button className="button button-primary" type="button" onClick={advance}>Следующий ход ↗</button>)}</div></div></div><div className="focus-fields">{visual.focus.split(' ').map((field) => <span key={field}>{field}</span>)}</div></div>;
+}
+
+// Прогресс квизов «Проверка знаний»: помним, в каких темах ученик
+// верно ответил на все вопросы. Практика разблокируется только после квиза.
+const QUIZ_STORE_KEY = 'coolchess.quiz.v1';
+
+function readQuizStore(): Record<string, boolean> {
+  try {
+    const raw = typeof window === 'undefined' ? null : localStorage.getItem(QUIZ_STORE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    if (parsed && typeof parsed === 'object') return parsed as Record<string, boolean>;
+  } catch {
+    // Битое хранилище игнорируем.
+  }
+  return {};
+}
+
+function writeQuizStore(topicId: string) {
+  try {
+    const store = readQuizStore();
+    store[topicId] = true;
+    localStorage.setItem(QUIZ_STORE_KEY, JSON.stringify(store));
+  } catch {
+    // Не сохранилось — квиз просто придётся пройти заново.
+  }
+}
+
+// Черновик ответов квиза: чтобы переключение вкладок не сжигало прогресс,
+// храним выбранные варианты и вердикты в localStorage (сброс — при смене темы
+// компонент монтируется заново через key, а внутри темы состояние живёт).
+const QUIZ_ANSWERS_KEY = 'coolchess.quiz.answers.v1';
+
+type QuizDraft = { picked: Record<number, number>; checked: Record<number, boolean> };
+
+function readQuizDraft(topicId: string): QuizDraft {
+  try {
+    const raw = typeof window === 'undefined' ? null : localStorage.getItem(QUIZ_ANSWERS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    if (parsed && typeof parsed === 'object') {
+      const entry = (parsed as Record<string, QuizDraft>)[topicId];
+      if (entry && typeof entry === 'object') return { picked: entry.picked ?? {}, checked: entry.checked ?? {} };
+    }
+  } catch {
+    // Игнорируем битое хранилище.
+  }
+  return { picked: {}, checked: {} };
+}
+
+function writeQuizDraft(topicId: string, draft: QuizDraft) {
+  try {
+    const raw = localStorage.getItem(QUIZ_ANSWERS_KEY);
+    const store: Record<string, QuizDraft> = raw ? JSON.parse(raw) : {};
+    store[topicId] = draft;
+    localStorage.setItem(QUIZ_ANSWERS_KEY, JSON.stringify(store));
+  } catch {
+    // Не сохранилось — ответы просто не переживут перезагрузку.
+  }
+}
+
+// Статичная доска для вопроса квиза: только позиция, без ходов.
+function QuizBoard({ fen, label }: { fen: string; label: string }) {
+  const boardRef = useRef<HTMLDivElement>(null);
+  const groundRef = useRef<Api | null>(null);
+  useEffect(() => {
+    if (!boardRef.current) return;
+    groundRef.current = Chessground(boardRef.current, {
+      fen, coordinates: true, orientation: 'white',
+      movable: { free: false, color: 'white', dests: new Map() },
+      highlight: { lastMove: false, check: true },
+      animation: { enabled: false },
+    });
+    return () => groundRef.current?.destroy();
+  }, [fen]);
+  return <div className="quiz-board-wrap"><div ref={boardRef} className="game-board" aria-label={label} /></div>;
+}
+
+function LessonQuiz({ topicId, topicTitle, boardFen, questions, onPassed, onGoPractice }: {
+  topicId: string;
+  topicTitle: string;
+  boardFen: string;
+  questions: LessonQuizQuestion[];
+  onPassed: () => void;
+  onGoPractice?: () => void;
+}) {
+  // Ответы по индексу вопроса: выбранный вариант + вердикт проверки.
+  // Черновик переживает переключение вкладок (localStorage), сброс — со сменой темы (key).
+  const [picked, setPicked] = useState<Record<number, number>>(() => readQuizDraft(topicId).picked);
+  const [checked, setChecked] = useState<Record<number, boolean>>(() => readQuizDraft(topicId).checked);
+  const [passed, setPassed] = useState(() => readQuizStore()[topicId] ?? false);
+  useEffect(() => { writeQuizDraft(topicId, { picked, checked }); }, [topicId, picked, checked]);
+  const correctCount = questions.filter((question, index) => checked[index] && picked[index] === question.correct).length;
+  const allCorrect = questions.length > 0 && correctCount === questions.length;
+  useEffect(() => {
+    if (allCorrect && !passed) {
+      writeQuizStore(topicId);
+      setPassed(true);
+      onPassed();
+    }
+  }, [allCorrect]);
+  const letters = ['А', 'Б', 'В', 'Г'];
+  return <div className="quiz-card"><div className="quiz-heading"><div><h2>Понял идею?<br /><em>Проверь себя.</em></h2><p>Ответь верно на все вопросы — и откроется практика. Ошибка — не страшно: читай пояснение и пробуй снова.</p></div></div><div className="quiz-layout"><QuizBoard fen={boardFen} label={`Позиция к вопросам темы: ${topicTitle}`} /><div className="quiz-questions">{questions.map((question, index) => {
+    const wasChecked = checked[index] ?? false;
+    const isRight = wasChecked && picked[index] === question.correct;
+    return <div className={`quiz-question${wasChecked ? (isRight ? ' right' : ' wrong') : ''}`} key={`${topicId}-q${index}`}><strong><span>{index + 1}</span>{question.prompt}</strong><div className="quiz-options">{question.options.map((option, optionIndex) => {
+      const selected = picked[index] === optionIndex;
+      const revealRight = wasChecked && optionIndex === question.correct;
+      return <button type="button" key={optionIndex} disabled={wasChecked && isRight} className={`${selected ? 'selected' : ''}${revealRight ? ' correct' : ''}${selected && wasChecked && !isRight ? ' wrong' : ''}`} onClick={() => {
+        if (wasChecked && isRight) return;
+        setPicked((current) => ({ ...current, [index]: optionIndex }));
+        setChecked((current) => ({ ...current, [index]: true }));
+      }}><i>{letters[optionIndex] ?? optionIndex + 1}</i>{option}</button>;
+    })}</div>{wasChecked && (isRight ? <p className="quiz-feedback ok">Верно ✓ {question.explanation}</p> : <p className="quiz-feedback bad">Пока неверно. {question.explanation} <button type="button" onClick={() => setChecked((current) => ({ ...current, [index]: false }))}>Попробовать снова</button></p>)}</div>;
+  })}</div></div>{passed && <div className="quiz-unlocked"><span>Проверка пройдена ✓ — шаг практики разблокирован.</span>{onGoPractice && <button className="button button-primary" type="button" onClick={onGoPractice}>К практике →</button>}</div>}</div>;
 }
 
 function OriginalLichessPuzzleLibrary() {
@@ -420,6 +561,50 @@ function writeDemoStore(topicId: string) {
   }
 }
 
+// Офлайн-запас практики: если сервер не отдал задачу (пустая БД, сеть),
+// берём позицию из public/data/puzzles.json и проверяем ход на устройстве.
+// Формат совпадает с выдачей Lichess: moves[0] — показанный ход соперника,
+// moves[1] — верное решение.
+type LocalPracticePuzzle = {
+  id: string;
+  fen: string;
+  moves: string[];
+  rating: number;
+  popularity: number;
+  themes: string[];
+  gameUrl: string | null;
+};
+
+let localPracticeCache: Promise<LocalPracticePuzzle[]> | null = null;
+
+function loadLocalPracticePuzzles(): Promise<LocalPracticePuzzle[]> {
+  if (!localPracticeCache) {
+    localPracticeCache = fetch('data/puzzles.json').then((response) => {
+      if (!response.ok) throw new Error('no local puzzles');
+      return response.json() as Promise<LocalPracticePuzzle[]>;
+    }).catch((reason) => {
+      localPracticeCache = null;
+      throw reason;
+    });
+  }
+  return localPracticeCache;
+}
+
+// Локальная оценка за задачу по тирам сервера (только для отображения:
+// серверные XP/монеты начисляет лишь онлайн-проверка).
+function offlinePracticeXp(rating: number): number {
+  if (rating <= 1199) return 15;
+  if (rating <= 1599) return 30;
+  if (rating <= 1999) return 50;
+  if (rating <= 2399) return 80;
+  return 120;
+}
+
+function samePracticeMove(actual: string, expected: string): boolean {
+  // Совпадение полных UCI; если в эталоне нет превращения — сравниваем 4 символа.
+  return expected.length === 5 ? actual === expected : actual.slice(0, 4) === expected.slice(0, 4);
+}
+
 function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: string }) {
   // Практика по теме идёт через сервер: задача подбирается по тегу темы,
   // ход соперника уже показан на доске, backend проверяет ключевой ход
@@ -430,8 +615,14 @@ function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: s
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'submitting' | 'correct' | 'wrong' | 'error'>('loading');
   const [error, setError] = useState('');
-  const [reward, setReward] = useState('');
   const [requestIndex, setRequestIndex] = useState(0);
+  // Защита от гонок: поздний ответ медленного запроса не затирает свежий.
+  const requestIdRef = useRef(0);
+  // Свежий статус для колбэка доски (замыкание chessground иначе видит старый).
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  // Офлайн-режим: верное решение локальной задачи (null — проверяет сервер).
+  const solutionRef = useRef<string | null>(null);
   // Счёт ведём через ref, а не через setState-апдейтер: апдейтеры выполняются
   // позже вызова, и запись/событие по ним отставали на один ход.
   const solvedRef = useRef<string[]>(readPracticeStore()[topicId] ?? []);
@@ -452,20 +643,59 @@ function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: s
   // Бонус начисляется прямо в обработчике хода (см. выше).
 
   const loadPuzzle = async (rotation = 0) => {
+    const requestId = (requestIdRef.current += 1);
     setStatus('loading');
     groundRef.current?.set({ movable: { color: 'white', dests: new Map() } });
     setError('');
-    setReward('');
     const theme = themes.length ? themes[(requestIndex + rotation) % themes.length] : undefined;
     try {
       const next = await puzzleApi.getRandomPuzzle(theme);
+      if (requestId !== requestIdRef.current) return;
+      solutionRef.current = null;
       setPuzzle(next);
       setRequestIndex((value) => value + 1);
       setStatus('ready');
     } catch (reason) {
-      setPuzzle(null);
-      setError(reason instanceof Error ? reason.message : 'Не удалось загрузить задачу');
-      setStatus('error');
+      if (requestId !== requestIdRef.current) return;
+      const message = reason instanceof Error ? reason.message : '';
+      if (/401|авторизац|войдите|войти/i.test(message)) {
+        // Без входа серверные задачи и награды недоступны — зовём войти.
+        solutionRef.current = null;
+        setPuzzle(null);
+        setError(reason instanceof Error ? reason.message : 'Не удалось загрузить задачу');
+        setStatus('error');
+        return;
+      }
+      // Сервер пуст или недоступен — играем локальный запас без серверных наград.
+      try {
+        const all = await loadLocalPracticePuzzles();
+        if (requestId !== requestIdRef.current) return;
+        const solvedIds = new Set(readPracticeStore()[topicId] ?? []);
+        const themed = all.filter((item) => !theme || item.themes.includes(theme));
+        const fresh = themed.filter((item) => !solvedIds.has(`local:${item.id}`));
+        const pool = fresh.length ? fresh : themed;
+        if (!pool.length) throw new Error('empty pool');
+        const candidate = pool[Math.floor(Math.random() * pool.length)];
+        solutionRef.current = candidate.moves[1] ?? null;
+        setPuzzle({
+          id: `local:${candidate.id}`,
+          fen: candidate.fen,
+          initial_move: candidate.moves[0] ?? '',
+          rating: candidate.rating,
+          popularity: candidate.popularity,
+          themes: candidate.themes,
+          game_url: candidate.gameUrl,
+        });
+        setRequestIndex((value) => value + 1);
+        setStatus(solutionRef.current ? 'ready' : 'error');
+        if (!solutionRef.current) setError('В локальной задаче нет решения.');
+      } catch {
+        if (requestId !== requestIdRef.current) return;
+        solutionRef.current = null;
+        setPuzzle(null);
+        setError(reason instanceof Error ? reason.message : 'Не удалось загрузить задачу');
+        setStatus('error');
+      }
     }
   };
 
@@ -491,24 +721,18 @@ function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: s
   }, [puzzle]);
 
   const submitMove = async (orig: Key, dest: Key) => {
-    if (!puzzle || !gameRef.current || status !== 'ready') return;
+    if (!puzzle || !gameRef.current || statusRef.current !== 'ready') return;
     const current = gameRef.current;
     const promotion = (orig[1] === '7' && dest[1] === '8') || (orig[1] === '2' && dest[1] === '1') ? 'q' : '';
+    const uci = `${orig}${dest}${promotion}`;
     setStatus('submitting');
     groundRef.current?.set({ movable: { color: 'white', dests: new Map() } });
-    try {
-      const result = await puzzleApi.submitPuzzleMove(puzzle.id, `${orig}${dest}${promotion}`);
-      if (!result.is_correct) {
-        setStatus('wrong');
-        groundRef.current?.set({ fen: current.fen(), turnColor: current.turn() === 'w' ? 'white' : 'black', movable: { color: current.turn() === 'w' ? 'white' : 'black', dests: legalDests(current) } });
-        window.setTimeout(() => setStatus('ready'), 700);
-        return;
-      }
+    const registerSolved = (xpEarned: number, alreadySolved: boolean) => {
       const played = current.move({ from: orig as Square, to: dest as Square, promotion: promotion || 'q' });
-      if (!result.already_solved && !solvedRef.current.includes(puzzle.id)) {
+      if (!alreadySolved && !solvedRef.current.includes(puzzle.id)) {
         // Всё делаем синхронно здесь: ref актуален всегда, хранилище пишем
-        // до события — итог шага 4 больше не отстаёт на один ход.
-        setSessionXp((value) => value + result.xp_earned);
+        // до события — итог практики больше не отстаёт на один ход.
+        setSessionXp((value) => value + xpEarned);
         solvedRef.current = [...solvedRef.current, puzzle.id];
         writePracticeStore(topicId, solvedRef.current);
         setSolvedTick((tick) => tick + 1);
@@ -519,8 +743,32 @@ function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: s
         }
       }
       setStatus('correct');
-      setReward(result.already_solved ? 'Задача уже была решена — в зачёт не идёт, возьми другую позицию.' : `+${result.xp_earned} XP · +${result.coins_earned} ♟ — засчитано!`);
       groundRef.current?.set({ fen: current.fen(), lastMove: played ? [played.from as Key, played.to as Key] : undefined, movable: { color: current.turn() === 'w' ? 'white' : 'black', dests: new Map() } });
+    };
+    const registerWrong = () => {
+      setStatus('wrong');
+      groundRef.current?.set({ fen: current.fen(), turnColor: current.turn() === 'w' ? 'white' : 'black', movable: { color: current.turn() === 'w' ? 'white' : 'black', dests: legalDests(current) } });
+      window.setTimeout(() => { if (statusRef.current === 'wrong') setStatus('ready'); }, 700);
+    };
+    // Офлайн-режим: сверяем ход с решением из локального запаса.
+    const localSolution = solutionRef.current;
+    if (localSolution) {
+      if (!samePracticeMove(uci, localSolution)) {
+        registerWrong();
+        return;
+      }
+      const xp = offlinePracticeXp(puzzle.rating);
+      const already = solvedRef.current.includes(puzzle.id);
+      registerSolved(xp, already);
+      return;
+    }
+    try {
+      const result = await puzzleApi.submitPuzzleMove(puzzle.id, uci);
+      if (!result.is_correct) {
+        registerWrong();
+        return;
+      }
+      registerSolved(result.xp_earned, result.already_solved);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Не удалось проверить ход');
       setStatus('error');
@@ -533,10 +781,8 @@ function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: s
   const fenSide = puzzle?.fen.split(' ')[1] ?? 'w';
   const moveSide = puzzle?.initial_move ? (fenSide === 'w' ? 'b' : 'w') : fenSide;
   const moveSideLabel = moveSide === 'w' ? 'белые' : 'чёрные';
-  const oppMove = puzzle?.initial_move ?? '';
-  const oppMoveText = oppMove.length >= 4 ? `${oppMove.slice(0, 2)} → ${oppMove.slice(2, 4)}${oppMove[4] ? `=${oppMove[4].toUpperCase()}` : ''}` : '';
   const needsAuth = /401|авторизац|войдите|войти/i.test(error);
-  return <div className="lesson-practice"><div className="practice-header"><div><span className="block-kicker">ПРАКТИКА ПО ТЕМЕ</span><strong>Реши {PRACTICE_QUOTA} задачи по теме — каждая засчитывается один раз</strong></div>{puzzle && <span className="practice-rating">{puzzle.rating} рейтинг</span>}</div><div className="practice-progress"><div className="practice-dots">{Array.from({ length: PRACTICE_QUOTA }, (_, position) => <i key={position} className={position < solvedCount ? 'done' : ''} />)}</div><span>Решено {solvedCount}/{PRACTICE_QUOTA}{sessionXp > 0 ? ` · +${sessionXp} XP за тему` : ''}{practiceBonus ? ' · пройдено ✓' : ''}</span></div><div className="practice-board-wrap"><div ref={boardRef} className="game-board" aria-label="Позиция по текущей теме" /></div>  {done && <div className="practice-done"><div><strong>{practiceBonus ? `Практика пройдена ✓ +${PRACTICE_BONUS} ♟` : `Практика пройдена ✓ ${solvedCount}/${PRACTICE_QUOTA}`}</strong><small>{practiceBonus ? `+${sessionXp} XP за задачи уже на твоём счёте.` : 'Начисляем бонус за практику…'}</small></div></div>}<div className="practice-info"><div><strong>{status === 'correct' ? 'Ход найден ✓' : status === 'wrong' ? 'Неверный ход — попробуй ещё' : status === 'submitting' ? 'Проверяем ход…' : status === 'error' ? (needsAuth ? 'Нужно войти в аккаунт' : error) : status === 'loading' ? 'Загружаем задачу…' : `Твой ход, ${moveSideLabel} — найди лучший ход`}</strong><small>{status === 'error' && needsAuth ? 'Задачи и награды XP доступны после входа.' : (reward || (oppMoveText ? `Ход соперника: ${oppMoveText}. ` : '') + `Тег задачи: ${puzzle?.themes.join(', ') ?? themes.join(', ')}`)}</small></div>{status === 'error' && needsAuth && <a className="source-link" href="#auth">Войти и решать за XP ↗</a>}<button type="button" className="practice-next" onClick={() => void loadPuzzle(1)} disabled={status === 'loading' || status === 'submitting'}>Другая позиция ↗</button></div></div>;
+  return <div className="lesson-practice"><div className="practice-header"><div><span className="block-kicker">ПРАКТИКА ПО ТЕМЕ</span><strong>Реши {PRACTICE_QUOTA} задачи по теме — каждая засчитывается один раз</strong></div></div><div className="practice-progress"><div className="practice-dots">{Array.from({ length: PRACTICE_QUOTA }, (_, position) => <i key={position} className={position < solvedCount ? 'done' : ''} />)}</div><span>Решено {solvedCount}/{PRACTICE_QUOTA}{sessionXp > 0 ? ` · +${sessionXp} XP за тему` : ''}{practiceBonus ? ' · пройдено ✓' : ''}</span></div><div className="practice-board-wrap"><div ref={boardRef} className="game-board" aria-label="Позиция по текущей теме" /></div>  {done && <div className="practice-done"><div><strong>{practiceBonus ? `Практика пройдена ✓ +${PRACTICE_BONUS} ♟` : `Практика пройдена ✓ ${solvedCount}/${PRACTICE_QUOTA}`}</strong><small>{practiceBonus ? `+${sessionXp} XP за задачи уже на твоём счёте.` : 'Начисляем бонус за практику…'}</small></div></div>}<div className="practice-info"><div><strong>{status === 'correct' ? 'Ход найден ✓' : status === 'wrong' ? 'Неверный ход — попробуй ещё' : status === 'submitting' ? 'Проверяем ход…' : status === 'error' ? (needsAuth ? 'Нужно войти в аккаунт' : error) : status === 'loading' ? 'Загружаем задачу…' : `Твой ход, ${moveSideLabel} — найди лучший ход`}</strong></div>{status === 'error' && needsAuth && <a className="source-link" href="#auth">Войти и решать за XP ↗</a>}<button type="button" className="practice-next" onClick={() => void loadPuzzle(1)} disabled={status === 'loading' || status === 'submitting'}>Другая позиция ↗</button></div></div>;
 }
 
 function LichessPuzzleLibrary() {
@@ -655,14 +901,10 @@ function LearnPage() {
   const module = courseModules.find((item) => item.topics.some((topic) => topic.id === topicId)) ?? courseModules[0];
   const topic = module.topics.find((item) => item.id === topicId) ?? module.topics[0];
   // Награда за теорию выдаётся один раз на тему (claimed в localStorage).
-  // Показываем состояние кнопки и баланс, чтобы получение +20 было видно.
   const [theoryClaimed, setTheoryClaimed] = useState(() => readStudentState().claimed.includes(`theory:${topic.id}`));
-  const [pawnBalance, setPawnBalance] = useState(() => readStudentState().pawns);
   useEffect(() => {
     const syncClaim = () => {
-      const state = readStudentState();
-      setTheoryClaimed(state.claimed.includes(`theory:${topic.id}`));
-      setPawnBalance(state.pawns);
+      setTheoryClaimed(readStudentState().claimed.includes(`theory:${topic.id}`));
     };
     syncClaim();
     window.addEventListener('coolchess:state', syncClaim);
@@ -687,7 +929,6 @@ function LearnPage() {
   const completeTheory = () => {
     const next = awardPawns(`theory:${topic.id}`, 20, 'theory');
     setTheoryClaimed(next.claimed.includes(`theory:${topic.id}`));
-    setPawnBalance(next.pawns);
   };
   // Трекер теории: разбор считается досмотренным, когда линия на демо-доске
   // проиграна до конца (или если ходов в ней нет вовсе).
@@ -696,19 +937,50 @@ function LearnPage() {
     setDemoViewed(readDemoStore()[topic.id] ?? (lessonVisuals[topic.id]?.moves.length ?? 0) === 0);
   }, [topic.id]);
   const markDemoViewed = () => { writeDemoStore(topic.id); setDemoViewed(true); };
+  // Степпер рабочей зоны (Stepik-концепция): теория → проверка знаний → практика.
+  // При выборе урока правая область полностью переключается и стартует с теории.
+  type LessonStep = 'theory' | 'quiz' | 'practice';
+  const [step, setStep] = useState<LessonStep>('theory');
+  useEffect(() => { setStep('theory'); }, [topic.id]);
+  // Переход между шагами всегда возвращает наверх рабочей зоны:
+  // иначе после кнопки остаёшься в середине страницы.
+  const goStep = (next: LessonStep) => {
+    setStep(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  // Сайдбар — полное раскрытое дерево курса: все модули и уроки всегда видны.
+  // Квиз засчитывается один раз на тему; практика locked до его прохождения.
+  const [quizTick, setQuizTick] = useState(0);
+  void quizTick;
+  const quizQuestions = lessonQuiz[topic.id] ?? [];
+  const quizPassed = (readQuizStore()[topic.id] ?? false) || quizQuestions.length === 0;
+  const practiceLocked = quizQuestions.length > 0 && !quizPassed;
+  const markQuizPassed = () => setQuizTick((value) => value + 1);
+  // Выбор урока из дерева (и кнопка «следующий урок»): переключаем рабочую зону.
+  const selectTopic = (nextId: string) => {
+    setTopicId(nextId);
+    setStep('theory');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    try { window.history.replaceState(null, '', `#learn/${nextId}`); } catch { /* hash не критичен */ }
+  };
+  // Следующий урок по порядку дерева — для кнопки после успешной практики.
+  const allTopics = courseModules.flatMap((courseModule) => courseModule.topics);
+  const nextTopic = allTopics[allTopics.findIndex((item) => item.id === topic.id) + 1] ?? null;
   // Данные для итогового табло шага 4: бонус практики и текущий счёт квоты.
   // Практика пишет счёт синхронно и шлёт событие coolchess:practice
   // о каждом зачтённом решении — по нему перечитываем хранилище.
   const practiceBonusClaimed = claimedTopics.includes(`practice:${topic.id}`);
   const practiceSolved = Math.min((readPracticeStore()[topic.id] ?? []).length, PRACTICE_QUOTA);
-  return <section className="learn-page"><aside className="learn-page-sidebar"><div className="sidebar-title"><span className="sidebar-logo">♟</span><div><strong>Курс ученика</strong><small>Выбери тему для изучения</small></div></div>{courseModules.map((item) => <div className="learn-module" key={item.id}><strong>{item.title}</strong>{item.topics.map((itemTopic) => {
+  return <section className="learn-page"><aside className="learn-page-sidebar"><div className="sidebar-title"><span className="sidebar-logo">♟</span><div><strong>Курс ученика</strong><small>Выбери тему для изучения</small></div></div>{courseModules.map((item) => {
+    const moduleDoneCount = item.topics.filter((moduleTopic) => theoryDone(moduleTopic.id) && practiceDone(moduleTopic.id)).length;
+    return <div className="learn-module" key={item.id}><strong>{item.title} · {moduleDoneCount}/{item.topics.length}</strong>{item.topics.map((itemTopic) => {
     const topicActive = itemTopic.id === topic.id;
     const topicTheoryDone = theoryDone(itemTopic.id);
     const topicPracticeDone = practiceDone(itemTopic.id);
     // Зелёным горит только полностью закрытая тема: теория + практика 3/3.
     const topicFullDone = topicTheoryDone && topicPracticeDone;
-    return <button className={`learn-topic${topicActive ? ' active' : ''}${topicFullDone ? ' done-full' : ''}${topicPracticeDone ? ' done-practice' : ''}`} key={itemTopic.id} type="button" onClick={() => setTopicId(itemTopic.id)} title={topicFullDone ? 'Тема пройдена полностью ✓' : topicTheoryDone ? 'Теория пройдена — осталось решить практику 3/3' : topicPracticeDone ? 'Практика пройдена — осталось завершить теорию' : itemTopic.title}><span>{topicFullDone ? '✓' : topicActive ? '→' : '·'}</span>{itemTopic.title}</button>;
-  })}</div>)}</aside><main className="learn-page-main"><div className="learn-page-heading"><div><span className="eyebrow"><span>01</span> УЧЕБНАЯ СТРАНИЦА</span><h1>{topic.title}</h1><p>{article.lead}</p></div><div className={theoryClaimed ? 'lesson-reward claimed' : 'lesson-reward'}><span>{theoryClaimed ? 'ТЕОРИЯ ПРОЙДЕНА ✓' : 'НАГРАДА ЗА ТЕМУ'}</span><strong>♟ +20</strong>{theoryClaimed && <small>получено · баланс {pawnBalance}</small>}</div></div><nav className="lesson-flow" aria-label="Этапы урока"><button className="current" type="button" onClick={() => document.getElementById('lesson-article')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}><span>1</span>Статья</button><button type="button" onClick={() => document.getElementById('lesson-practice')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}><span>2</span>Закрепление · тест</button></nav><article className="learn-article" id="lesson-article"><div className="learn-article-text"><div className="article-breadcrumb">{module.title.toUpperCase()} / ТЕМА</div><span className="block-kicker">ШАГ 1 · ПРОЧИТАЙ ТЕОРИЮ</span><h2>Пойми идею,<br /><em>а не только правило.</em></h2><div className="learn-callout"><span className="block-kicker">ПОНЯТНАЯ АНАЛОГИЯ</span><p>{article.analogy}</p></div><div className="learn-example"><span className="block-kicker">РАЗБЕРЁМ НА ПРИМЕРЕ</span><p>{article.example}</p></div><ol>{article.steps.map((step) => <li key={step}>{step}</li>)}</ol></div><div className="article-completion">{theoryClaimed ? <span>Теория изучена ✓ · +20 пешек получено</span> : <button className="button button-primary" type="button" onClick={completeTheory}>Отметить теорию изученной · +20 ♟</button>}</div></article><section className="learn-reinforcement" id="lesson-reinforcement"><div className="learn-reinforcement-heading"><div><span className="block-kicker">ШАГ 2 · ЗАКРЕПИ ИДЕЮ</span><h2>Посмотри, как это работает.</h2><p>Переключай ходы на доске или запусти разбор целиком.</p></div><span className="theory-tracker">{demoViewed ? 'Разбор просмотрен ✓' : `${visual.moves.length} ходов в разборе`}</span></div><TheoryBoard visual={visual} onLineViewed={markDemoViewed} /></section><section className="learn-practice" id="lesson-practice"><div className="learn-practice-heading"><div><span className="block-kicker">ШАГ 3 · РЕШИ ЗАДАЧУ</span><h2>Теперь проверь идею на задаче.</h2><p>После статьи и разбора попробуй применить идею самостоятельно. Найди лучший ход: сервер проверит ответ и начислит XP и монеты. Подборка — по тегам выбранной темы: {topic.puzzleThemes.join(', ') || 'базовая позиция'}.</p></div></div><LessonPracticeBoard key={topic.id} topicId={topic.id} themes={topic.puzzleThemes} /><div className="learn-complete" id="learn-complete"><div><span className="block-kicker">ШАГ 4 · ИТОГ ТЕМЫ</span><strong>Что уже закрыто, а что осталось.</strong></div><div className="complete-grid"><div className={theoryClaimed ? 'complete-card done' : 'complete-card'}><span>ТЕОРИЯ · ♟ +20</span><strong>{theoryClaimed ? 'Теория пройдена ✓' : 'Теория не пройдена'}</strong><small>{theoryClaimed ? '+20 получено' : 'Прочитай разбор выше'}{` · Разбор: ${demoViewed ? 'просмотрен ✓' : 'не досмотрен'}`}</small>{!theoryClaimed && <button className="button button-primary" type="button" onClick={completeTheory}>Завершить теорию ↗</button>}</div><div className={practiceBonusClaimed ? 'complete-card done' : 'complete-card'}><span>ПРАКТИКА · ♟ +{PRACTICE_BONUS}</span><strong>{practiceBonusClaimed ? 'Практика пройдена ✓' : practiceSolved > 0 ? `Практика ${practiceSolved}/${PRACTICE_QUOTA}` : 'Практика не пройдена'}</strong><small>{practiceBonusClaimed ? `+${PRACTICE_BONUS} ♟ получено · XP за задачи на счёте` : 'Реши задачи по теме выше'}</small></div></div>{theoryClaimed && practiceBonusClaimed && <div className="complete-all">Тема пройдена полностью ✓ — пункт в дереве горит зелёным</div>}</div></section></main></section>;
+    return <button className={`learn-topic${topicActive ? ' active' : ''}${topicFullDone ? ' done-full' : ''}${topicPracticeDone ? ' done-practice' : ''}`} key={itemTopic.id} type="button" onClick={() => selectTopic(itemTopic.id)} title={topicFullDone ? 'Тема пройдена полностью ✓' : topicTheoryDone ? 'Теория пройдена — осталось решить практику 3/3' : topicPracticeDone ? 'Практика пройдена — осталось завершить теорию' : itemTopic.title}><span>{topicFullDone ? '✓' : topicActive ? '→' : '·'}</span>{itemTopic.title}</button>;
+  })}</div>; })}</aside><main className="learn-page-main"><nav className="lesson-flow lesson-stepper" aria-label="Шаги урока"><button className={step === 'theory' ? 'current' : theoryClaimed ? 'done' : ''} type="button" onClick={() => goStep('theory')}><span>{theoryClaimed ? '✓' : '1'}</span>Теория</button><button className={step === 'quiz' ? 'current' : quizPassed ? 'done' : ''} type="button" onClick={() => goStep('quiz')}><span>{quizPassed ? '✓' : '2'}</span>Проверка знаний</button><button className={step === 'practice' ? 'current' : practiceBonusClaimed ? 'done' : ''} type="button" disabled={practiceLocked} title={practiceLocked ? 'Сначала верно ответь на все вопросы шага 2' : 'Интерактивная практика'} onClick={() => goStep('practice')}><span>{practiceBonusClaimed ? '✓' : '3'}</span>Практика{practiceLocked ? ' · 🔒' : ''}</button></nav>{step === 'theory' && <article className="learn-article" id="lesson-article"><div className="learn-article-text"><h1 className="learn-topic-title">{topic.title}</h1><p className="learn-topic-lead">{article.lead}</p>{article.body.map((paragraph) => <p key={paragraph.slice(0, 32)}>{paragraph}</p>)}</div><div className="learn-article-board"><TheoryBoard visual={visual} onLineViewed={markDemoViewed} kicker="ЛИСТАЙ РАЗБОР" /></div><div className="article-completion">{!theoryClaimed && <button className="button button-primary" type="button" onClick={completeTheory}>Отметить теорию изученной · +20 ♟</button>}<button className="button button-primary" type="button" onClick={() => goStep('quiz')}>К проверке знаний →</button></div></article>}{step === 'quiz' && <LessonQuiz key={topic.id} topicId={topic.id} topicTitle={topic.title} boardFen={visual.fen} questions={quizQuestions} onPassed={markQuizPassed} onGoPractice={() => goStep('practice')} />}{step === 'practice' && <section className="learn-practice lesson-tab-practice" id="lesson-practice"><div className="learn-practice-heading"><div><h2>Сделай ход сам.</h2><p>Квиз пройден — доска твоя. Найди лучший ход: сервер проверит ответ и начислит XP и монеты. Подборка — по тегам выбранной темы: {topic.puzzleThemes.join(', ') || 'базовая позиция'}.</p></div></div><LessonPracticeBoard key={topic.id} topicId={topic.id} themes={topic.puzzleThemes} />{practiceBonusClaimed && <div className="practice-success"><div><strong>Приём закреплён ✓ — практика темы пройдена!</strong><small>Так держать. Можно закрепить ещё или идти дальше по курсу.</small></div>{nextTopic && <button className="button button-primary" type="button" onClick={() => selectTopic(nextTopic.id)}>Следующий урок: {nextTopic.title} →</button>}</div>}<div className="learn-complete" id="learn-complete"><div><span className="block-kicker">ИТОГ ТЕМЫ</span><strong>Что уже закрыто, а что осталось.</strong></div><div className="complete-grid"><div className={theoryClaimed ? 'complete-card done' : 'complete-card'}><span>ТЕОРИЯ · ♟ +20</span><strong>{theoryClaimed ? 'Теория пройдена ✓' : 'Теория не пройдена'}</strong><small>{theoryClaimed ? '+20 получено' : 'Прочитай разбор выше'}{` · Разбор: ${demoViewed ? 'просмотрен ✓' : 'не досмотрен'}`}</small>{!theoryClaimed && <button className="button button-primary" type="button" onClick={completeTheory}>Завершить теорию ↗</button>}</div><div className={quizPassed ? 'complete-card done' : 'complete-card'}><span>ПРОВЕРКА ЗНАНИЙ</span><strong>{quizPassed ? 'Квиз пройден ✓' : 'Квиз не пройден'}</strong><small>{quizPassed ? 'Все ответы верные' : 'Вернись на шаг 2 и ответь верно'}</small>{!quizPassed && <button className="button button-primary" type="button" onClick={() => goStep('quiz')}>Пройти квиз ↗</button>}</div><div className={practiceBonusClaimed ? 'complete-card done' : 'complete-card'}><span>ПРАКТИКА · ♟ +{PRACTICE_BONUS}</span><strong>{practiceBonusClaimed ? 'Практика пройдена ✓' : practiceSolved > 0 ? `Практика ${practiceSolved}/${PRACTICE_QUOTA}` : 'Практика не пройдена'}</strong><small>{practiceBonusClaimed ? `+${PRACTICE_BONUS} ♟ получено · XP за задачи на счёте` : 'Реши задачи по теме выше'}</small></div></div>{theoryClaimed && practiceBonusClaimed && <div className="complete-all">Тема пройдена полностью ✓ — пункт в дереве горит зелёным</div>}</div></section>}</main></section>;
 }
 
 function ProfilePage() {

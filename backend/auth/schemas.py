@@ -55,8 +55,17 @@ class UserCreate(schemas.BaseUserCreate):
 # Схема обновления профиля.
 # Роль и Elo здесь отсутствуют намеренно: их меняет только
 # администратор через PATCH /api/admin/users/{id}/role.
+# Email нормализуем той же функцией, что при регистрации:
+# иначе через PATCH /api/users/me можно было записать
+# ненормализованный адрес (верхний регистр, +алиас, точки Gmail)
+# и обойти защиту "1 почта = 1 аккаунт".
 class UserUpdate(schemas.BaseUserUpdate):
-    pass
+    @field_validator("email")
+    @classmethod
+    def validate_email_safety(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return normalize_and_validate_email(v)
 
 
 class RoleUpdateRequest(BaseModel):

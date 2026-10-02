@@ -1,3 +1,5 @@
+import { fetchApi, readApiError, wsUrlFor } from '../../../shared/api/apiBase';
+
 export type PvpPlayer = {
   user_id: string;
   email: string;
@@ -19,11 +21,9 @@ export type PvpRoomState = {
   black_player: PvpPlayer;
 };
 
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
-
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem('coolchess.accessToken');
-  const response = await fetch(`${apiUrl}${path}`, {
+  const response = await fetchApi(path, {
     ...init,
     headers: {
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
@@ -32,14 +32,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   if (!response.ok) {
-    let message = `Ошибка сервера (${response.status})`;
-    try {
-      const body = await response.json() as { detail?: string };
-      if (body.detail) message = body.detail;
-    } catch {
-      // Keep the status message when the server did not return JSON.
-    }
-    throw new Error(message);
+    throw new Error(await readApiError(response));
   }
   return response.json() as Promise<T>;
 }
@@ -57,8 +50,8 @@ export function getPvpRoom(gameId: string) {
 
 export function createPvpSocket(gameId: string, onMessage: (message: { type: string; data?: PvpRoomState; move?: string; result?: string; reason?: string; message?: string }) => void) {
   const token = sessionStorage.getItem('coolchess.accessToken');
-  const wsUrl = apiUrl.replace(/^http/, 'ws');
-  const socket = new WebSocket(`${wsUrl}/ws/pvp/${encodeURIComponent(gameId)}?token=${encodeURIComponent(token ?? '')}`);
+  const wsUrl = wsUrlFor(`/ws/pvp/${encodeURIComponent(gameId)}?token=${encodeURIComponent(token ?? '')}`);
+  const socket = new WebSocket(wsUrl);
   socket.addEventListener('message', (event) => {
     try { onMessage(JSON.parse(event.data) as Parameters<typeof onMessage>[0]); } catch { /* Ignore malformed events. */ }
   });

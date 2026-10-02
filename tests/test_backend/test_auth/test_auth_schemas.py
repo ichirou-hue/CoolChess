@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 from auth.models import UserRole
-from auth.schemas import normalize_and_validate_email, UserCreate
+from auth.schemas import normalize_and_validate_email, UserCreate, UserUpdate
 
 
 def test_normalize_email_lowercase_and_strip():
@@ -54,3 +54,15 @@ def test_user_create_schema_ignores_privilege_escalation():
         role="coach",  # type: ignore[call-arg] — лишнее поле отбрасывается
     )
     assert getattr(user_data, "role", None) is None
+
+
+def test_user_update_normalizes_email_single_account():
+    # PATCH /api/users/me обязан нормализовать email той же логикой,
+    # что регистрация: иначе можно записать +алиас/регистр/точки Gmail
+    # и завести второй аккаунт на тот же почтовый ящик.
+    assert UserUpdate(email="Test+Spam@Example.COM").email == "test@example.com"
+    assert UserUpdate(email="F.I.R.S.T@gmail.com").email == "first@gmail.com"
+
+
+def test_user_update_none_email_stays_none():
+    assert UserUpdate().email is None

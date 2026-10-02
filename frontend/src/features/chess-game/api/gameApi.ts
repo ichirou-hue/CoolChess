@@ -1,4 +1,6 @@
 /** Starts games and sends player moves to the backend. */
+import { fetchApi, readApiError } from '../../../shared/api/apiBase';
+
 export type GameResponse = {
   id: string;
   status: 'in_progress' | 'player_won' | 'bot_won' | 'draw' | 'resigned' | string;
@@ -24,11 +26,9 @@ export type GameHistoryItem = {
   created_at: string;
 };
 
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
-
 async function request<T>(path: string, init: RequestInit = {}) {
   const token = sessionStorage.getItem('coolchess.accessToken');
-  const response = await fetch(`${apiUrl}${path}`, {
+  const response = await fetchApi(path, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -37,14 +37,7 @@ async function request<T>(path: string, init: RequestInit = {}) {
     },
   });
   if (!response.ok) {
-    let message = `Ошибка сервера (${response.status})`;
-    try {
-      const body = await response.json() as { detail?: string };
-      if (body.detail) message = body.detail;
-    } catch {
-      // Keep the status message when the server did not return JSON.
-    }
-    throw new Error(message);
+    throw new Error(await readApiError(response));
   }
   return response.json() as Promise<T>;
 }

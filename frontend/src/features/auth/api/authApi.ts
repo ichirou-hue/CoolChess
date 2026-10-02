@@ -1,4 +1,6 @@
 /** Sends login and registration requests to the backend. */
+import { fetchApi, readApiError } from '../../../shared/api/apiBase';
+
 export type AuthUser = {
   id: string;
   email: string;
@@ -12,17 +14,9 @@ type TokenResponse = {
 };
 
 const tokenKey = 'coolchess.accessToken';
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
 
 async function readError(response: Response) {
-  try {
-    const body = await response.json() as { detail?: string | Array<{ msg?: string }> };
-    if (typeof body.detail === 'string') return body.detail;
-    if (Array.isArray(body.detail)) return body.detail.map((item) => item.msg ?? 'Ошибка проверки данных').join(', ');
-  } catch {
-    // The server may return an empty or non-JSON response.
-  }
-  return `Ошибка сервера (${response.status})`;
+  return readApiError(response);
 }
 
 function getHeaders(token = getToken()): Record<string, string> {
@@ -42,8 +36,8 @@ export function clearToken() {
 }
 
 export async function login(email: string, password: string) {
-  const body = new URLSearchParams({ username: email, password });
-  const response = await fetch(`${apiUrl}/api/auth/jwt/login`, {
+  const body = new URLSearchParams({ username: email.trim(), password });
+  const response = await fetchApi('/api/auth/jwt/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
@@ -56,17 +50,18 @@ export async function login(email: string, password: string) {
 
 export async function register(email: string, password: string) {
   // Роль и стартовый Elo назначает сервер — клиент их не передает.
-  const response = await fetch(`${apiUrl}/api/auth/register`, {
+  // Email тримим; регистр/алиасы нормализует сервер (1 почта = 1 аккаунт).
+  const response = await fetchApi('/api/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email: email.trim(), password }),
   });
   if (!response.ok) throw new Error(await readError(response));
   return login(email, password);
 }
 
 export async function getMe() {
-  const response = await fetch(`${apiUrl}/api/users/me`, { headers: getHeaders() });
+  const response = await fetchApi('/api/users/me', { headers: getHeaders() });
   if (!response.ok) {
     clearToken();
     throw new Error(await readError(response));
@@ -75,7 +70,7 @@ export async function getMe() {
 }
 
 export async function logout() {
-  const response = await fetch(`${apiUrl}/api/auth/jwt/logout`, { method: 'POST', headers: getHeaders() });
+  const response = await fetchApi('/api/auth/jwt/logout', { method: 'POST', headers: getHeaders() });
   clearToken();
   if (!response.ok && response.status !== 401) throw new Error(await readError(response));
 }

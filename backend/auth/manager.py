@@ -75,6 +75,44 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             pass
         return await super().authenticate(credentials)
 
+    async def create(self, user_create, safe: bool = False, request: Optional[Request] = None):
+        """Создание с защитной нормализацией email (оборона в глубину).
+
+        Схема UserCreate уже нормализует адрес, но нормализация здесь
+        гарантирует "1 почта = 1 аккаунт" даже при прямом вызове менеджера
+        или обходе схемы (админские роуты, скрипты, тесты).
+        """
+        try:
+            user_create.email = normalize_and_validate_email(user_create.email)
+        except HTTPException:
+            pass
+        return await super().create(user_create, safe=safe, request=request)
+
+    async def update(self, user_update, user: User, safe: bool = False, request: Optional[Request] = None):
+        """Обновление с нормализацией смены email.
+
+        Без этого через PATCH /api/users/me можно было записать
+        ненормализованный адрес (регистр, +алиас, точки Gmail) и тем самым
+        завести второй аккаунт на тот же почтовый ящик.
+        """
+        update_dict = (
+            user_update.create_update_dict()
+            if safe
+            else user_update.create_update_dict_superuser()
+        )
+        if "email" in update_dict and update_dict["email"]:
+            # Нормализуем до проверки дубликата в super().update():
+            # _update сравнивает через get_by_email (case-insensitive),
+            # а +алиасы/точки ловит только нормализация.
+            update_dict["email"] = normalize_and_validate_email(update_dict["email"])
+            # Подменяем объект обновления нормализованным значением,
+            # чтобы super().update() проверил дубликат уже по нему.
+            try:
+                object.__setattr__(user_update, "email", update_dict["email"])
+            except Exception:
+                user_update.email = update_dict["email"]
+        return await super().update(user_update, user, safe=safe, request=request)
+
     async def on_after_register(self, user: User, request: Optional[Request] = None):
         logger.info(f"[CoolChess Auth] Пользователь {user.email} зарегистрирован.")
 

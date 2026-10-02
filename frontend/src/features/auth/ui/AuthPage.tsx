@@ -27,6 +27,10 @@ export function AuthPage() {
       if (isRegister) await register(email, password);
       else await login(email, password);
       window.location.hash = '#home';
+    } catch {
+      // Текст ошибки уже положен в контекст (AuthProvider.error) и показан
+      // под переключателем режимов; здесь гасим rejection, чтобы в консоли
+      // не было unhandled rejection при failed to fetch / дубликате почты.
     } finally {
       setPending(false);
     }

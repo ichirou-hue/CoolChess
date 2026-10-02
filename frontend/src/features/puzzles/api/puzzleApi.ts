@@ -1,4 +1,6 @@
 /** Loads themed puzzles and submits a student's move for server validation. */
+import { fetchApi, readApiError } from '../../../shared/api/apiBase';
+
 export type Puzzle = {
   id: string;
   fen: string;
@@ -19,8 +21,6 @@ export type PuzzleSolveResult = {
   new_level: number | null;
 };
 
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
-
 const tokenKey = 'coolchess.accessToken';
 
 export function hasToken() {
@@ -29,7 +29,7 @@ export function hasToken() {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem('coolchess.accessToken');
-  const response = await fetch(`${apiUrl}${path}`, {
+  const response = await fetchApi(path, {
     ...init,
     headers: {
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
@@ -38,14 +38,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   if (!response.ok) {
-    let message = `Ошибка сервера (${response.status})`;
-    try {
-      const body = await response.json() as { detail?: string };
-      if (body.detail) message = body.detail;
-    } catch {
-      // Keep the status message if the server did not return JSON.
-    }
-    throw new Error(message);
+    throw new Error(await readApiError(response));
   }
   return response.json() as Promise<T>;
 }

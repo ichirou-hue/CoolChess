@@ -56,6 +56,9 @@ export async function register(email: string, password: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: email.trim(), password }),
   });
+  if (response.status === 404) {
+    throw new Error('Backend не нашёл маршрут регистрации (/api/auth/register). Проверьте адрес API и перезапустите frontend после изменения VITE_API_URL.');
+  }
   if (!response.ok) throw new Error(await readError(response));
   return login(email, password);
 }

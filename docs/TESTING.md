@@ -67,7 +67,7 @@ npm run build   # tsc -b && vite build
 ## Что добавить при развитии
 
 - Тест гонки двух параллельных `solve` на реальной БД (сейчас — моки).
-- Контрактные тесты frontend ↔ backend по `VITE_API_URL` (порты 8080/8081,
-  см. `docs/DEPLOYMENT.md`).
+- Контрактные тесты frontend ↔ backend через Vite proxy и `VITE_API_URL`
+  (см. `docs/DEPLOYMENT.md`).
 - Нагрузочный тест `GET /api/puzzles/random` и `POST /api/bot/move`
   (инференс Maia — самое тяжёлое место).

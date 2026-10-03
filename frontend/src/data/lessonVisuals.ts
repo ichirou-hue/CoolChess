@@ -14,12 +14,13 @@ export type LessonVisual = {
   highlight?: string[];
   stepNotes?: string[];
   askSquare?: string;
+  askFrom?: string;
   askText?: string;
 };
 
 const demo = (
   fen: string, moves: string[], title: string, caption: string, focus: string,
-  extra: Partial<Pick<LessonVisual, 'arrows' | 'highlight' | 'stepNotes' | 'askSquare' | 'askText'>> = {},
+  extra: Partial<Pick<LessonVisual, 'arrows' | 'highlight' | 'stepNotes' | 'askSquare' | 'askFrom' | 'askText'>> = {},
 ): LessonVisual => ({ fen, moves, title, caption, focus, ...extra });
 
 export const lessonVisuals: Record<string, LessonVisual> = {
@@ -35,7 +36,7 @@ export const lessonVisuals: Record<string, LessonVisual> = {
   'basics-moves': demo('4k3/8/8/3pP3/8/8/8/4K3 w - - 0 1', ['e5e6'], 'Пешка показывает направление', 'Белая пешка с e5 идёт на e6, а бьёт по диагонали d6 и f6.', 'e5 e6 d6 f6', {
     arrows: [['e5', 'e6'], ['e5', 'd6'], ['e5', 'f6']], highlight: ['d6', 'f6'],
     stepNotes: ['Ход — прямо на e6, а бой — по диагонали: поля d6 и f6 уже под прицелом.'],
-    askSquare: 'e6', askText: 'Кликни поле, куда пешка пойдёт вперёд.',
+    askSquare: 'e6', askFrom: 'e5', askText: 'Кликни поле, куда пешка пойдёт вперёд.',
   }),
   'basics-capture': demo('4k3/8/8/1b6/2N5/8/8/4K3 w - - 0 1', ['c4b6'], 'Взятие должно быть оправдано', 'Конь может атаковать поля вокруг, но перед взятием нужно проверить защиту.', 'c4 b6', {
     arrows: [['c4', 'b6']], highlight: ['b6', 'c4'],
@@ -84,7 +85,7 @@ export const lessonVisuals: Record<string, LessonVisual> = {
   'mate-defense': demo('6k1/5ppp/8/8/8/8/5Q2/6K1 b - - 0 1', ['g8h8'], 'Три ответа на шах', 'На доске проверь по очереди: уход короля, блокировку линии и взятие атакующей фигуры.', 'g8 h8 f7', {
     arrows: [['g8', 'h8']], highlight: ['g8', 'h8'],
     stepNotes: ['Первый ответ: король просто уходит из-под шаха на h8.'],
-    askSquare: 'h8', askText: 'Куда уйти королю из-под шаха? Кликни безопасное поле.',
+    askSquare: 'h8', askFrom: 'g8', askText: 'Куда уйти королю из-под шаха? Кликни безопасное поле.',
   }),
   'tactics-hanging': demo('4k3/8/8/3q4/8/3R4/8/4K3 w - - 0 1', ['d3d5'], 'Незащищённая фигура', 'Сначала посмотри, что защищает фигуру. Затем ищи прямой удар по ней.', 'd3 d5', {
     arrows: [['d3', 'd5']], highlight: ['d5'],

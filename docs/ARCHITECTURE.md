@@ -4,7 +4,7 @@
 
 ```
 React SPA (Vite, :5173)
-  │  HTTP + JWT Bearer (VITE_API_URL, по умолчанию http://localhost:8080)
+  │  HTTP + JWT Bearer (единый API helper; в dev запросы идут через Vite proxy)
   ▼
 FastAPI (backend/server.py, :8080)
   ├── auth/          регистрация, JWT, роли

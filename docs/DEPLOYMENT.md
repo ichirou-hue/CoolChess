@@ -25,7 +25,7 @@
 | `ENV` | `development` | нет |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` / `POSTGRES_PORT` | `postgres` / `postgrespassword` / `coolchess` / `5433` | для compose |
 | `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | нет (есть дефолт) |
-| `VITE_API_URL` | `http://localhost:8080` | см. нюанс ниже |
+| `VITE_API_URL` | пусто для Vite proxy | нет |
 
 Без `JWT_SECRET`/`VERIFY_SECRET` backend падает с `RuntimeError` (вне тестов).
 Для SQLite без Docker: `DATABASE_URL=sqlite+aiosqlite:///./coolchess.db`.
@@ -67,11 +67,10 @@ cd frontend; npm install; npm run dev
 
 ## Нюансы
 
-- **Vite API URL.** Модули фронтенда читают `VITE_API_URL`, но дефолты в коде
-  расходятся: `authApi`/`gameApi`/`puzzleApi` — `http://localhost:8080`,
-  `leaderboardApi`/`profileApi` — `http://localhost:8081`. Чтобы все модули
-  точно ходили в один backend, задайте `VITE_API_URL=http://localhost:8080`
-  в `frontend/.env` явно. Долгосрочно — свести все модули к одному helper.
+- **Vite API URL.** При локальной разработке оставьте `VITE_API_URL` пустым:
+  единый API helper отправляет относительные `/api/...` запросы через Vite proxy
+  на backend `localhost:8080`. Для отдельного API-хоста задайте полный адрес,
+  например `http://localhost:8080`, и перезапустите Vite после изменения `.env`.
 - **CORS.** `allow_origins=["*"]` вместе с `allow_credentials=True` запрещён —
   только явный список в `CORS_ORIGINS`.
 - **Login — form-data.** `POST /api/auth/jwt/login` принимает `username` +

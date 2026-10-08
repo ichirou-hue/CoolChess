@@ -1,4 +1,4 @@
-/** Reads the student's profile and manages Lichess account linking. */
+/** Reads the student's profile and manages public chess-platform rating sync. */
 import { fetchApi, readApiError } from '../../../shared/api/apiBase';
 
 export type StudentProfile = {
@@ -15,6 +15,11 @@ export type StudentProfile = {
   lichess_blitz_rating: number | null;
   lichess_rapid_rating: number | null;
   lichess_puzzle_rating: number | null;
+  chesscom_username: string | null;
+  chesscom_blitz_rating: number | null;
+  chesscom_rapid_rating: number | null;
+  chesscom_bullet_rating: number | null;
+  chesscom_daily_rating: number | null;
 };
 
 export type LichessVerification = {
@@ -28,6 +33,15 @@ export type LichessSyncResult = {
   lichess_rapid_rating: number | null;
   lichess_puzzle_rating: number | null;
   updated_elo: number;
+  message: string;
+};
+
+export type ChessComSyncResult = {
+  chesscom_username: string;
+  chesscom_blitz_rating: number | null;
+  chesscom_rapid_rating: number | null;
+  chesscom_bullet_rating: number | null;
+  chesscom_daily_rating: number | null;
   message: string;
 };
 
@@ -63,5 +77,12 @@ export function syncLichessAccount(lichessUsername: string) {
   return request<LichessSyncResult>('/api/users/sync-lichess', {
     method: 'POST',
     body: JSON.stringify({ lichess_username: lichessUsername }),
+  });
+}
+
+export function syncChessComAccount(chesscomUsername: string) {
+  return request<ChessComSyncResult>('/api/users/sync-chesscom', {
+    method: 'POST',
+    body: JSON.stringify({ chesscom_username: chesscomUsername }),
   });
 }

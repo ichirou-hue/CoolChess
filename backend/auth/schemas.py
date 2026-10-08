@@ -86,3 +86,16 @@ class LichessSyncResponse(BaseModel):
 class LichessVerificationCodeResponse(BaseModel):
     verification_code: str
     instructions: str
+
+
+class ChessComSyncRequest(BaseModel):
+    chesscom_username: str = Field(..., min_length=2, max_length=25, description="Публичный ник на Chess.com")
+
+
+class ChessComSyncResponse(BaseModel):
+    chesscom_username: str
+    chesscom_blitz_rating: Optional[int] = None
+    chesscom_rapid_rating: Optional[int] = None
+    chesscom_bullet_rating: Optional[int] = None
+    chesscom_daily_rating: Optional[int] = None
+    message: str

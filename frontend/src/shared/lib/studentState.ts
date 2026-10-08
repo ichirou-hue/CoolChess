@@ -73,3 +73,9 @@ export function awardPawns(eventId: string, reward: number, kind: RewardKind = '
   window.dispatchEvent(new Event('coolchess:state'));
   return next;
 }
+
+/** A smaller repeat-lesson reward can be claimed once per topic each rolling week. */
+export function reviewRewardEventId(topicId: string, now = Date.now()) {
+  const week = Math.floor(now / (7 * 24 * 60 * 60 * 1000));
+  return `theory-review:${topicId}:${week}`;
+}

@@ -9,10 +9,12 @@ import { courseModules } from './data/course';
 import { lessonContent } from './data/lessonContent';
 import { lessonVisuals, type LessonVisual } from './data/lessonVisuals';
 import { lessonQuiz, type LessonQuizQuestion } from './data/lessonQuiz';
-import { awardPawns, readStudentState } from './shared/lib/studentState';
+import { awardPawns, readStudentState, reviewRewardEventId } from './shared/lib/studentState';
 import { AuthPage as FeatureAuthPage } from './features/auth/ui/AuthPage';
 import { AuthProvider } from './features/auth/model/AuthProvider';
 import { useAuth } from './features/auth/model/AuthProvider';
+import { readCoursePlacement, saveCoursePlacement, type CoursePlacement } from './features/learning/model/coursePlacement';
+import { classifyMove, StockfishClient, type MoveClassification, type PositionAnalysis } from './features/analysis/model/stockfishClient';
 import * as gameApi from './features/chess-game/api/gameApi';
 import type { GameResponse } from './features/chess-game/api/gameApi';
 import * as puzzleApi from './features/puzzles/api/puzzleApi';
@@ -61,6 +63,28 @@ function BoardShell({ boardRef }: { boardRef: React.RefObject<HTMLDivElement | n
   return <div className="board-frame"><div ref={boardRef} className="game-board" aria-label="Шахматная доска" /><div className="board-file-label">{['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((file) => <span key={file}>{file}</span>)}</div></div>;
 }
 
+type LiveMoveFlash = { classification: MoveClassification | 'brilliant'; glyph: string; label: string; reward?: number };
+
+function materialForSide(game: Chess, side: 'w' | 'b') {
+  const values = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+  let total = 0;
+  for (const row of game.board()) for (const piece of row) {
+    if (piece) total += (piece.color === side ? 1 : -1) * values[piece.type];
+  }
+  return total;
+}
+
+function moveSacrificesPiece(beforeFen: string, afterFen: string, before: PositionAnalysis, after: PositionAnalysis, lossCp: number) {
+  if (!after.bestMove || lossCp > 35 || before.scoreCp >= 500 || -after.scoreCp < -150) return false;
+  const beforeGame = new Chess(beforeFen);
+  const side = beforeGame.turn();
+  const afterGame = new Chess(afterFen);
+  const reply = after.bestMove;
+  const response = afterGame.move({ from: reply.slice(0, 2), to: reply.slice(2, 4), promotion: reply[4] as 'q' | 'r' | 'b' | 'n' | undefined });
+  if (!response) return false;
+  return materialForSide(beforeGame, side) - materialForSide(afterGame, side) >= 2.5;
+}
+
 function ChessGame() {
   const boardRef = useRef<HTMLDivElement>(null);
   const groundRef = useRef<Api | null>(null);
@@ -78,8 +102,28 @@ function ChessGame() {
   const difficultyRef = useRef(1500);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const analysisClientRef = useRef<StockfishClient | null>(null);
+  const beforeAnalysisRef = useRef<Promise<PositionAnalysis | null> | null>(null);
+  const beforeAnalysisFenRef = useRef('');
+  const analysisRunRef = useRef(0);
+  const liveFlashTimerRef = useRef<number | null>(null);
+  const [liveMoveFlash, setLiveMoveFlash] = useState<LiveMoveFlash | null>(null);
+
+  useEffect(() => {
+    const client = new StockfishClient();
+    analysisClientRef.current = client;
+    return () => {
+      analysisClientRef.current = null;
+      client.dispose();
+      if (liveFlashTimerRef.current !== null) window.clearTimeout(liveFlashTimerRef.current);
+    };
+  }, []);
 
   const syncBoard = (response: GameResponse) => {
+    if (gameStateRef.current?.id !== response.id) {
+      analysisRunRef.current += 1;
+      setLiveMoveFlash(null);
+    }
     const nextGame = new Chess(response.current_fen);
     gameRef.current = nextGame;
     gameStateRef.current = response;
@@ -91,6 +135,13 @@ function ChessGame() {
     setViewPly(null);
     const last = response.moves_uci.at(-1);
     const canMove = response.status === 'in_progress' && ((response.player_color === 'white' && nextGame.turn() === 'w') || (response.player_color === 'black' && nextGame.turn() === 'b'));
+    if (canMove && analysisClientRef.current) {
+      beforeAnalysisFenRef.current = response.current_fen;
+      beforeAnalysisRef.current = analysisClientRef.current.analyze(response.current_fen, 10);
+    } else {
+      beforeAnalysisFenRef.current = '';
+      beforeAnalysisRef.current = null;
+    }
     groundRef.current?.set({
       fen: response.current_fen,
       turnColor: nextGame.turn() === 'w' ? 'white' : 'black',
@@ -109,6 +160,10 @@ function ChessGame() {
 
   const showPly = (ply: number) => {
     if (!game) return;
+    analysisRunRef.current += 1;
+    setLiveMoveFlash(null);
+    if (liveFlashTimerRef.current !== null) window.clearTimeout(liveFlashTimerRef.current);
+    setResultDismissed(true);
     const chess = new Chess();
     let lastMove: [Key, Key] | undefined;
     for (const uci of game.moves_uci.slice(0, ply)) {
@@ -143,9 +198,43 @@ function ChessGame() {
     const currentGame = gameStateRef.current;
     if (!currentGame?.id || thinkingRef.current || currentGame.status !== 'in_progress') return;
     const current = gameRef.current;
+    const beforeFen = current.fen();
+    const movePly = currentGame.moves_uci.length + 1;
     const promotion = (orig[1] === '7' && dest[1] === '8') || (orig[1] === '2' && dest[1] === '1') ? 'q' : '';
     try {
-      current.move({ from: orig as Square, to: dest as Square, promotion: promotion || 'q' });
+      const beforeAnalysis = beforeAnalysisFenRef.current === beforeFen && beforeAnalysisRef.current
+        ? beforeAnalysisRef.current
+        : analysisClientRef.current?.analyze(beforeFen, 10) ?? Promise.resolve(null);
+      const playedMove = current.move({ from: orig as Square, to: dest as Square, promotion: promotion || 'q' });
+      const afterFen = current.fen();
+      const analysisRun = ++analysisRunRef.current;
+      beforeAnalysisFenRef.current = '';
+      beforeAnalysisRef.current = null;
+      setLiveMoveFlash(null);
+      if (liveFlashTimerRef.current !== null) window.clearTimeout(liveFlashTimerRef.current);
+      const playedUci = `${playedMove.from}${playedMove.to}${playedMove.promotion ?? ''}`;
+      void beforeAnalysis.then(async (before) => {
+        const after = await analysisClientRef.current?.analyze(afterFen, 10) ?? null;
+        if (!before || !after || analysisRun !== analysisRunRef.current) return;
+        const { classification, lossCp } = classifyMove(before, after, playedUci);
+        const brilliant = before.bestMove === playedUci && moveSacrificesPiece(beforeFen, afterFen, before, after, lossCp);
+        const result: LiveMoveFlash = brilliant
+          ? { classification: 'brilliant', glyph: '⚡', label: 'Бриллиантовый ход', reward: 50 }
+          : classification === 'best'
+            ? { classification, glyph: '✦', label: 'Лучший ход' }
+            : classification === 'excellent'
+              ? { classification, glyph: '!!', label: 'Отличный ход' }
+              : classification === 'good'
+                ? { classification, glyph: '✓', label: 'Хороший ход' }
+                : classification === 'inaccuracy'
+                  ? { classification, glyph: '?!', label: 'Неточность' }
+                  : classification === 'mistake'
+                    ? { classification, glyph: '?', label: 'Ошибка' }
+                    : { classification, glyph: '??', label: 'Грубая ошибка' };
+        if (brilliant) awardPawns(`game-brilliant:${currentGame.id}:${movePly}`, 50, 'game');
+        setLiveMoveFlash(result);
+        liveFlashTimerRef.current = window.setTimeout(() => setLiveMoveFlash(null), 1700);
+      }).catch(() => undefined);
       thinkingRef.current = true;
       setThinking(true);
       const response = await gameApi.makeMove(currentGame.id, `${orig}${dest}${promotion}`, currentGame.moves_uci.length === 0 ? difficultyRef.current : undefined);
@@ -228,7 +317,7 @@ function ChessGame() {
       <div className="game-controls"><button className="button button-primary" type="button" onClick={() => void newGame()} disabled={loading || thinking}>Новая партия <span>↗</span></button>{game?.status === 'in_progress' && <button className="button button-link" type="button" onClick={() => void resign()} disabled={loading || thinking}>Сдаться</button>}<span className="engine-status"><i className={thinking ? 'thinking' : ''} /> {statusText}</span>{(error?.includes('401') || error?.includes('Сначала войдите')) && <a className="source-link" href="#auth">Войти в аккаунт ↗</a>}</div>
       <div className="maia-achievements"><div className="achievement-heading"><strong>Уровни Maia</strong><span>{maiaAchievements.length}/{maiaLevels.length} побед</span></div><div className="maia-level-map" aria-label="Пройденные уровни Maia">{maiaLevels.map((level) => <span className={maiaAchievements.includes(level) ? 'earned' : ''} title={`${level} ELO${maiaAchievements.includes(level) ? ' · победа' : ''}`} key={level}>{maiaAchievements.includes(level) ? '✓' : level}</span>)}</div></div>
     </div>
-    <div className="game-layout"><div className="player-row"><span className="avatar black-avatar">♞</span><div><strong>CoolChess Maia</strong><small>{game?.bot_difficulty ?? difficulty} ELO · {playerIsWhite ? 'чёрные' : 'белые'}</small></div><span className="clock">{game?.status === 'in_progress' && !playerToMove ? 'ХОД' : 'MAIA'}</span></div><div className="game-board-stage"><BoardShell boardRef={boardRef} />{resultCopy && !resultDismissed && <div className={`game-result-overlay ${resultCopy.tone}`} role="region" aria-label={`Результат партии: ${resultCopy.title}`}><div className="game-result-card"><div className="game-result-confetti" aria-hidden="true">{Array.from({ length: 9 }, (_, index) => <i key={index} />)}</div><span className="game-result-emblem" aria-hidden="true">{resultCopy.emblem}</span><span className="game-result-label">{resultCopy.label}</span><h3>{resultCopy.title}</h3><p>{resultCopy.message}</p><div className="game-result-rewards"><span><strong>{game!.elo_delta >= 0 ? '+' : ''}{game!.elo_delta}</strong><small>ELO</small></span><span><strong>+{game!.xp_earned}</strong><small>опыт</small></span><span><strong>+{game!.coins_earned} ♟</strong><small>награда</small></span></div><div className="game-result-actions"><button className="button button-primary" type="button" onClick={() => void newGame()}>Новая партия ↗</button><button className="game-result-review" type="button" onClick={() => setResultDismissed(true)}>Разобрать ходы</button></div></div></div>}</div><div className="player-row user-row"><span className="avatar user-avatar">Е</span><div><strong>Ученик</strong><small>{playerIsWhite ? 'Белые' : 'Чёрные'} · {viewPly !== null ? `просмотр ${viewPly}/${moves.length}` : playerToMove ? 'ваш ход' : 'ожидание'}</small></div><span className="clock">{game?.status === 'in_progress' && playerToMove ? 'ХОД' : 'ВЫ'}</span></div></div>
+    <div className="game-layout"><div className="player-row"><span className="avatar black-avatar">♞</span><div><strong>CoolChess Maia</strong><small>{game?.bot_difficulty ?? difficulty} ELO · {playerIsWhite ? 'чёрные' : 'белые'}</small></div><span className="clock">{game?.status === 'in_progress' && !playerToMove ? 'ХОД' : 'MAIA'}</span></div><div className="game-board-stage"><BoardShell boardRef={boardRef} />{liveMoveFlash && game?.status === 'in_progress' && <div className={`live-move-flash ${liveMoveFlash.classification}`} role="img" aria-label={`${liveMoveFlash.label}${liveMoveFlash.reward ? `: плюс ${liveMoveFlash.reward} пешек` : ''}`}><span aria-hidden="true">{liveMoveFlash.glyph}</span>{liveMoveFlash.reward && <small aria-hidden="true">+{liveMoveFlash.reward} ♟</small>}</div>}{resultCopy && !resultDismissed && <div className={`game-result-overlay ${resultCopy.tone}`} role="region" aria-label={`Результат партии: ${resultCopy.title}`}><div className="game-result-card"><div className="game-result-confetti" aria-hidden="true">{Array.from({ length: 9 }, (_, index) => <i key={index} />)}</div><span className="game-result-emblem" aria-hidden="true">{resultCopy.emblem}</span><span className="game-result-label">{resultCopy.label}</span><h3>{resultCopy.title}</h3><p>{resultCopy.message}</p><div className="game-result-rewards"><span><strong>{game!.elo_delta >= 0 ? '+' : ''}{game!.elo_delta}</strong><small>ELO</small></span><span><strong>+{game!.xp_earned}</strong><small>опыт</small></span><span><strong>+{game!.coins_earned} ♟</strong><small>награда</small></span></div><div className="game-result-actions"><button className="button button-primary" type="button" onClick={() => void newGame()}>Новая партия ↗</button><button className="game-result-review" type="button" onClick={() => setResultDismissed(true)}>Разобрать ходы</button></div></div></div>}</div><div className="player-row user-row"><span className="avatar user-avatar">Е</span><div><strong>Ученик</strong><small>{playerIsWhite ? 'Белые' : 'Чёрные'} · {viewPly !== null ? `просмотр ${viewPly}/${moves.length}` : playerToMove ? 'ваш ход' : 'ожидание'}</small></div><span className="clock">{game?.status === 'in_progress' && playerToMove ? 'ХОД' : 'ВЫ'}</span></div></div>
     <aside className="move-panel">
       <div className="move-panel-heading">
         <div className="move-title-wrap"><span className="move-title-icon" aria-hidden="true">♟</span><span><strong>Ходы партии</strong></span></div>
@@ -255,20 +344,49 @@ function TheoryBoard({ visual, onLineViewed, kicker }: { visual: LessonVisual; o
   const [askSolved, setAskSolved] = useState(false);
   const [askMiss, setAskMiss] = useState<string | null>(null);
   const [askHinted, setAskHinted] = useState(false);
+  const [practiceMode, setPracticeMode] = useState(false);
+  const [challengeActive, setChallengeActive] = useState(false);
+  const [practiceFeedback, setPracticeFeedback] = useState<string | null>(null);
   const askHidden = Boolean(visual.askSquare) && !askSolved;
   const boardShapes = () => {
+    if (challengeActive) return [];
     const arrows: { orig: Key; dest: Key; brush: 'green' | 'blue' }[] = (visual.arrows ?? [])
       .filter(([from, to]) => !askHidden || (from !== visual.askSquare && to !== visual.askSquare))
       .map(([from, to]) => ({ orig: from as Key, dest: to as Key, brush: 'green' as const }));
     if (askHinted && visual.askSquare && visual.askFrom) arrows.push({ orig: visual.askFrom as Key, dest: visual.askSquare as Key, brush: 'blue' as const });
-    const marks: { orig: Key; brush: 'yellow' }[] = (visual.highlight ?? [])
-      .filter((square) => !askHidden || square !== visual.askSquare)
-      .map((square) => ({ orig: square as Key, brush: 'yellow' as const }));
-    if (askHinted && visual.askSquare) marks.push({ orig: visual.askSquare as Key, brush: 'yellow' as const });
-    return [...arrows, ...marks];
+    return arrows;
   };
-  useEffect(() => { groundRef.current?.set({ drawable: { shapes: boardShapes() } }); }, [askSolved, askHinted, visual]);
-  useEffect(() => { setAskSolved(false); setAskMiss(null); setAskHinted(false); }, [visual]);
+  const boardHighlights = () => {
+    const squares = new Map<Key, string>();
+    if (challengeActive) return squares;
+    (visual.highlight ?? []).filter((square) => !askHidden || square !== visual.askSquare).forEach((square) => squares.set(square as Key, 'lesson-focus-square'));
+    if (askHinted && visual.askSquare) squares.set(visual.askSquare as Key, 'lesson-target-square');
+    return squares;
+  };
+  useEffect(() => {
+    groundRef.current?.set({
+      drawable: { shapes: boardShapes() },
+      highlight: { custom: boardHighlights() },
+      movable: practiceMode
+        ? { color: gameRef.current.turn() === 'w' ? 'white' : 'black', dests: legalDests(gameRef.current), events: { after: (orig, dest) => {
+          const expected = visual.moves[step];
+          const move = gameRef.current.move({ from: orig as Square, to: dest as Square, promotion: 'q' });
+          if (!move) return;
+          const matches = `${move.from}${move.to}${move.promotion ?? ''}` === expected;
+          setPracticeFeedback(matches ? 'Ты нашёл ход, который раскрывает идею позиции. Теперь разыграй продолжение и проследи за ответом соперника.' : 'Этот ход ведёт к другой позиции. Ответ пока не показываем: вернись к исходной позиции и попробуй ещё раз.');
+          if (matches) {
+            const nextStep = step + 1;
+            setStep(nextStep);
+            setChallengeActive(false);
+            if (nextStep >= visual.moves.length) onLineViewed?.();
+          }
+          else setPracticeMode(false);
+          groundRef.current?.set({ fen: gameRef.current.fen(), lastMove: [move.from as Key, move.to as Key], turnColor: gameRef.current.turn() === 'w' ? 'white' : 'black', movable: { color: 'white', dests: new Map() } });
+        } } }
+        : { color: 'white', dests: new Map() },
+    });
+  }, [askSolved, askHinted, visual, practiceMode, challengeActive, step, onLineViewed]);
+  useEffect(() => { setAskSolved(false); setAskMiss(null); setAskHinted(false); setPracticeMode(false); setChallengeActive(false); setPracticeFeedback(null); }, [visual]);
   const boardClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (!visual.askSquare || askSolved || !boardRef.current) return;
     const rect = boardRef.current.getBoundingClientRect();
@@ -279,7 +397,7 @@ function TheoryBoard({ visual, onLineViewed, kicker }: { visual: LessonVisual; o
     if (square === visual.askSquare) setAskSolved(true);
     else setAskMiss(square);
   };
-  const resetBoard = () => { gameRef.current = new Chess(visual.fen); setStep(0); setAskSolved(false); setAskMiss(null); setAskHinted(false); groundRef.current?.set({ fen: visual.fen, lastMove: undefined, turnColor: 'white', movable: { color: 'white', dests: new Map() } }); };
+  const resetBoard = () => { gameRef.current = new Chess(visual.fen); setStep(0); setAskSolved(false); setAskMiss(null); setAskHinted(false); setPracticeMode(false); setChallengeActive(false); setPracticeFeedback(null); groundRef.current?.set({ fen: visual.fen, lastMove: undefined, turnColor: 'white', movable: { color: 'white', dests: new Map() } }); };
   const advance = () => {
     const uci = visual.moves[step];
     if (!uci) return;
@@ -292,6 +410,9 @@ function TheoryBoard({ visual, onLineViewed, kicker }: { visual: LessonVisual; o
     }
   };
   const playLine = () => {
+    setPracticeMode(false);
+    setChallengeActive(false);
+    setPracticeFeedback(null);
     resetBoard();
     let lineStep = 0;
     const timer = window.setInterval(() => {
@@ -307,7 +428,7 @@ function TheoryBoard({ visual, onLineViewed, kicker }: { visual: LessonVisual; o
   };
   useEffect(() => {
     if (!boardRef.current) return;
-    groundRef.current = Chessground(boardRef.current, { fen: visual.fen, coordinates: true, orientation: 'white', movable: { free: false, color: 'white', dests: new Map() }, highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 260 } });
+    groundRef.current = Chessground(boardRef.current, { fen: visual.fen, coordinates: true, orientation: 'white', movable: { free: false, color: 'white', dests: new Map() }, highlight: { lastMove: true, check: true, custom: boardHighlights() }, animation: { enabled: true, duration: 260 } });
     groundRef.current.set({ drawable: { shapes: boardShapes() } });
     const resizeObserver = new ResizeObserver(() => groundRef.current?.redrawAll());
     resizeObserver.observe(boardRef.current);
@@ -319,7 +440,216 @@ function TheoryBoard({ visual, onLineViewed, kicker }: { visual: LessonVisual; o
   }, [visual]);
   useEffect(() => resetBoard(), [visual]);
   const explanation = step > 0 ? visual.stepNotes?.[step - 1] ?? visual.caption : visual.caption;
-  return <div className="theory-board-card"><div className="theory-board-top"><div><span className="block-kicker">{kicker ?? 'РАЗБЕРЁМ НА ДОСКЕ'}</span><strong>{visual.title}</strong></div>{visual.moves.length > 0 && <span className="theory-progress">{step} <i>/</i> {visual.moves.length} ходов</span>}</div><div className="theory-board-experience"><div className="theory-board-col"><div className="theory-board"><div ref={boardRef} className={`game-board theory-demo-board${visual.askSquare ? ' is-prompt' : ''}`} onClick={boardClick} aria-label={`Теоретическая позиция: ${visual.title}`} /></div><div className="focus-fields">{visual.focus.split(' ').map((field) => <span key={field}>{field}</span>)}</div></div><div className="theory-side-stack"><div className="theory-explain-card"><span className="theory-card-kicker">{step > 0 ? `ПОСЛЕ ХОДА ${step}` : 'СМОТРИ НА ДОСКУ'}</span><p>{explanation}</p>{visual.moves.length > 0 && <div className="theory-mini-progress"><i><b style={{ width: `${Math.min((step / visual.moves.length) * 100, 100)}%` }} /></i><small>{step === visual.moves.length ? 'Линия разобрана ✓' : `${visual.moves.length - step} ${visual.moves.length - step === 1 ? 'ход' : 'хода'} осталось`}</small></div>}</div>{visual.askSquare && <div className={`demo-ask${askSolved ? ' solved' : ''}${askMiss ? ' has-miss' : ''}`} aria-live="polite"><span className="demo-ask-icon" aria-hidden="true">{askSolved ? '✓' : askHinted ? '↗' : '✦'}</span><div className="demo-ask-copy"><span className="theory-card-kicker">{askSolved ? 'ОТЛИЧНО' : 'ТВОЙ ХОД'}</span><p>{askSolved ? 'Нашёл нужное поле! Теперь идея видна на доске.' : visual.askText}</p>{!askSolved && askMiss && <small>Поле {askMiss} не подходит. Попробуй ещё или посмотри подсказку.</small>}{!askSolved && <button type="button" onClick={() => setAskHinted((shown) => !shown)}>{askHinted ? 'Скрыть подсказку' : visual.askFrom ? 'Показать стрелку' : 'Подсветить поле'} <span aria-hidden="true">{askHinted ? '−' : '↗'}</span></button>}</div></div>}</div></div><div className="theory-board-bottom"><div>{visual.moves.length > 0 && <><button className="theory-control" type="button" onClick={resetBoard}>Сначала</button><button className="theory-control" type="button" onClick={playLine}>Показать линию</button></>}{visual.moves.length > 0 && (step >= visual.moves.length ? <span className="theory-line-done">Разбор просмотрен ✓</span> : <button className="button button-primary" type="button" onClick={advance}>Следующий ход ↗</button>)}</div></div></div>;
+  return <div className="theory-board-card"><div className="theory-board-top"><div><span className="block-kicker">{kicker ?? 'РАЗБЕРЁМ НА ДОСКЕ'}</span><strong>{visual.title}</strong></div>{visual.moves.length > 0 && <span className="theory-progress">{step} <i>/</i> {visual.moves.length} ходов</span>}</div><div className="theory-board-experience"><div className="theory-board-col"><div className="theory-board"><div ref={boardRef} className={`game-board theory-demo-board${visual.askSquare ? ' is-prompt' : ''}${practiceMode ? ' is-practice' : ''}`} onClick={boardClick} aria-label={`Теоретическая позиция: ${visual.title}`} /></div></div><div className="theory-side-stack"><div className="theory-explain-card"><span className="theory-card-kicker">{step > 0 ? `ПОСЛЕ ХОДА ${step}` : 'СМОТРИ НА ДОСКУ'}</span><p>{practiceFeedback ?? explanation}</p>{visual.moves.length > 0 && <div className="theory-mini-progress"><i><b style={{ width: `${Math.min((step / visual.moves.length) * 100, 100)}%` }} /></i><small>{step === visual.moves.length ? 'Линия разобрана ✓' : `${visual.moves.length - step} ${visual.moves.length - step === 1 ? 'ход' : 'хода'} осталось`}</small></div>}</div>{visual.askSquare && <div className={`demo-ask${askSolved ? ' solved' : ''}${askMiss ? ' has-miss' : ''}`} aria-live="polite"><span className="demo-ask-icon" aria-hidden="true">{askSolved ? '✓' : askHinted ? '↗' : '✦'}</span><div className="demo-ask-copy"><span className="theory-card-kicker">{askSolved ? 'ОТЛИЧНО' : 'ТВОЙ ХОД'}</span><p>{askSolved ? 'Нашёл нужное поле! Теперь идея видна на доске.' : visual.askText}</p>{!askSolved && askMiss && <small>Поле {askMiss} не подходит. Попробуй ещё или посмотри подсказку.</small>}{!askSolved && <button type="button" onClick={() => setAskHinted((shown) => !shown)}>{askHinted ? 'Скрыть подсказку' : visual.askFrom ? 'Показать стрелку' : 'Подсветить поле'} <span aria-hidden="true">{askHinted ? '−' : '↗'}</span></button>}</div></div>}</div></div><div className="theory-board-bottom"><div>{visual.moves.length > 0 && <><button className="theory-control" type="button" onClick={resetBoard}>Сначала</button><button className="theory-control" type="button" onClick={playLine}>Показать линию</button></>}{visual.moves.length > 0 && !visual.askSquare && !practiceFeedback && step < visual.moves.length && <button className="theory-control" type="button" disabled={practiceMode} onClick={() => { setPracticeFeedback(null); setChallengeActive(true); setPracticeMode(true); }}>Твой ход</button>}{practiceFeedback && <button className="theory-control" type="button" onClick={resetBoard}>Вернуться к позиции</button>}{visual.moves.length > 0 && (step >= visual.moves.length ? <span className="theory-line-done">Разбор просмотрен ✓</span> : !practiceMode && <button className="button button-primary" type="button" onClick={advance}>Следующий ход ↗</button>)}</div></div></div>;
+}
+
+type OpeningChoice = {
+  reply: string;
+  /** Curated move assessment; `brilliant` must be independently verified, not inferred from a PGN NAG. */
+  quality: 'best' | 'good' | 'brilliant';
+  /** Optional PGN Numeric Annotation Glyph attached to this move in the source line. */
+  nag?: number;
+  attackLine?: Array<[string, string]>;
+  feedback: string;
+  next?: string;
+};
+
+type OpeningPrompt = {
+  title: string;
+  question: string;
+  choices: Record<string, OpeningChoice>;
+};
+
+const openingPrompts: Record<string, OpeningPrompt> = {
+  start: {
+    title: 'Начни борьбу за центр',
+    question: 'Какой план выберешь первым: занять центр пешкой или давить на него с фланга?',
+    choices: {
+      e2e4: { reply: 'e7e5', quality: 'best', attackLine: [['e4', 'd5']], feedback: 'Ты занял центр. Чёрные отвечают симметрично и тоже борются за центральные поля.', next: 'after-e4' },
+      d2d4: { reply: 'd7d5', quality: 'best', feedback: 'Центр занят пешкой d. Соперник зеркально оспаривает пространство.', next: 'after-d4' },
+      c2c4: { reply: 'e7e5', quality: 'good', feedback: 'Английское начало контролирует центр с фланга. Чёрные сразу занимают пространство пешкой e.', next: 'after-c4' },
+      g1f3: { reply: 'd7d5', quality: 'good', feedback: 'Конь давит на центр, не занимая его пешкой. Чёрные занимают пространство ходом d5.', next: 'after-nf3' },
+    },
+  },
+  'after-e4': {
+    title: 'Центр оспорен',
+    question: 'Чёрные заняли e5. Как продолжить: развить фигуру, усилить центр или сразу вывести слона?',
+    choices: {
+      g1f3: { reply: 'b8c6', quality: 'best', attackLine: [['f3', 'e5']], feedback: 'Конь развивается и атакует e5. Чёрные защищают пешку конём: теперь оцени, как укрепить центр и закончить развитие.' },
+      d2d4: { reply: 'e5d4', quality: 'good', attackLine: [['d4', 'e5']], feedback: 'Ты немедленно бросил вызов центру. Чёрные взяли пешку: реши, стоит ли возвращать материал сразу или использовать темп на развитие.', next: 'after-center-sacrifice' },
+      f1c4: { reply: 'b8c6', quality: 'good', feedback: 'Слон занял активную диагональ и смотрит на f7. Чёрные развивают коня; не забывай о развитии остальных фигур.' },
+    },
+  },
+  'after-center-sacrifice': {
+    title: 'Пешка взята: что важнее?',
+    question: 'Чёрные выиграли пешку, но ты можешь развиться с темпом. Как продолжить?',
+    choices: {
+      g1f3: { reply: 'b8c6', quality: 'best', attackLine: [['f3', 'd4']], feedback: 'Ты не тратишь темп на немедленный возврат пешки: развиваешь коня и готовишь давление на центр. Чёрные выводят коня, и позиция остаётся динамичной.' },
+      d1d4: { reply: 'b8c6', quality: 'good', feedback: 'Ферзь вернул пешку, но чёрные развиваются с темпом, нападая на него. Сравни материал с потерей времени и активности.' },
+      f1c4: { reply: 'b8c6', quality: 'good', feedback: 'Слон развивается, пока пешка остаётся у соперника. Ты получаешь активность, но должен подтвердить её дальнейшим развитием.' },
+    },
+  },
+  'after-d4': {
+    title: 'Соперник удерживает центр',
+    question: 'Пешки d4 и d5 встретились. Как оспорить опорную пешку и поддержать свою?',
+    choices: {
+      c2c4: { reply: 'd5c4', quality: 'best', attackLine: [['c4', 'd5']], feedback: 'Ход c4 предлагает разменять пешку и отвлечь защитника центра. Чёрные принимают пешку: её можно вернуть развитием, а не только немедленным взятием.', next: 'after-queen-gambit' },
+      g1f3: { reply: 'g8f6', quality: 'good', feedback: 'Конь развивается и поддерживает d4. Чёрные развиваются в ответ: дальше важно решить, когда менять пешки в центре.' },
+      e2e3: { reply: 'g8f6', quality: 'good', feedback: 'Пешка поддерживает d4 и открывает путь слону. Чёрные развивают коня; следи, чтобы укрепление не мешало развитию.' },
+    },
+  },
+  'after-queen-gambit': {
+    title: 'Пешка на c4 под боем',
+    question: 'Чёрные взяли пешку. Как продолжить развитие и подготовить её возврат?',
+    choices: {
+      e2e3: { reply: 'e7e6', quality: 'best', feedback: 'Ты открываешь дорогу слону и готовишь вернуть пешку c4. Важно: временная жертва оправдана только активностью и развитием.' },
+      e2e4: { reply: 'e7e6', quality: 'good', feedback: 'Ты усиливаешь центр, но пешка c4 пока остаётся у соперника. Проверь, есть ли у тебя план её вернуть.' },
+      g1f3: { reply: 'g8f6', quality: 'good', feedback: 'Конь развивается, сохраняя давление на центр. Теперь нужно подключить остальные фигуры и решить судьбу пешки c4.' },
+    },
+  },
+  'after-c4': {
+    title: 'Центр под давлением',
+    question: 'Чёрные заняли e5. Как развить фигуру и усилить контроль над центром?',
+    choices: {
+      b1c3: { reply: 'b8c6', quality: 'best', attackLine: [['c3', 'd5']], feedback: 'Конь поддерживает давление на центр. Чёрные развивают коня; сравни, какие поля контролирует каждая сторона.' },
+      g2g3: { reply: 'b8c6', quality: 'good', feedback: 'Ты готовишь фианкетто и долгосрочное давление на центр. Чёрные развиваются: план требует времени и безопасного короля.' },
+      d2d4: { reply: 'e5d4', quality: 'good', feedback: 'Ты сразу оспариваешь пешку e5. Чёрные берут её: оцени, достаточно ли у тебя развития, чтобы компенсировать размен.' },
+    },
+  },
+  'after-nf3': {
+    title: 'Контроль без пешечного захвата',
+    question: 'Конь уже давит на центр, а чёрные заняли d5. Как поддержать давление?',
+    choices: {
+      c2c4: { reply: 'd5c4', quality: 'best', attackLine: [['c4', 'd5']], feedback: 'Пешка c4 атакует опорную пешку d5. Чёрные забирают её; используй развитие, чтобы вернуть пешку и сохранить активность.' },
+      d2d4: { reply: 'g8f6', quality: 'good', feedback: 'Ты занимаешь центр пешкой и поддерживаешь фигуру. Чёрные развивают коня: оцени устойчивость центра и продолжай развитие.' },
+      g2g3: { reply: 'g8f6', quality: 'good', feedback: 'Фианкетто готовит дальнее давление на центр. Чёрные развиваются; план требует нескольких ходов и рокировки.' },
+    },
+  },
+};
+
+function OpeningTrainer({ onComplete }: { onComplete?: () => void }) {
+  const boardRef = useRef<HTMLDivElement>(null);
+  const groundRef = useRef<Api | null>(null);
+  const gameRef = useRef(new Chess());
+  const [promptId, setPromptId] = useState('start');
+  const [feedback, setFeedback] = useState('');
+  const [missed, setMissed] = useState(false);
+  const [finished, setFinished] = useState(false);
+  const [attempts, setAttempts] = useState(0);
+  const [moveEffect, setMoveEffect] = useState<'best' | 'brilliant' | null>(null);
+  const replyTimerRef = useRef<number | null>(null);
+  const effectTimerRef = useRef<number | null>(null);
+  const prompt = openingPrompts[promptId];
+  const promptIdRef = useRef(promptId);
+  promptIdRef.current = promptId;
+  const centerSquares: Key[] = ['e4', 'd4', 'e5', 'd5'];
+
+  const updateBoard = (lastMove?: [Key, Key], attackLine: Array<[string, string]> = []) => {
+    const game = gameRef.current;
+    const userTurn = game.turn() === 'w' && !finished;
+    groundRef.current?.set({
+      fen: game.fen(),
+      lastMove,
+      turnColor: userTurn ? 'white' : 'black',
+      movable: { color: userTurn ? 'white' : 'black', dests: userTurn ? legalDests(game) : new Map() },
+      drawable: { shapes: attackLine.map(([orig, dest]) => ({ orig: orig as Key, dest: dest as Key, brush: 'yellow' as const })) },
+      highlight: { custom: new Map(centerSquares.map((square) => [square, 'opening-center-square'])) },
+    });
+  };
+
+  const reset = () => {
+    if (replyTimerRef.current !== null) window.clearTimeout(replyTimerRef.current);
+    if (effectTimerRef.current !== null) window.clearTimeout(effectTimerRef.current);
+    gameRef.current = new Chess();
+    setPromptId('start');
+    setFeedback('');
+    setMissed(false);
+    setFinished(false);
+    setAttempts(0);
+    setMoveEffect(null);
+    updateBoard();
+  };
+
+  const continueLine = (option: OpeningChoice, nextPrompt?: string) => {
+    const reply = gameRef.current.move({ from: option.reply.slice(0, 2) as Square, to: option.reply.slice(2, 4) as Square });
+    if (!reply) {
+      gameRef.current.undo();
+      setFeedback('В этой позиции не удалось продолжить линию. Начни сценарий заново.');
+      setFinished(true);
+      updateBoard();
+      return;
+    }
+    updateBoard([reply.from as Key, reply.to as Key]);
+    setFeedback((message) => `${message} ${option.feedback}`);
+    if (nextPrompt) setPromptId(nextPrompt);
+    else {
+      setFinished(true);
+      groundRef.current?.set({ movable: { color: 'white', dests: new Map() } });
+      onComplete?.();
+    }
+  };
+
+  useEffect(() => {
+    if (!boardRef.current) return;
+    groundRef.current = Chessground(boardRef.current, {
+      fen: gameRef.current.fen(), coordinates: true, orientation: 'white',
+      movable: { free: false, color: 'white', dests: legalDests(gameRef.current), events: { after: (from, to) => {
+        const currentPrompt = openingPrompts[promptIdRef.current];
+        const uci = `${from}${to}`;
+        const option = currentPrompt.choices[uci];
+        if (!option) {
+          setMissed(true);
+          setAttempts((value) => value + 1);
+          setFeedback('Ход легален, но пока не поддерживает идею этого шага. Сравни контроль центра, развитие и безопасность короля; можешь выбрать другой ход.');
+          updateBoard();
+          return;
+        }
+        const userMove = gameRef.current.move({ from: from as Square, to: to as Square });
+        if (!userMove) return;
+        setMissed(false);
+        setAttempts((value) => value + 1);
+        const isBrilliant = option.quality === 'brilliant';
+        const rating = isBrilliant ? 'Бриллиантовый ход!' : option.quality === 'best' ? 'Лучший учебный план.' : 'Рабочий план.';
+        setMoveEffect(isBrilliant ? 'brilliant' : option.quality === 'best' ? 'best' : null);
+        if (effectTimerRef.current !== null) window.clearTimeout(effectTimerRef.current);
+        if (option.quality === 'best' || isBrilliant) effectTimerRef.current = window.setTimeout(() => setMoveEffect(null), 1250);
+        const nagNote = option.nag !== undefined ? ` Метка PGN: $${option.nag}.` : '';
+        let rewardNote = '';
+        if (isBrilliant) {
+          const rewardEvent = `opening-brilliant:${promptIdRef.current}:${uci}`;
+          const alreadyClaimed = readStudentState().claimed.includes(rewardEvent);
+          if (!alreadyClaimed) awardPawns(rewardEvent, 50, 'theory');
+          rewardNote = alreadyClaimed ? ' Награда за этот бриллиантовый ход уже получена.' : ' +50 пешек.';
+        }
+        let lastMove: [Key, Key] = [userMove.from as Key, userMove.to as Key];
+        updateBoard(lastMove, option.attackLine);
+        setFeedback(`${rating}${nagNote}${rewardNote} ${option.attackLine ? 'Посмотри на жёлтую линию атаки.' : ''}`);
+        if (option.attackLine) {
+          replyTimerRef.current = window.setTimeout(() => continueLine(option, option.next), 1000);
+        } else continueLine(option, option.next);
+      } } },
+      highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 260 },
+    });
+    updateBoard();
+    const observer = new ResizeObserver(() => groundRef.current?.redrawAll());
+    observer.observe(boardRef.current);
+    return () => {
+      observer.disconnect();
+      if (replyTimerRef.current !== null) window.clearTimeout(replyTimerRef.current);
+      if (effectTimerRef.current !== null) window.clearTimeout(effectTimerRef.current);
+      groundRef.current?.destroy();
+      groundRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (promptId !== 'start' || finished) updateBoard();
+  }, [promptId, finished]);
+
+  return <div className={`theory-board-card opening-trainer${moveEffect ? ` is-${moveEffect}-move` : ''}`}>
+    <div className="theory-board-top"><div><span className="block-kicker">ИНТЕРАКТИВНЫЙ ДЕБЮТ</span><strong>{finished ? 'Твоя линия и её идея' : prompt.title}</strong></div><span className="theory-progress">{finished ? 'разбор' : `ход ${Math.floor(attempts / 2) + 1}`}</span></div>
+    <div className="opening-trainer-layout"><div><div className="theory-board opening-trainer-board"><div ref={boardRef} className="game-board theory-demo-board" aria-label="Интерактивная шахматная позиция" /></div></div><div className="opening-trainer-copy" aria-live="polite"><span className="theory-card-kicker">{finished ? 'ИДЕЯ ПОЗИЦИИ' : 'ТВОЁ РЕШЕНИЕ'}</span><p>{finished ? 'Центр можно занять пешками, оспаривать фигурами или временно отдать пешку ради темпа и активности. После ответа соперника проверь, кто контролирует ключевые поля и успеваешь ли ты развить фигуры.' : prompt.question}</p>{feedback && <p className={`opening-feedback${missed ? ' is-hint' : ''}`}>{feedback}</p>}{!finished && <small>Красным отмечены центральные поля. Сделай ход на доске: все легальные ходы доступны, но объяснение линии зависит от выбранного плана.</small>}{finished && <button className="button button-primary" type="button" onClick={reset}>Разыграть другую линию</button>}</div></div>
+  </div>;
 }
 
 // Прогресс квизов «Проверка знаний»: помним, в каких темах ученик
@@ -425,13 +755,16 @@ function LessonQuiz({ topicId, topicTitle, boardFen, questions, onPassed, onGoPr
     const isRight = wasChecked && picked[index] === question.correct;
     return <div className={`quiz-question${wasChecked ? (isRight ? ' right' : ' wrong') : ''}`} key={`${topicId}-q${index}`}><strong><span>{index + 1}</span>{question.prompt}</strong><div className="quiz-options">{question.options.map((option, optionIndex) => {
       const selected = picked[index] === optionIndex;
-      const revealRight = wasChecked && optionIndex === question.correct;
-      return <button type="button" key={optionIndex} disabled={wasChecked && isRight} className={`${selected ? 'selected' : ''}${revealRight ? ' correct' : ''}${selected && wasChecked && !isRight ? ' wrong' : ''}`} onClick={() => {
-        if (wasChecked && isRight) return;
+      const revealRight = isRight && optionIndex === question.correct;
+      return <button type="button" key={optionIndex} disabled={wasChecked} className={`${selected ? 'selected' : ''}${revealRight ? ' correct' : ''}${selected && wasChecked && !isRight ? ' wrong' : ''}`} onClick={() => {
+        if (wasChecked) return;
         setPicked((current) => ({ ...current, [index]: optionIndex }));
         setChecked((current) => ({ ...current, [index]: true }));
       }}><i>{letters[optionIndex] ?? optionIndex + 1}</i>{option}</button>;
-    })}</div>{wasChecked && (isRight ? <p className="quiz-feedback ok">Верно ✓ {question.explanation}</p> : <p className="quiz-feedback bad">Пока неверно. {question.explanation} <button type="button" onClick={() => setChecked((current) => ({ ...current, [index]: false }))}>Попробовать снова</button></p>)}</div>;
+    })}</div>{wasChecked && (isRight ? <p className="quiz-feedback ok">Верно ✓ {question.explanation}</p> : <p className="quiz-feedback bad">Пока неверно. Попробуй ещё раз. <button type="button" onClick={() => {
+      setChecked((current) => ({ ...current, [index]: false }));
+      setPicked((current) => { const next = { ...current }; delete next[index]; return next; });
+    }}>Попробовать снова</button></p>)}</div>;
   })}</div></div>{passed && <div className="quiz-unlocked"><span>Проверка пройдена ✓ — шаг практики разблокирован.</span>{onGoPractice && <button className="button button-primary" type="button" onClick={onGoPractice}>К практике →</button>}</div>}</div>;
 }
 
@@ -931,12 +1264,52 @@ function StartLearningPanel() {
     <div className="home-extra-links"><a href="#community"><span aria-hidden="true">🏆</span><span><strong>Сообщество</strong><small>Рейтинг учеников и кланы</small></span><b>↗</b></a><a href="#profile"><span aria-hidden="true">👤</span><span><strong>Мой прогресс</strong><small>Опыт, уровень и статистика</small></span><b>↗</b></a></div>
   </section>;
 }
+function CoursePlacementPanel({ onStart }: { onStart: (placement: CoursePlacement, topicId: string) => void }) {
+  const [experience, setExperience] = useState<CoursePlacement['experience'] | null>(null);
+  const start = (placement: CoursePlacement, topicId: string) => onStart(placement, topicId);
+
+  if (!experience) return <section className="course-placement">
+    <span className="block-kicker">НАСТРОЙКА МАРШРУТА</span>
+    <h1>С чего начнём?</h1>
+    <p>Выбери вариант, который ближе. Старт можно будет изменить, а любой урок курса доступен из каталога.</p>
+    <div className="course-placement-options">
+      <button type="button" onClick={() => start({ experience: 'beginner', reviewRules: null }, 'basics-history')}><strong>Я начинаю с нуля</strong><span>Пройдём правила, тактику, дебюты, миттельшпиль и эндшпиль по порядку.</span></button>
+      <button type="button" onClick={() => setExperience('occasional')}><strong>Знаю, как ходят фигуры, иногда играю</strong><span>Решим, нужно ли освежить основы перед продолжением курса.</span></button>
+      <button type="button" onClick={() => setExperience('regular')}><strong>Играю регулярно</strong><span>Начнём с тактики; дальше можно перейти к дебютам, стратегии или другой теме.</span></button>
+    </div>
+    <small>Старт можно изменить в любой момент. По мере прохождения курса маршрут будет уточняться по ответам и результатам практики.</small>
+  </section>;
+
+  if (experience === 'occasional') return <section className="course-placement">
+    <span className="block-kicker">БЫСТРОЕ ПОВТОРЕНИЕ</span>
+    <h1>Освежить правила?</h1>
+    <p>Повторение необязательно. Если основы знакомы, можно пропустить их и начать с дебютных принципов. Миттельшпиль и эндшпиль идут дальше по курсу.</p>
+    <div className="course-placement-actions">
+      <button className="button button-primary" type="button" onClick={() => start({ experience, reviewRules: true }, 'basics-moves')}>Да, повторить основы</button>
+      <button className="button button-link" type="button" onClick={() => start({ experience, reviewRules: false }, 'opening-principles')}>Пропустить и перейти к дебютам</button>
+      <button className="button button-link" type="button" onClick={() => setExperience(null)}>Назад</button>
+    </div>
+  </section>;
+
+  return <section className="course-placement">
+    <span className="block-kicker">СТАРТ ДЛЯ ИГРАЮЩЕГО</span>
+    <h1>Выбери первую тему</h1>
+    <p>Начни с тактики или сразу открой нужный раздел в каталоге. Результаты уроков помогут уточнить дальнейший маршрут.</p>
+    <div className="course-placement-actions">
+      <button className="button button-primary" type="button" onClick={() => start({ experience, reviewRules: false }, 'tactics-hanging')}>Начать с тактики</button>
+      <button className="button button-link" type="button" onClick={() => setExperience(null)}>Назад</button>
+    </div>
+  </section>;
+}
+
 function LearnPage() {
   // Первый урок берём из данных курса, а не хардкодим:
   // иначе кнопка «Открыть первый урок» и дефолт могут разъехаться.
   const firstTopicId = courseModules[0].topics[0].id;
   const topicFromHash = () => window.location.hash.startsWith('#learn/') ? window.location.hash.split('/')[1] : firstTopicId;
   const [topicId, setTopicId] = useState(topicFromHash);
+  const [placement, setPlacement] = useState<CoursePlacement | null>(readCoursePlacement);
+  const [showPlacement, setShowPlacement] = useState(() => !readCoursePlacement() && !window.location.hash.startsWith('#learn/'));
   useEffect(() => { const syncTopic = () => { const next = topicFromHash(); if (next !== firstTopicId || window.location.hash === '#learn') setTopicId(next); }; window.addEventListener('hashchange', syncTopic); return () => window.removeEventListener('hashchange', syncTopic); }, []);
   const module = courseModules.find((item) => item.topics.some((topic) => topic.id === topicId)) ?? courseModules[0];
   const topic = module.topics.find((item) => item.id === topicId) ?? module.topics[0];
@@ -966,17 +1339,26 @@ function LearnPage() {
   const practiceDone = (id: string) => claimedTopics.includes(`practice:${id}`);
   const article = lessonContent[topic.id];
   const visual = lessonVisuals[topic.id] ?? { fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', moves: [], title: topic.title, caption: 'Разбери позицию и назови главную идею.', focus: 'e4 d4' };
+  const [demoViewed, setDemoViewed] = useState(() => readDemoStore()[topic.id] ?? visual.moves.length === 0);
+  const [reviewViewed, setReviewViewed] = useState(false);
   const completeTheory = () => {
     const next = awardPawns(`theory:${topic.id}`, 20, 'theory');
     setTheoryClaimed(next.claimed.includes(`theory:${topic.id}`));
+    setReviewViewed(false);
   };
   // Трекер теории: разбор считается досмотренным, когда линия на демо-доске
   // проиграна до конца (или если ходов в ней нет вовсе).
-  const [demoViewed, setDemoViewed] = useState(() => readDemoStore()[topic.id] ?? visual.moves.length === 0);
   useEffect(() => {
     setDemoViewed(readDemoStore()[topic.id] ?? (lessonVisuals[topic.id]?.moves.length ?? 0) === 0);
+    setReviewViewed(visual.moves.length === 0);
   }, [topic.id]);
-  const markDemoViewed = () => { writeDemoStore(topic.id); setDemoViewed(true); };
+  const markDemoViewed = () => { writeDemoStore(topic.id); setDemoViewed(true); setReviewViewed(true); };
+  const reviewRewardId = reviewRewardEventId(topic.id);
+  const reviewRewardClaimed = readStudentState().claimed.includes(reviewRewardId);
+  const completeReview = () => {
+    if (!reviewViewed || reviewRewardClaimed) return;
+    awardPawns(reviewRewardId, 5, 'theory');
+  };
   // Степпер рабочей зоны (Stepik-концепция): теория → проверка знаний → практика.
   // При выборе урока правая область полностью переключается и стартует с теории.
   type LessonStep = 'theory' | 'quiz' | 'practice';
@@ -1003,6 +1385,12 @@ function LearnPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     try { window.history.replaceState(null, '', `#learn/${nextId}`); } catch { /* hash не критичен */ }
   };
+  const beginCourse = (nextPlacement: CoursePlacement, nextTopicId: string) => {
+    saveCoursePlacement(nextPlacement);
+    setPlacement(nextPlacement);
+    setShowPlacement(false);
+    selectTopic(nextTopicId);
+  };
   // Следующий урок по порядку дерева — для кнопки после успешной практики.
   const allTopics = courseModules.flatMap((courseModule) => courseModule.topics);
   const nextTopic = allTopics[allTopics.findIndex((item) => item.id === topic.id) + 1] ?? null;
@@ -1011,7 +1399,8 @@ function LearnPage() {
   // о каждом зачтённом решении — по нему перечитываем хранилище.
   const practiceBonusClaimed = claimedTopics.includes(`practice:${topic.id}`);
   const practiceSolved = Math.min((readPracticeStore()[topic.id] ?? []).length, PRACTICE_QUOTA);
-  return <section className="learn-page"><aside className="learn-page-sidebar"><div className="sidebar-title"><span className="sidebar-logo">♟</span><div><strong>Курс ученика</strong><small>Выбери тему для изучения</small></div></div>{courseModules.map((item) => {
+  if (showPlacement) return <section className="learn-page course-placement-page"><main className="learn-page-main"><CoursePlacementPanel onStart={beginCourse} /></main></section>;
+  return <section className="learn-page"><aside className="learn-page-sidebar"><div className="sidebar-title"><span className="sidebar-logo">♟</span><div><strong>Курс ученика</strong><small>{placement ? 'Маршрут можно изменить' : 'Выбери тему для изучения'}</small></div></div><button className="learn-route-reset" type="button" onClick={() => setShowPlacement(true)}>Изменить старт курса</button>{courseModules.map((item) => {
     const moduleDoneCount = item.topics.filter((moduleTopic) => theoryDone(moduleTopic.id) && practiceDone(moduleTopic.id)).length;
     return <div className="learn-module" key={item.id}><strong>{item.title} · {moduleDoneCount}/{item.topics.length}</strong>{item.topics.map((itemTopic) => {
     const topicActive = itemTopic.id === topic.id;
@@ -1020,7 +1409,33 @@ function LearnPage() {
     // Зелёным горит только полностью закрытая тема: теория + практика 3/3.
     const topicFullDone = topicTheoryDone && topicPracticeDone;
     return <button className={`learn-topic${topicActive ? ' active' : ''}${topicFullDone ? ' done-full' : ''}${topicPracticeDone ? ' done-practice' : ''}`} key={itemTopic.id} type="button" onClick={() => selectTopic(itemTopic.id)} title={topicFullDone ? 'Тема пройдена полностью ✓' : topicTheoryDone ? 'Теория пройдена — осталось решить практику 3/3' : topicPracticeDone ? 'Практика пройдена — осталось завершить теорию' : itemTopic.title}><span>{topicFullDone ? '✓' : topicActive ? '→' : '·'}</span>{itemTopic.title}</button>;
-  })}</div>; })}</aside><main className="learn-page-main"><nav className="lesson-flow lesson-stepper" aria-label="Шаги урока"><button className={step === 'theory' ? 'current' : theoryClaimed ? 'done' : ''} type="button" onClick={() => goStep('theory')}><span>{theoryClaimed ? '✓' : '1'}</span>Теория</button><button className={step === 'quiz' ? 'current' : quizPassed ? 'done' : ''} type="button" onClick={() => goStep('quiz')}><span>{quizPassed ? '✓' : '2'}</span>Проверка знаний</button><button className={step === 'practice' ? 'current' : practiceBonusClaimed ? 'done' : ''} type="button" disabled={practiceLocked} title={practiceLocked ? 'Сначала верно ответь на все вопросы шага 2' : 'Интерактивная практика'} onClick={() => goStep('practice')}><span>{practiceBonusClaimed ? '✓' : '3'}</span>Практика{practiceLocked ? ' · 🔒' : ''}</button></nav>{step === 'theory' && <article className="learn-article" id="lesson-article"><div className="learn-article-text"><h1 className="learn-topic-title">{topic.title}</h1><p className="learn-topic-lead">{article.lead}</p>{article.body.map((paragraph) => <p key={paragraph.slice(0, 32)}>{paragraph}</p>)}</div><div className="learn-article-board"><TheoryBoard visual={visual} onLineViewed={markDemoViewed} kicker="ЛИСТАЙ РАЗБОР" /></div><div className="article-completion">{!theoryClaimed && <button className="button button-primary" type="button" onClick={completeTheory}>Отметить теорию изученной · +20 ♟</button>}<button className="button button-primary" type="button" onClick={() => goStep('quiz')}>К проверке знаний →</button></div></article>}{step === 'quiz' && <LessonQuiz key={topic.id} topicId={topic.id} topicTitle={topic.title} boardFen={visual.fen} questions={quizQuestions} onPassed={markQuizPassed} onGoPractice={() => goStep('practice')} />}{step === 'practice' && <section className="learn-practice lesson-tab-practice" id="lesson-practice"><div className="learn-practice-heading"><div><h2>Сделай ход сам.</h2><p>Квиз пройден — доска твоя. Найди лучший ход: сервер проверит ответ и начислит XP и монеты. Подборка — по тегам выбранной темы: {topic.puzzleThemes.join(', ') || 'базовая позиция'}.</p></div></div><LessonPracticeBoard key={topic.id} topicId={topic.id} themes={topic.puzzleThemes} />{practiceBonusClaimed && <div className="practice-success"><div><strong>Приём закреплён ✓ — практика темы пройдена!</strong><small>Так держать. Можно закрепить ещё или идти дальше по курсу.</small></div>{nextTopic && <button className="button button-primary" type="button" onClick={() => selectTopic(nextTopic.id)}>Следующий урок: {nextTopic.title} →</button>}</div>}</section>}</main></section>;
+          })}
+        </div>;
+      })}
+    </aside>
+    <main className="learn-page-main">
+      <nav className="lesson-flow lesson-stepper" aria-label="Шаги урока">
+        <button className={step === 'theory' ? 'current' : theoryClaimed ? 'done' : ''} type="button" onClick={() => goStep('theory')}><span>{theoryClaimed ? '✓' : '1'}</span>Теория</button>
+        <button className={step === 'quiz' ? 'current' : quizPassed ? 'done' : ''} type="button" onClick={() => goStep('quiz')}><span>{quizPassed ? '✓' : '2'}</span>Проверка знаний</button>
+        <button className={step === 'practice' ? 'current' : practiceBonusClaimed ? 'done' : ''} type="button" disabled={practiceLocked} title={practiceLocked ? 'Сначала верно ответь на все вопросы шага 2' : 'Интерактивная практика'} onClick={() => goStep('practice')}><span>{practiceBonusClaimed ? '✓' : '3'}</span>Практика{practiceLocked ? ' · 🔒' : ''}</button>
+      </nav>
+      {step === 'theory' && <article className="learn-article" id="lesson-article">
+        <div className="learn-article-text"><h1 className="learn-topic-title">{topic.title}</h1><p className="learn-topic-lead">{article.lead}</p>{article.body.map((paragraph) => <p key={paragraph.slice(0, 32)}>{paragraph}</p>)}</div>
+        <div className="learn-article-board">{topic.id === 'opening-principles' ? <OpeningTrainer onComplete={markDemoViewed} /> : <TheoryBoard visual={visual} onLineViewed={markDemoViewed} kicker="ЛИСТАЙ РАЗБОР" />}</div>
+        <div className="article-completion">
+          {!theoryClaimed && <button className="button button-primary" type="button" disabled={!demoViewed} onClick={completeTheory}>Отметить теорию изученной · +20 ♟</button>}
+          {theoryClaimed && <button className="button button-primary" type="button" disabled={!reviewViewed || reviewRewardClaimed} onClick={completeReview}>{reviewRewardClaimed ? 'Повтор засчитан · +5 ♟' : reviewViewed ? 'Засчитать повторение · +5 ♟' : 'Разбери линию ещё раз для повтора'}</button>}
+          <button className="button button-primary" type="button" onClick={() => goStep('quiz')}>К проверке знаний →</button>
+        </div>
+      </article>}
+      {step === 'quiz' && <LessonQuiz key={topic.id} topicId={topic.id} topicTitle={topic.title} boardFen={visual.fen} questions={quizQuestions} onPassed={markQuizPassed} onGoPractice={() => goStep('practice')} />}
+      {step === 'practice' && <section className="learn-practice lesson-tab-practice" id="lesson-practice">
+        <div className="learn-practice-heading"><div><h2>Сделай ход сам.</h2><p>Квиз пройден — доска твоя. Найди лучший ход: сервер проверит ответ и начислит XP и монеты. Подборка — по тегам выбранной темы: {topic.puzzleThemes.join(', ') || 'базовая позиция'}.</p></div></div>
+        <LessonPracticeBoard key={topic.id} topicId={topic.id} themes={topic.puzzleThemes} />
+        {practiceBonusClaimed && <div className="practice-success"><div><strong>Приём закреплён ✓ — практика темы пройдена!</strong><small>Так держать. Можно закрепить ещё или идти дальше по курсу.</small></div>{nextTopic && <button className="button button-primary" type="button" onClick={() => selectTopic(nextTopic.id)}>Следующий урок: {nextTopic.title} →</button>}</div>}
+      </section>}
+    </main>
+  </section>;
 }
 
 function ProfilePage() {
@@ -1031,8 +1446,11 @@ function ProfilePage() {
   const [error, setError] = useState('');
   const [verification, setVerification] = useState('');
   const [lichessName, setLichessName] = useState('');
+  const [chesscomName, setChesscomName] = useState('');
   const [linkMessage, setLinkMessage] = useState('');
+  const [chesscomMessage, setChesscomMessage] = useState('');
   const [linkBusy, setLinkBusy] = useState(false);
+  const [chesscomBusy, setChesscomBusy] = useState(false);
 
   const refreshProfile = async () => {
     setLoading(true);
@@ -1041,6 +1459,7 @@ function ProfilePage() {
       setProfile(nextProfile);
       setRankData(nextRank);
       setLichessName(nextProfile.lichess_username ?? '');
+      setChesscomName(nextProfile.chesscom_username ?? '');
       setError('');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Не удалось загрузить профиль');
@@ -1077,8 +1496,22 @@ function ProfilePage() {
     }
   };
 
+  const submitChessComSync = async () => {
+    setChesscomBusy(true);
+    setChesscomMessage('');
+    try {
+      const result = await profileApi.syncChessComAccount(chesscomName.trim());
+      setChesscomMessage(result.message);
+      await refreshProfile();
+    } catch (reason) {
+      setChesscomMessage(reason instanceof Error ? reason.message : 'Не удалось получить рейтинг Chess.com');
+    } finally {
+      setChesscomBusy(false);
+    }
+  };
+
   const displayName = user?.email.split('@')[0] ?? 'Ученик';
-  return <section className="profile-page"><div className="profile-hero"><div className="profile-avatar-large">{displayName[0]?.toUpperCase() ?? 'У'}</div><div><span className="eyebrow"><span>06</span> ПРОФИЛЬ УЧЕНИКА</span><h1>{displayName} <em>в игре.</em></h1><p>{profile?.email ?? user?.email ?? 'Данные профиля загружаются с сервера.'}</p></div><div className="profile-wallet"><span>РЕЙТИНГ COOLCHESS</span><strong>{loading ? '…' : profile?.elo_rating ?? '—'}</strong><small>{profile ? `уровень ${profile.level} · ${profile.coins} ♟` : user?.role ?? 'ученик'}</small></div></div>{error && <p className="puzzle-reward">{error}</p>}<div className="profile-grid"><div className="profile-card streak-card"><span className="profile-card-kicker">ОПЫТ</span><strong>{loading ? '…' : profile?.xp ?? '—'} XP</strong><p>накопленный опыт</p><small>Уровень {loading ? '…' : profile?.level ?? '—'} · серверные данные</small></div><div className="profile-card"><span className="profile-card-kicker">БАЛАНС</span><strong>{loading ? '…' : profile?.coins ?? '—'} ♟</strong><p>доступные пешки</p><small>Подтверждено сервером</small></div><div className="profile-card"><span className="profile-card-kicker">ЗАДАЧИ</span><strong>{loading ? '…' : rankData?.my_rank?.puzzles_solved ?? '—'}</strong><p>решено правильно</p><small>{rankData?.my_rank ? `Место в рейтинге: ${rankData.my_rank.rank}` : 'Пока нет статистики'}</small></div><div className="profile-card"><span className="profile-card-kicker">LICHESS</span><strong>{profile?.lichess_username ? '✓' : '—'}</strong><p>{profile?.lichess_username ?? 'Аккаунт не привязан'}</p><small>{profile?.lichess_rapid_rating ? `Rapid ${profile.lichess_rapid_rating}` : 'Подключи профиль для синхронизации'}</small></div></div><div className="profile-activity"><div><h2>Связать Lichess</h2><p>Скопируй проверочный код в описание профиля Lichess, затем укажи свой ник здесь.</p>{verification && <p><strong>{verification}</strong></p>}{linkMessage && <p>{linkMessage}</p>}</div><div className="lichess-link-controls"><input value={lichessName} onChange={(event) => setLichessName(event.target.value)} placeholder="Ник на Lichess" aria-label="Ник на Lichess" /><button className="button button-link" type="button" onClick={() => void startLichessLink()}>Получить код</button><button className="button button-primary" type="button" disabled={!lichessName.trim() || linkBusy} onClick={() => void submitLichessLink()}>{linkBusy ? 'Проверяем…' : 'Проверить и связать'}</button></div></div></section>;
+  return <section className="profile-page"><div className="profile-hero"><div className="profile-avatar-large">{displayName[0]?.toUpperCase() ?? 'У'}</div><div><span className="eyebrow"><span>06</span> ПРОФИЛЬ УЧЕНИКА</span><h1>{displayName} <em>в игре.</em></h1><p>{profile?.email ?? user?.email ?? 'Данные профиля загружаются с сервера.'}</p></div><div className="profile-wallet"><span>РЕЙТИНГ COOLCHESS</span><strong>{loading ? '…' : profile?.elo_rating ?? '—'}</strong><small>{profile ? `уровень ${profile.level} · ${profile.coins} ♟` : user?.role ?? 'ученик'}</small></div></div>{error && <p className="puzzle-reward">{error}</p>}<div className="profile-grid"><div className="profile-card streak-card"><span className="profile-card-kicker">ОПЫТ</span><strong>{loading ? '…' : profile?.xp ?? '—'} XP</strong><p>накопленный опыт</p><small>Уровень {loading ? '…' : profile?.level ?? '—'} · серверные данные</small></div><div className="profile-card"><span className="profile-card-kicker">БАЛАНС</span><strong>{loading ? '…' : profile?.coins ?? '—'} ♟</strong><p>доступные пешки</p><small>Подтверждено сервером</small></div><div className="profile-card"><span className="profile-card-kicker">ЗАДАЧИ</span><strong>{loading ? '…' : rankData?.my_rank?.puzzles_solved ?? '—'}</strong><p>решено правильно</p><small>{rankData?.my_rank ? `Место в рейтинге: ${rankData.my_rank.rank}` : 'Пока нет статистики'}</small></div><div className="profile-card"><span className="profile-card-kicker">LICHESS</span><strong>{profile?.lichess_username ? '✓' : '—'}</strong><p>{profile?.lichess_username ?? 'Аккаунт не привязан'}</p><small>{profile?.lichess_rapid_rating ? `Rapid ${profile.lichess_rapid_rating}` : 'Подключи профиль для синхронизации'}</small></div><div className="profile-card"><span className="profile-card-kicker">CHESS.COM</span><strong>{profile?.chesscom_username ? '✓' : '—'}</strong><p>{profile?.chesscom_username ?? 'Аккаунт не указан'}</p><small>{profile?.chesscom_rapid_rating ? `Rapid ${profile.chesscom_rapid_rating}` : 'Нет Rapid'} · {profile?.chesscom_blitz_rating ? `Blitz ${profile.chesscom_blitz_rating}` : 'Нет Blitz'}</small></div></div><div className="profile-activity"><div><h2>Связать Lichess</h2><p>Скопируй проверочный код в описание профиля Lichess, затем укажи свой ник здесь.</p>{verification && <p><strong>{verification}</strong></p>}{linkMessage && <p>{linkMessage}</p>}</div><div className="lichess-link-controls"><input value={lichessName} onChange={(event) => setLichessName(event.target.value)} placeholder="Ник на Lichess" aria-label="Ник на Lichess" /><button className="button button-link" type="button" onClick={() => void startLichessLink()}>Получить код</button><button className="button button-primary" type="button" disabled={!lichessName.trim() || linkBusy} onClick={() => void submitLichessLink()}>{linkBusy ? 'Проверяем…' : 'Проверить и связать'}</button></div></div><div className="profile-activity chesscom-activity"><div><h2>Добавить Chess.com</h2><p>Укажи публичный ник, чтобы показать рейтинги в профиле. Chess.com не подтверждает, что этот аккаунт принадлежит тебе.</p>{chesscomMessage && <p role="status">{chesscomMessage}</p>}</div><div className="lichess-link-controls"><input value={chesscomName} onChange={(event) => setChesscomName(event.target.value)} placeholder="Ник на Chess.com" aria-label="Ник на Chess.com" /><button className="button button-primary" type="button" disabled={!chesscomName.trim() || chesscomBusy} onClick={() => void submitChessComSync()}>{chesscomBusy ? 'Обновляем…' : 'Получить рейтинги'}</button></div></div></section>;
 }
 
 function PvpPage() {

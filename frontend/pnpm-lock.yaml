@@ -20,6 +20,9 @@ importers:
       react-dom:
         specifier: 18.3.1
         version: 18.3.1(react@18.3.1)
+      stockfish:
+        specifier: 19.0.0
+        version: 19.0.0
     devDependencies:
       '@tailwindcss/vite':
         specifier: 4.3.3
@@ -515,6 +518,10 @@ packages:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
 
+  stockfish@19.0.0:
+    resolution: {integrity: sha512-jDyYLbqNpboQcMs5HodTHI2CrKL74zkQWb1+sgoNXw5HI6avTblW4G0X7afFt3BBOc6VbTSkOV64EUxm/DWSpg==}
+    hasBin: true
+
   tailwindcss@4.3.3:
     resolution: {integrity: sha512-gOhV3P7ufE62QDGg1zVaTgCR+EtPv92k2nIhVcVKcLmxT1sUBsQGhnZj175j+MqRt4zLF7ic+sCYjfhxMxj7YQ==}
 
@@ -905,6 +912,8 @@ snapshots:
       loose-envify: 1.4.0
 
   source-map-js@1.2.1: {}
+
+  stockfish@19.0.0: {}
 
   tailwindcss@4.3.3: {}
 

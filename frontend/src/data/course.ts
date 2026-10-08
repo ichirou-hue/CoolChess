@@ -39,11 +39,6 @@ export const courseModules: CourseModule[] = [
     ],
   },
   {
-    id: 'endgame', title: 'Эндшпиль', description: 'Учимся превращать небольшое преимущество в победу.', topics: [
-      topic('endgame-features', 'Особенности игры в эндшпиле', ['endgame']), topic('endgame-square', 'Правило квадрата', ['pawnEndgame']), topic('endgame-passed', 'Проходная пешка', ['advancedPawn', 'promotion']), topic('endgame-doubled', 'Почему сдвоенные пешки — это плохо?', ['pawnEndgame']), topic('endgame-opposition', 'Оппозиция', ['pawnEndgame', 'zugzwang']), topic('endgame-king', 'Активность короля', ['endgame', 'defensiveMove']),
-    ],
-  },
-  {
     id: 'opening', title: 'Дебют', description: 'Первые ходы с понятным планом, а не заучиванием вариантов.', topics: [
       topic('opening-principles', 'Три главных дебютных принципа', ['opening', 'advantage']), topic('opening-development', 'Сила быстрого развития фигур. Понятие темпа', ['opening', 'advantage']), topic('opening-king', 'Безопасность короля', ['castling', 'exposedKing']), topic('opening-center', 'Какой бывает центр. Зачем нужен центр', ['opening', 'advantage']), topic('opening-mistakes', 'Критические ошибки в дебюте', ['opening', 'hangingPiece']),
     ],
@@ -51,6 +46,11 @@ export const courseModules: CourseModule[] = [
   {
     id: 'middlegame', title: 'Миттельшпиль: стратегия в шахматах', description: 'Переходим от отдельных тактик к планированию позиции.', topics: [
       topic('middle-material', 'Материальное преимущество. Принципы его использования', ['advantage', 'crushing']), topic('middle-positional', 'Позиционное преимущество. Разновидности и особенности использования', ['advantage', 'equality', 'quietMove']), topic('middle-pawns', 'Расположение пешек. Островки и слабости', ['endgame', 'zugzwang']), topic('middle-lines', 'Открытые линии', ['discoveredAttack', 'clearance']), topic('middle-pieces', 'Хорошие и плохие фигуры', ['quietMove', 'defensiveMove']), topic('middle-mistakes', 'Типовые ошибки в миттельшпиле', ['hangingPiece', 'advantage']),
+    ],
+  },
+  {
+    id: 'endgame', title: 'Эндшпиль', description: 'Учимся превращать небольшое преимущество в победу.', topics: [
+      topic('endgame-features', 'Особенности игры в эндшпиле', ['endgame']), topic('endgame-square', 'Правило квадрата', ['pawnEndgame']), topic('endgame-passed', 'Проходная пешка', ['advancedPawn', 'promotion']), topic('endgame-doubled', 'Почему сдвоенные пешки — это плохо?', ['pawnEndgame']), topic('endgame-opposition', 'Оппозиция', ['pawnEndgame', 'zugzwang']), topic('endgame-king', 'Активность короля', ['endgame', 'defensiveMove']),
     ],
   },
 ];

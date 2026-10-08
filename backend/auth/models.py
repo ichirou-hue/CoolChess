@@ -79,6 +79,13 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     # Детерминированный код от user.id запрещен: id светится в лидерборде.
     lichess_verification_code = Column(String(32), nullable=True)
 
+    # Chess.com public rating snapshot. The username is user supplied and not ownership-verified.
+    chesscom_username = Column(String(50), nullable=True, index=True)
+    chesscom_blitz_rating = Column(Integer, nullable=True)
+    chesscom_rapid_rating = Column(Integer, nullable=True)
+    chesscom_bullet_rating = Column(Integer, nullable=True)
+    chesscom_daily_rating = Column(Integer, nullable=True)
+
 
 class Puzzle(Base):
     __tablename__ = "puzzles"

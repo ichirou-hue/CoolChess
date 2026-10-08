@@ -8,12 +8,15 @@ from database import get_async_session
 from auth.models import User, UserRole
 from auth.manager import current_active_user, require_role, require_superuser
 from auth.schemas import (
+    ChessComSyncRequest,
+    ChessComSyncResponse,
     LichessSyncRequest,
     LichessSyncResponse,
     LichessVerificationCodeResponse,
     RoleUpdateRequest,
 )
 from integrations.lichess_service import lichess_service
+from integrations.chesscom_service import chesscom_service
 
 users_router = APIRouter(tags=["Player & Coach"])
 
@@ -54,6 +57,11 @@ async def get_player_profile(user: User = Depends(current_active_user)):
         "lichess_blitz_rating": user.lichess_blitz_rating,
         "lichess_rapid_rating": user.lichess_rapid_rating,
         "lichess_puzzle_rating": user.lichess_puzzle_rating,
+        "chesscom_username": user.chesscom_username,
+        "chesscom_blitz_rating": user.chesscom_blitz_rating,
+        "chesscom_rapid_rating": user.chesscom_rapid_rating,
+        "chesscom_bullet_rating": user.chesscom_bullet_rating,
+        "chesscom_daily_rating": user.chesscom_daily_rating,
     }
 
 
@@ -149,6 +157,36 @@ async def sync_lichess_account(
         lichess_puzzle_rating=db_user.lichess_puzzle_rating,
         updated_elo=db_user.elo_rating,
         message=f"Аккаунт Lichess {db_user.lichess_username} успешно верифицирован и привязан!",
+    )
+
+
+@users_router.post(
+    "/api/users/sync-chesscom",
+    response_model=ChessComSyncResponse,
+    tags=["Users"],
+)
+async def sync_chesscom_account(
+    body: ChessComSyncRequest,
+    current_user: User = Depends(current_active_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Stores a public Chess.com rating snapshot; the public API does not prove account ownership."""
+    profile_data = await chesscom_service.fetch_player_stats(body.chesscom_username)
+    db_user = await _get_db_user(db, current_user.id)
+    db_user.chesscom_username = profile_data["username"]
+    db_user.chesscom_blitz_rating = profile_data["blitz_rating"]
+    db_user.chesscom_rapid_rating = profile_data["rapid_rating"]
+    db_user.chesscom_bullet_rating = profile_data["bullet_rating"]
+    db_user.chesscom_daily_rating = profile_data["daily_rating"]
+    await db.commit()
+    await db.refresh(db_user)
+    return ChessComSyncResponse(
+        chesscom_username=db_user.chesscom_username,
+        chesscom_blitz_rating=db_user.chesscom_blitz_rating,
+        chesscom_rapid_rating=db_user.chesscom_rapid_rating,
+        chesscom_bullet_rating=db_user.chesscom_bullet_rating,
+        chesscom_daily_rating=db_user.chesscom_daily_rating,
+        message=f"Публичные рейтинги Chess.com для {db_user.chesscom_username} обновлены.",
     )
 
 

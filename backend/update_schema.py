@@ -29,6 +29,11 @@ MISSING_COLUMNS = [
     ("users", "lichess_rapid_rating", "INTEGER"),
     ("users", "lichess_puzzle_rating", "INTEGER"),
     ("users", "lichess_verification_code", "VARCHAR(32)"),
+    ("users", "chesscom_username", "VARCHAR(50)"),
+    ("users", "chesscom_blitz_rating", "INTEGER"),
+    ("users", "chesscom_rapid_rating", "INTEGER"),
+    ("users", "chesscom_bullet_rating", "INTEGER"),
+    ("users", "chesscom_daily_rating", "INTEGER"),
 ]
 
 

@@ -40,7 +40,7 @@ export const courseModules: CourseModule[] = [
   },
   {
     id: 'opening', title: 'Дебют', description: 'Первые ходы с понятным планом, а не заучиванием вариантов.', topics: [
-      topic('opening-principles', 'Три главных дебютных принципа', ['opening', 'advantage']), topic('opening-development', 'Сила быстрого развития фигур. Понятие темпа', ['opening', 'advantage']), topic('opening-king', 'Безопасность короля', ['castling', 'exposedKing']), topic('opening-center', 'Какой бывает центр. Зачем нужен центр', ['opening', 'advantage']), topic('opening-mistakes', 'Критические ошибки в дебюте', ['opening', 'hangingPiece']),
+      topic('opening-principles', 'Три главных дебютных принципа', ['opening', 'advantage']), topic('opening-development', 'Сила быстрого развития фигур. Понятие темпа', ['opening', 'advantage']), topic('opening-king', 'Безопасность короля', ['castling', 'exposedKing']), topic('opening-center', 'Какой бывает центр. Зачем нужен центр', ['opening', 'advantage']), topic('opening-mistakes', 'Критические ошибки в дебюте', ['opening', 'hangingPiece']), topic('opening-library', 'Каталог дебютов и вариантов', ['opening']),
     ],
   },
   {

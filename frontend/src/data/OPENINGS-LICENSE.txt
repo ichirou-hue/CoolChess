@@ -1,0 +1,5 @@
+The opening names, ECO codes, and PGN move lines in openings.json are from
+lichess-org/chess-openings, released under CC0-1.0.
+Source: https://github.com/lichess-org/chess-openings
+
+The dataset is public domain. This notice is retained for provenance.

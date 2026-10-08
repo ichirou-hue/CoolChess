@@ -5,12 +5,21 @@ export type PositionAnalysis = {
   principalVariation: string[];
 };
 
-export type MoveClassification = 'best' | 'excellent' | 'good' | 'inaccuracy' | 'mistake' | 'blunder';
+export type MoveClassification = 'best' | 'excellent' | 'good' | 'inaccuracy' | 'mistake' | 'blunder' | 'great' | 'miss';
 
 export function classifyMove(before: PositionAnalysis, after: PositionAnalysis, playedMove: string) {
   // UCI scores are from the root side-to-move perspective: before is the learner's
   // view, after is the opponent's view, so add the two scores to find the loss.
   const lossCp = Math.max(0, before.scoreCp + after.scoreCp);
+  const afterForPlayerCp = -after.scoreCp;
+  if (before.scoreCp >= 150 && afterForPlayerCp <= 0 && lossCp >= 80) {
+    return { classification: 'miss' as const, lossCp };
+  }
+  const changesOutcome = (before.scoreCp <= -200 && afterForPlayerCp >= -50)
+    || (before.scoreCp <= 50 && afterForPlayerCp >= 200);
+  if (changesOutcome && (before.bestMove === playedMove || lossCp <= 8)) {
+    return { classification: 'great' as const, lossCp };
+  }
   const classification: MoveClassification = before.bestMove === playedMove ? 'best'
     : lossCp <= 12 ? 'excellent'
       : lossCp <= 45 ? 'good'

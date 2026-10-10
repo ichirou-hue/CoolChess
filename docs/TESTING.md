@@ -8,7 +8,7 @@
 
 - Используйте единое Python-окружение `.venv` в корневой папке проекта.
   В Windows команда: `.venv\Scripts\python.exe -m pytest -q`.
-- Последняя проверка: **155 тестов, 0 failed**.
+- Последняя проверка: **159 тестов, 0 failed**.
 - Конфигурация — `pyproject.toml`: `pythonpath = ["backend"]`
   (импорты `server`, `database`, `auth`, ... работают из корня),
   `testpaths = ["tests"]`.

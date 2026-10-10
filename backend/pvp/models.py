@@ -22,6 +22,7 @@ def calculate_pvp_elo_delta(user_elo: int, opponent_elo: int, actual: float, k: 
 class PlayerConnection:
     user_id: Optional[uuid.UUID]  # None = открытое место (ждём соперника)
     email: str = ""
+    display_name: str = ""
     elo: int = 1200
     websocket: Optional[WebSocket] = None
     connected: bool = False
@@ -163,6 +164,7 @@ class ChessGameRoom:
         return {
             "user_id": str(player.user_id) if player.user_id else None,
             "email": player.email,
+            "display_name": player.display_name,
             "elo": player.elo,
             "connected": player.connected,
         }

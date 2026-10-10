@@ -50,6 +50,7 @@ user_solved_puzzles = Table(
 class User(SQLAlchemyBaseUserTableUUID, Base):
     __tablename__ = "users"
 
+    display_name = Column(String(32), default="Игрок", server_default="Игрок", nullable=False)
     role = Column(SQLEnum(UserRole), default=UserRole.STUDENT, nullable=False)
     elo_rating = Column(Integer, default=1200, nullable=False)
 
@@ -75,16 +76,26 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     lichess_blitz_rating = Column(Integer, nullable=True)
     lichess_rapid_rating = Column(Integer, nullable=True)
     lichess_puzzle_rating = Column(Integer, nullable=True)
-    # Случайный код привязки Lichess-аккаунта (см. users_routes).
-    # Детерминированный код от user.id запрещен: id светится в лидерборде.
     lichess_verification_code = Column(String(32), nullable=True)
+    lichess_verification_username = Column(String(50), nullable=True)
+    lichess_verification_expires_at = Column(DateTime(timezone=True), nullable=True)
+    lichess_verification_attempts = Column(Integer, default=0, server_default="0", nullable=False)
 
-    # Chess.com public rating snapshot. The username is user supplied and not ownership-verified.
+    # Chess.com public rating snapshot and temporary ownership verification state.
     chesscom_username = Column(String(50), nullable=True, index=True)
     chesscom_blitz_rating = Column(Integer, nullable=True)
     chesscom_rapid_rating = Column(Integer, nullable=True)
     chesscom_bullet_rating = Column(Integer, nullable=True)
     chesscom_daily_rating = Column(Integer, nullable=True)
+    chesscom_verification_code = Column(String(32), nullable=True)
+    chesscom_verification_username = Column(String(50), nullable=True)
+    chesscom_verification_expires_at = Column(DateTime(timezone=True), nullable=True)
+    chesscom_verification_attempts = Column(Integer, default=0, server_default="0", nullable=False)
+
+    email_verification_code_hash = Column(String(64), nullable=True)
+    email_verification_expires_at = Column(DateTime(timezone=True), nullable=True)
+    email_verification_sent_at = Column(DateTime(timezone=True), nullable=True)
+    email_verification_attempts = Column(Integer, default=0, server_default="0", nullable=False)
 
 
 class Puzzle(Base):

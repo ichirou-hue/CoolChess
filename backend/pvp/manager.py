@@ -52,7 +52,12 @@ class PVPConnectionManager:
         return room
 
     def claim_black_seat(
-        self, game_id: str, user_id: uuid.UUID, email: str = "", elo: int = 1200
+        self,
+        game_id: str,
+        user_id: uuid.UUID,
+        email: str = "",
+        display_name: str = "",
+        elo: int = 1200,
     ) -> bool:
         """Первый подключившийся чужак занимает открытое место чёрных."""
         room = self.get_room(game_id)
@@ -62,6 +67,7 @@ class PVPConnectionManager:
             return False
         room.black.user_id = user_id
         room.black.email = email
+        room.black.display_name = display_name
         room.black.elo = elo
         room.touch()
         return True

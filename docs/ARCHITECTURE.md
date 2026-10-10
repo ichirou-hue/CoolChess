@@ -12,9 +12,9 @@ FastAPI (backend/server.py, :8080)
   ├── puzzles/       задачи Lichess + награды
   ├── games/         партии с ботом + награды
   ├── leaderboard/   топы и позиция игрока
-  ├── clans/         кланы (REST)
+  ├── tournaments/   турниры и участники (REST)
   ├── pvp/           PvP-комнаты + WS + серверные часы (in-memory)
-  └── integrations/  Lichess API
+  └── integrations/  публичные API Lichess и Chess.com
   ▼
 PostgreSQL (compose, :5433) или SQLite (aiosqlite, dev-режим)
   (PvP-состояние в памяти процесса, в БД не пишется)
@@ -22,8 +22,8 @@ PostgreSQL (compose, :5433) или SQLite (aiosqlite, dev-режим)
 
 Точка входа backend — `backend/server.py`: создаёт `FastAPI(title="CoolChess API")`
 с `lifespan` (старт/стоп фонового таймера PvP), настраивает CORS из
-`CORS_ORIGINS`, подключает 8 доменных роутеров
-(`puzzle`, `game`, `leaderboard`, `bot`, `users`, `clan`, `pvp-ws`, `pvp-http`)
+`CORS_ORIGINS`, подключает доменные роутеры задач, партий, лидерборда, бота,
+пользователей, турниров и PvP
 и стандартные роутеры `fastapi-users` (auth / register / reset-password /
 verify / users). Запуск из каталога `backend/`:
 `uvicorn server:app --reload --port 8080` (в compose — 1 воркер, см. ниже).
@@ -37,9 +37,9 @@ verify / users). Запуск из каталога `backend/`:
 | `puzzles/` | `puzzle_routes.py`, `rewards.py` | выдача случайной задачи, проверка решения, `REWARD_TIERS`, `calculate_level` |
 | `games/` | `models.py`, `schemas.py`, `game_routes.py`, `rewards.py` | жизненный цикл партии, валидация ходов, ход Maia в ответ, `calculate_match_rewards` |
 | `leaderboard/` | `leaderboard_routes.py`, `schemas.py` | топ по `elo`/`level`/`puzzles`, `my_rank`, маскирование email |
-| `clans/` | `models.py`, `schemas.py`, `clan_routes.py` | `Clan`/`ClanMember`, роли `leader`/`officer`/`member`, REST `GET /api/clans`, `GET .../{id}`, `POST .../create`, `.../{id}/join`, `.../leave`, `.../disband`, `.../transfer`; гонки гасятся через `IntegrityError` |
-| `pvp/` | `models.py`, `manager.py`, `pvp_routes.py` | `ChessGameRoom` (доска `python-chess`, часы, инкремент, TTL), `PVPConnectionManager` (синглтон `pvp_manager`, фоновый таймер 1с, `settle_ratings`), HTTP `POST /api/pvp/create` + WS `/ws/pvp/{game_id}?token=` |
-| `integrations/` | `lichess_service.py` | `fetch_user_profile`, парсинг `perfs`, обработка 404/429/502/503 |
+| `tournaments/` | `models.py`, `tournament_routes.py` | Настройки турниров и участники в БД; форматы round-robin/swiss/single-elimination; создание, регистрация, выбор стороны и распределение по группам с RBAC. Автоматическое формирование пар ещё не реализовано |
+| `pvp/` | `models.py`, `manager.py`, `pvp_routes.py` | `ChessGameRoom` (доска `python-chess`, часы, инкремент, TTL), `PVPConnectionManager` (синглтон `pvp_manager`, фоновый таймер 1с, `settle_ratings`), короткий пятисимвольный код комнаты, HTTP `POST /api/pvp/create` + WS `/ws/pvp/{game_id}?token=` |
+| `integrations/` | `lichess_service.py`, `chesscom_service.py` | Lichess: проверка владельца по коду Bio и синхронизация рейтингов; Chess.com: чтение публичных рейтингов по нику без подтверждения владельца |
 | корень | `database.py`, `init_db.py`, `update_schema.py`, `schema.sql`, `dump_ddl.py`, `load_lichess_puzzles.py` | engine/сессии, создание и миграция схемы, загрузка задач |
 
 ## Ключевые потоки
@@ -59,7 +59,7 @@ verify / users). Запуск из каталога `backend/`:
    (`IntegrityError` + rollback гасит гонку параллельных запросов).
 3. Награды — строго по тиру рейтинга задачи (`get_fixed_puzzle_rewards`).
 
-### Привязка Lichess
+### Привязка рейтинговых аккаунтов
 1. `GET /api/users/lichess-verification-code` — одноразовая генерация
    `coolchess-<hex>` (случайный; детерминированный от `user.id` запрещён,
    т.к. id виден в лидерборде).
@@ -67,19 +67,14 @@ verify / users). Запуск из каталога `backend/`:
 3. `POST /api/users/sync-lichess` — сервер читает публичный профиль через
    Lichess API, ищет код в Bio, при успехе сохраняет рейтинги; новичку
    (`games_played == 0`, `elo == 1200`) калибрует стартовый Elo из rapid/blitz.
-
-### Создание клана (`POST /api/clans/create`)
-1. Проверка JWT (`current_active_user`); отказ `400`, если `ClanMember`
-   с таким `user_id` уже существует (1 игрок = 1 клан).
-2. Проверка уникальности `name` / `tag` (тег — `strip().upper()`); дубль → `400`
-   (включая гонку: `commit` обёрнут в `except IntegrityError`).
-3. Вставка `Clan` + `ClanMember(role=leader)` в одной транзакции (`commit`).
-   Жизненный цикл замыкают `POST /transfer` (лидер → officer, новый → leader)
-   и `POST /disband` (удаление клана каскадом) — оба только для лидера.
+4. `POST /api/users/sync-chesscom` — читает публичную статистику Chess.com по
+   нику и сохраняет доступные рейтинги. Публичный endpoint не подтверждает
+   владение аккаунтом. Пароли Chess.com и Lichess не запрашиваются.
 
 ### PvP-партия (HTTP create → WS)
-1. `POST /api/pvp/create` (JWT в header) — комната `pvp-<hex12>`, создатель —
-   белые, место чёрных открыто (`black.user_id=None`, `waiting_opponent=true`).
+1. `POST /api/pvp/create` (JWT в header) — уникальный пятисимвольный код комнаты,
+   создатель — белые, место чёрных открыто (`black.user_id=None`,
+   `waiting_opponent=true`).
 2. WS `GET /ws/pvp/{id}?token=` (`decode_jwt`, audience `fastapi-users:auth`);
    неуспех — закрытие `1008`. Первый чужак занимает место чёрных (`claim_black_seat`
    с подгрузкой email/elo из БД), остальные — зрители в `room.spectators`.
@@ -99,7 +94,7 @@ verify / users). Запуск из каталога `backend/`:
 
 React 18 + TypeScript + Vite + Tailwind, доска `chessground`, правила `chess.js`.
 Hash-роутер (`useHashRoute`): `#home`, `#auth`, `#learn`, `#puzzles`, `#play`,
-`#community`, `#profile`. Каждый домен имеет свой API-модуль
+`#pvp`, `#tournaments`, `#community`, `#profile`. Каждый домен имеет свой API-модуль
 (`features/*/api/*Api.ts`), читающий `VITE_API_URL`. Серверные награды —
 источник истины; `shared/lib/studentState.ts` — только локальный адаптер
 (пешки, серия). Целевая структура — в `docs/frontend-architecture.md`,

@@ -15,6 +15,7 @@ class LeaderboardUserItem(BaseModel):
 
     rank: int = Field(..., description="Место в рейтинге (1, 2, 3...)")
     user_id: uuid.UUID
+    display_name: str
     email: str
     elo_rating: int
     level: int

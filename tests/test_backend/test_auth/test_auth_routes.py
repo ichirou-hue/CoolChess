@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
 
@@ -12,6 +13,7 @@ def create_mock_user(role=UserRole.STUDENT, is_superuser=False, email="student@c
     user = MagicMock(spec=User)
     user.id = uuid.uuid4()
     user.email = email
+    user.display_name = "Тестовый игрок"
     user.is_active = True
     user.is_verified = True
     user.is_superuser = is_superuser
@@ -26,6 +28,18 @@ def create_mock_user(role=UserRole.STUDENT, is_superuser=False, email="student@c
     user.lichess_rapid_rating = None
     user.lichess_puzzle_rating = None
     user.lichess_verification_code = None
+    user.lichess_verification_username = None
+    user.lichess_verification_expires_at = None
+    user.lichess_verification_attempts = 0
+    user.chesscom_verification_code = None
+    user.chesscom_verification_username = None
+    user.chesscom_verification_expires_at = None
+    user.chesscom_verification_attempts = 0
+    user.chesscom_username = None
+    user.chesscom_blitz_rating = None
+    user.chesscom_rapid_rating = None
+    user.chesscom_bullet_rating = None
+    user.chesscom_daily_rating = None
     return user
 
 
@@ -47,6 +61,7 @@ async def test_get_profile_authorized(anonymous_client):
         assert response.status_code == 200
         data = response.json()
         assert data["email"] == mock_student.email
+        assert data["display_name"] == mock_student.display_name
         assert data["role"] == UserRole.STUDENT.value
         assert data["elo_rating"] == 1350
         assert data["xp"] == 150
@@ -120,19 +135,19 @@ async def test_get_lichess_verification_code_generates_and_reuses(anonymous_clie
     mock_db_session.execute.return_value = mock_res
 
     try:
-        # Первый запрос генерирует случайный код и сохраняет его
+        # Legacy endpoint remains compatible but issues a fresh expiring code.
         response = await anonymous_client.get("/api/users/lichess-verification-code")
         assert response.status_code == 200
         data = response.json()
-        assert data["verification_code"].startswith("coolchess-")
-        assert "coolchess-verify-" not in data["verification_code"]
+        assert data["verification_code"].startswith("coolchess-verify-")
         assert data["verification_code"] in data["instructions"]
         assert mock_student.lichess_verification_code == data["verification_code"]
+        assert mock_student.lichess_verification_expires_at > datetime.now(timezone.utc)
         mock_db_session.commit.assert_awaited()
 
-        # Повторный запрос возвращает тот же код, а не генерирует новый
+        # A reissue rotates the secret rather than extending its lifetime.
         response2 = await anonymous_client.get("/api/users/lichess-verification-code")
-        assert response2.json()["verification_code"] == data["verification_code"]
+        assert response2.json()["verification_code"] != data["verification_code"]
     finally:
         app.dependency_overrides.pop(current_active_user, None)
         app.dependency_overrides.pop(get_async_session, None)
@@ -174,6 +189,7 @@ async def test_sync_lichess_requires_issued_code(anonymous_client, mock_db_sessi
 async def test_sync_lichess_fails_without_verification_code_in_bio(anonymous_client, mock_db_session):
     mock_student = create_mock_user(role=UserRole.STUDENT)
     mock_student.lichess_verification_code = "coolchess-abc12345"
+    mock_student.lichess_verification_expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
     app.dependency_overrides[current_active_user] = lambda: mock_student
     app.dependency_overrides[get_async_session] = lambda: mock_db_session
     mock_res = MagicMock()
@@ -198,7 +214,7 @@ async def test_sync_lichess_fails_without_verification_code_in_bio(anonymous_cli
             )
 
             assert response.status_code == 400
-            assert "не найден в профиле Lichess" in response.json()["detail"]
+            assert "не найден в поле Bio профиля lichess" in response.json()["detail"]
     finally:
         app.dependency_overrides.pop(current_active_user, None)
         app.dependency_overrides.pop(get_async_session, None)
@@ -215,6 +231,7 @@ async def test_sync_lichess_success_with_verification_code(anonymous_client, moc
 
     code = "coolchess-abc12345"
     mock_student.lichess_verification_code = code
+    mock_student.lichess_verification_expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
     mock_res = MagicMock()
     mock_res.scalar_one_or_none.return_value = mock_student
     mock_db_session.execute.return_value = mock_res
@@ -241,6 +258,199 @@ async def test_sync_lichess_success_with_verification_code(anonymous_client, moc
             assert data["lichess_rapid_rating"] == 2820
             assert data["updated_elo"] == 2820
             assert mock_student.lichess_username == "MagnusCarlsen"
+    finally:
+        app.dependency_overrides.pop(current_active_user, None)
+        app.dependency_overrides.pop(get_async_session, None)
+
+
+@pytest.mark.asyncio
+async def test_platform_verification_code_is_bound_to_username_and_expires(
+    anonymous_client, mock_db_session
+):
+    user = create_mock_user()
+    app.dependency_overrides[current_active_user] = lambda: user
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = user
+    mock_db_session.execute.return_value = mock_result
+
+    try:
+        response = await anonymous_client.post(
+            "/api/users/platform-verification-code",
+            json={"platform": "chesscom", "username": "Player_One"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["verification_code"].startswith("coolchess-verify-")
+        assert data["platform"] == "chesscom"
+        assert data["username"] == "Player_One"
+        assert "Location" in data["instructions"]
+        assert user.chesscom_verification_code == data["verification_code"]
+        assert user.chesscom_verification_username == "Player_One"
+        assert user.chesscom_verification_expires_at > datetime.now(timezone.utc)
+    finally:
+        app.dependency_overrides.pop(current_active_user, None)
+        app.dependency_overrides.pop(get_async_session, None)
+
+
+@pytest.mark.asyncio
+async def test_verify_platform_lichess_bio_saves_ratings_and_consumes_code(
+    anonymous_client, mock_db_session
+):
+    user = create_mock_user()
+    user.games_played = 0
+    user.elo_rating = 1200
+    code = "coolchess-verify-a1b2c3d4"
+    user.lichess_verification_code = code
+    user.lichess_verification_username = "MagnusCarlsen"
+    user.lichess_verification_expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = user
+    mock_db_session.execute.return_value = mock_result
+    app.dependency_overrides[current_active_user] = lambda: user
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+
+    try:
+        with patch(
+            "auth.users_routes.lichess_service.fetch_user_profile",
+            new_callable=AsyncMock,
+            return_value={
+                "username": "MagnusCarlsen",
+                "bio": f"Verified: {code}",
+                "blitz_rating": 2800,
+                "rapid_rating": 2750,
+                "puzzle_rating": 2900,
+            },
+        ) as fetch_profile:
+            response = await anonymous_client.post(
+                "/api/users/verify-platform-account",
+                json={"platform": "lichess", "username": "MagnusCarlsen"},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["lichess_rapid_rating"] == 2750
+        assert user.lichess_username == "MagnusCarlsen"
+        assert user.elo_rating == 2750
+        assert user.lichess_verification_code is None
+        assert user.lichess_verification_expires_at is None
+        fetch_profile.assert_awaited_once_with("MagnusCarlsen")
+    finally:
+        app.dependency_overrides.pop(current_active_user, None)
+        app.dependency_overrides.pop(get_async_session, None)
+
+
+@pytest.mark.asyncio
+async def test_verify_platform_chesscom_location_saves_public_ratings(
+    anonymous_client, mock_db_session
+):
+    user = create_mock_user()
+    code = "coolchess-verify-a1b2c3d4"
+    user.chesscom_verification_code = code
+    user.chesscom_verification_username = "Player_One"
+    user.chesscom_verification_expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = user
+    mock_db_session.execute.return_value = mock_result
+    app.dependency_overrides[current_active_user] = lambda: user
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+
+    try:
+        with (
+            patch(
+                "auth.users_routes.chesscom_service.fetch_player_profile",
+                new_callable=AsyncMock,
+                return_value={"username": "Player_One", "location": f"Berlin {code}", "bio": "", "status": ""},
+            ),
+            patch(
+                "auth.users_routes.chesscom_service.fetch_player_stats",
+                new_callable=AsyncMock,
+                return_value={
+                    "username": "Player_One",
+                    "rapid_rating": 1900,
+                    "blitz_rating": 1800,
+                    "bullet_rating": 1700,
+                    "daily_rating": 1600,
+                },
+            ),
+        ):
+            response = await anonymous_client.post(
+                "/api/users/verify-platform-account",
+                json={"platform": "chesscom", "username": "Player_One"},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["chesscom_rapid_rating"] == 1900
+        assert response.json()["chesscom_blitz_rating"] == 1800
+        assert user.chesscom_username == "Player_One"
+        assert user.chesscom_verification_code is None
+        assert user.chesscom_verification_expires_at is None
+    finally:
+        app.dependency_overrides.pop(current_active_user, None)
+        app.dependency_overrides.pop(get_async_session, None)
+
+
+@pytest.mark.asyncio
+async def test_verify_platform_rejects_expired_code(anonymous_client, mock_db_session):
+    user = create_mock_user()
+    user.lichess_verification_code = "coolchess-verify-a1b2c3d4"
+    user.lichess_verification_username = "MagnusCarlsen"
+    user.lichess_verification_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = user
+    mock_db_session.execute.return_value = mock_result
+    app.dependency_overrides[current_active_user] = lambda: user
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+
+    try:
+        with patch("auth.users_routes.lichess_service.fetch_user_profile", new_callable=AsyncMock) as fetch_profile:
+            response = await anonymous_client.post(
+                "/api/users/verify-platform-account",
+                json={"platform": "lichess", "username": "MagnusCarlsen"},
+            )
+        assert response.status_code == 400
+        assert "Срок действия кода истёк" in response.json()["detail"]
+        assert user.lichess_verification_code is None
+        fetch_profile.assert_not_awaited()
+    finally:
+        app.dependency_overrides.pop(current_active_user, None)
+        app.dependency_overrides.pop(get_async_session, None)
+
+
+@pytest.mark.asyncio
+async def test_verify_platform_missing_profile_code_increments_attempts(
+    anonymous_client, mock_db_session
+):
+    user = create_mock_user()
+    user.chesscom_verification_code = "coolchess-verify-a1b2c3d4"
+    user.chesscom_verification_username = "Player_One"
+    user.chesscom_verification_expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = user
+    mock_db_session.execute.return_value = mock_result
+    app.dependency_overrides[current_active_user] = lambda: user
+    app.dependency_overrides[get_async_session] = lambda: mock_db_session
+
+    try:
+        with (
+            patch(
+                "auth.users_routes.chesscom_service.fetch_player_profile",
+                new_callable=AsyncMock,
+                return_value={"username": "Player_One", "location": "Berlin", "bio": "", "status": ""},
+            ),
+            patch(
+                "auth.users_routes.chesscom_service.fetch_player_stats",
+                new_callable=AsyncMock,
+                return_value={"username": "Player_One"},
+            ),
+        ):
+            response = await anonymous_client.post(
+                "/api/users/verify-platform-account",
+                json={"platform": "chesscom", "username": "Player_One"},
+            )
+        assert response.status_code == 400
+        assert "Location" in response.json()["detail"]
+        assert user.chesscom_verification_attempts == 1
+        assert user.chesscom_username is None
     finally:
         app.dependency_overrides.pop(current_active_user, None)
         app.dependency_overrides.pop(get_async_session, None)

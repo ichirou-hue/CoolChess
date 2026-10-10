@@ -6,6 +6,7 @@ export type LeaderboardCategory = 'elo' | 'level' | 'puzzles';
 export type LeaderboardPlayer = {
   rank: number;
   user_id: string;
+  display_name: string;
   email: string;
   elo_rating: number;
   level: number;

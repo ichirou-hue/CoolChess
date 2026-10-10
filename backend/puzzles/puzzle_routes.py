@@ -1,4 +1,5 @@
 import enum
+import random
 from typing import Optional, List
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,35 +53,25 @@ class SolveResponse(BaseModel):
     new_level: Optional[int] = None
 
 
-@puzzle_router.get("/random", response_model=PuzzleResponse)
-async def get_random_puzzle(
-    difficulty: Optional[DifficultyLevel] = Query(None, description="Фиксированный уровень сложности"),
-    min_rating: Optional[int] = Query(None, description="Точный минимальный Elo"),
-    max_rating: Optional[int] = Query(None, description="Точный максимальный Elo"),
-    theme: Optional[str] = Query(None, description="Концепция/тема (mateIn1, fork, pin, defensiveMove...)"),
-    exclude_solved: bool = Query(True, description="Исключить уже решенные пользователем задачи"),
-    solved_only: bool = Query(False, description="Показывать только уже решенные пользователем задачи"),
-    db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+def _apply_progress_filters(
+    query,
+    progress: Optional[str],
+    exclude_solved: bool,
+    solved_only: bool,
+    user: User,
 ):
-    query = select(Puzzle)
+    if progress is not None:
+        normalized_progress = progress.strip().lower()
+        if normalized_progress == "solved":
+            solved_only = True
+            exclude_solved = False
+        elif normalized_progress == "unsolved":
+            solved_only = False
+            exclude_solved = True
+        elif normalized_progress == "all":
+            solved_only = False
+            exclude_solved = False
 
-    # Фильтр по сложности
-    if difficulty:
-        low, high = DIFFICULTY_RANGES[difficulty]
-        query = query.where(Puzzle.rating.between(low, high))
-
-    # Фильтр по точным границам рейтинга
-    if min_rating is not None:
-        query = query.where(Puzzle.rating >= min_rating)
-    if max_rating is not None:
-        query = query.where(Puzzle.rating <= max_rating)
-
-    # Фильтр по концепции / теме
-    if theme:
-        query = query.where(Puzzle.themes.ilike(f"%{theme.strip()}%"))
-
-    # Исключение уже решенных
     if solved_only:
         solved_subquery = (
             select(user_solved_puzzles.c.puzzle_id)
@@ -94,16 +85,38 @@ async def get_random_puzzle(
         )
         query = query.where(Puzzle.id.not_in(solved_subquery))
 
-    query = query.order_by(func.random()).limit(1)
-    result = await db.execute(query)
-    puzzle = result.scalar_one_or_none()
+    return query
 
-    if not puzzle:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Подходящая задача с указанными фильтрами не найдена."
-        )
 
+def _build_puzzle_query(
+    difficulty: Optional[DifficultyLevel],
+    min_rating: Optional[int],
+    max_rating: Optional[int],
+    theme: Optional[str],
+    exclude_solved: bool,
+    solved_only: bool,
+    progress: Optional[str],
+    user: User,
+):
+    query = select(Puzzle)
+
+    if difficulty:
+        low, high = DIFFICULTY_RANGES[difficulty]
+        query = query.where(Puzzle.rating.between(low, high))
+
+    if min_rating is not None:
+        query = query.where(Puzzle.rating >= min_rating)
+    if max_rating is not None:
+        query = query.where(Puzzle.rating <= max_rating)
+
+    if theme:
+        query = query.where(Puzzle.themes.ilike(f"%{theme.strip()}%"))
+
+    query = _apply_progress_filters(query, progress, exclude_solved, solved_only, user)
+    return query
+
+
+def _serialize_puzzle_response(puzzle: Puzzle) -> PuzzleResponse:
     moves_list = puzzle.moves.split()
     initial_opponent_move = moves_list[0] if moves_list else ""
 
@@ -116,6 +129,91 @@ async def get_random_puzzle(
         themes=puzzle.themes.split(),
         game_url=puzzle.game_url,
     )
+
+
+@puzzle_router.get("/random", response_model=PuzzleResponse)
+async def get_random_puzzle(
+    difficulty: Optional[DifficultyLevel] = Query(None, description="Фиксированный уровень сложности"),
+    min_rating: Optional[int] = Query(None, description="Точный минимальный Elo"),
+    max_rating: Optional[int] = Query(None, description="Точный максимальный Elo"),
+    theme: Optional[str] = Query(None, description="Концепция/тема (mateIn1, fork, pin, defensiveMove...)"),
+    progress: Optional[str] = Query(None, description="Статус решения: all, solved, unsolved"),
+    exclude_solved: bool = Query(True, description="Исключить уже решенные пользователем задачи"),
+    solved_only: bool = Query(False, description="Показывать только уже решенные пользователем задачи"),
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    query = _build_puzzle_query(
+        difficulty=difficulty,
+        min_rating=min_rating,
+        max_rating=max_rating,
+        theme=theme,
+        exclude_solved=exclude_solved,
+        solved_only=solved_only,
+        progress=progress,
+        user=user,
+    )
+    query = query.order_by(func.random()).limit(1)
+    result = await db.execute(query)
+    puzzle = result.scalar_one_or_none()
+
+    if not puzzle:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Подходящая задача с указанными фильтрами не найдена."
+        )
+
+    return _serialize_puzzle_response(puzzle)
+
+
+@puzzle_router.get("/batch", response_model=List[PuzzleResponse])
+async def get_puzzle_batch(
+    limit: int = Query(default=10, ge=1, description="Количество задач в выборке (максимум 10)"),
+    difficulty: Optional[DifficultyLevel] = Query(None, description="Фиксированный уровень сложности"),
+    min_rating: Optional[int] = Query(None, description="Точный минимальный Elo"),
+    max_rating: Optional[int] = Query(None, description="Точный максимальный Elo"),
+    theme: Optional[str] = Query(None, description="Концепция/тема (mateIn1, fork, pin, defensiveMove...)"),
+    progress: Optional[str] = Query(None, description="Статус решения: all, solved, unsolved"),
+    exclude_solved: bool = Query(True, description="Исключить уже решенные пользователем задачи"),
+    solved_only: bool = Query(False, description="Показывать только уже решенные пользователем задачи"),
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    effective_limit = min(limit, 10)
+    query = _build_puzzle_query(
+        difficulty=difficulty,
+        min_rating=min_rating,
+        max_rating=max_rating,
+        theme=theme,
+        exclude_solved=exclude_solved,
+        solved_only=solved_only,
+        progress=progress,
+        user=user,
+    )
+    query = query.order_by(func.random()).limit(effective_limit)
+    result = await db.execute(query)
+    puzzles = result.scalars().all()
+
+    if not puzzles:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Подходящая задача с указанными фильтрами не найдена."
+        )
+
+    randomized_puzzles = list(puzzles)
+    random.shuffle(randomized_puzzles)
+
+    unique_puzzles = []
+    seen_ids = set()
+    for puzzle in randomized_puzzles:
+        if puzzle.id in seen_ids:
+            continue
+        seen_ids.add(puzzle.id)
+        unique_puzzles.append(_serialize_puzzle_response(puzzle))
+        if len(unique_puzzles) >= effective_limit:
+            break
+
+    return unique_puzzles
 
 
 @puzzle_router.post("/{puzzle_id}/solve", response_model=SolveResponse)

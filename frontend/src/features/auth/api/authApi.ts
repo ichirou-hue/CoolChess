@@ -4,7 +4,9 @@ import { fetchApi, readApiError } from '../../../shared/api/apiBase';
 export type AuthUser = {
   id: string;
   email: string;
+  display_name: string;
   role: 'student' | 'coach' | 'admin' | string;
+  is_superuser: boolean;
   elo_rating: number;
 };
 
@@ -48,19 +50,55 @@ export async function login(email: string, password: string) {
   return getMe();
 }
 
-export async function register(email: string, password: string) {
+export async function register(email: string, password: string, displayName: string) {
   // Роль и стартовый Elo назначает сервер — клиент их не передает.
   // Email тримим; регистр/алиасы нормализует сервер (1 почта = 1 аккаунт).
   const response = await fetchApi('/api/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email.trim(), password }),
+    body: JSON.stringify({ email: email.trim(), password, display_name: displayName.trim() }),
   });
   if (response.status === 404) {
     throw new Error('Backend не нашёл маршрут регистрации (/api/auth/register). Проверьте адрес API и перезапустите frontend после изменения VITE_API_URL.');
   }
   if (!response.ok) throw new Error(await readError(response));
-  return login(email, password);
+}
+
+export async function verifyEmail(email: string, code: string) {
+  const response = await fetchApi('/api/auth/verify-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim(), code: code.trim() }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+}
+
+export async function resendVerification(email: string) {
+  const response = await fetchApi('/api/auth/resend-verification', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim() }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json() as Promise<{ message: string }>;
+}
+
+export async function requestPasswordReset(email: string) {
+  const response = await fetchApi('/api/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim() }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+}
+
+export async function resetPassword(token: string, password: string) {
+  const response = await fetchApi('/api/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
 }
 
 export async function getMe() {

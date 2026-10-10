@@ -12,8 +12,9 @@
 
 ## Переменные окружения (не коммитить)
 
-Образцы: `.env.example` (корень) и `backend/.env.example`. Скопировать
-в `.env` и `backend/.env`, заполнить секреты. Compose читает `backend/.env`
+Образцы: `.env.example` (корень), `backend/.env.example` и
+`frontend/.env.example`. Для Docker скопируйте первые два в `.env` и
+`backend/.env` и заполните секреты. Compose читает `backend/.env`
 через `env_file`, `DATABASE_URL` внутри сети compose перезаписывается
 на `postgres:5432`.
 
@@ -26,11 +27,42 @@
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` / `POSTGRES_PORT` | `postgres` / `postgrespassword` / `coolchess` / `5433` | для compose |
 | `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | нет (есть дефолт) |
 | `VITE_API_URL` | пусто для Vite proxy | нет |
+| `SMTP_HOST`, `SMTP_PORT` | `smtp.mail.ru`, `465` | значения по умолчанию |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | полный адрес Mail.ru и пароль приложения | да для регистрации |
+| `SMTP_FROM_EMAIL` | подтверждённый адрес отправителя; по умолчанию берётся `SMTP_USERNAME` | нет |
+| `SMTP_STARTTLS`, `SMTP_USE_SSL` | `false`, `true` (SSL на порту 465) | значения по умолчанию |
+| `FRONTEND_URL` | `http://localhost:5173` локально; HTTPS origin сайта в production | адрес, на который ведёт ссылка сброса пароля |
 
 Без `JWT_SECRET`/`VERIFY_SECRET` backend падает с `RuntimeError` (вне тестов).
+Регистрация требует заполненных `SMTP_USERNAME` и `SMTP_PASSWORD` в
+`backend/.env`. Для Mail.ru создайте пароль приложения; `SMTP_FROM_EMAIL`,
+если задан, должен совпадать с почтовым ящиком SMTP-логина. Сервер отправляет
+письма через Mail.ru SMTP независимым получателям, включая Mail.ru, Gmail и
+Яндекс.Почту. Коды подтверждения хранятся
+только в виде HMAC-хеша, действуют 10 минут и допускают до пяти попыток.
+Повторная отправка ограничена интервалом в 60 секунд. Для отправки обязательно
+включить `SMTP_STARTTLS` или `SMTP_USE_SSL`; при заполнении учётных данных
+нужно задать и логин, и пароль.
+Перед отправкой писем сброса пароля в production обязательно задайте
+`FRONTEND_URL` как публичный HTTPS-адрес frontend. Если переменная не задана,
+ссылка по умолчанию ведёт на `http://localhost:5173` и недоступна получателю
+вне вашей машины; почтовые сервисы могут помечать такую ссылку как подозрительную.
 Для SQLite без Docker: `DATABASE_URL=sqlite+aiosqlite:///./coolchess.db`.
 
 ## Порядок запуска с нуля
+
+Для всех локальных Python-команд проекта используется одно окружение
+`.venv` в корневой папке. Создайте и установите обычные backend-зависимости:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+В PowerShell окружение активируется командой
+`.\.venv\Scripts\Activate.ps1`. Maia-3 и веса модели необязательны; см. раздел
+ниже.
 
 Продоподобно (всё в Docker):
 
@@ -44,14 +76,17 @@ docker compose up --build -d
 
 Для разработки (только БД в Docker, остальное локально):
 
-```powershell
+```bash
 docker compose up -d postgres
 cd backend
-alembic upgrade head   # или: python init_db.py
-uvicorn server:app --reload --port 8080
+../.venv/bin/python -m alembic upgrade head
+../.venv/bin/python -m uvicorn server:app --reload --port 8080
 # отдельный терминал:
 cd frontend; npm install; npm run dev
 ```
+
+На Windows вместо `../.venv/bin/python` используйте
+`..\.venv\Scripts\python.exe`.
 
 Проверка: `GET http://localhost/health` (через nginx) или
 `GET http://127.0.0.1:8080/health` напрямую, Swagger — `/docs`.
@@ -63,7 +98,7 @@ cd frontend; npm install; npm run dev
 Без него бот работает в fallback-режиме (первый легальный ход, поле
 `fallback: true` в ответе) — это штатное поведение для dev. Для полной силы:
 положить `.pt`-файл в `backend/models/` и доустановить тяжёлые пакеты
-(см. блок «Maia-3» в `requirements.txt`: `torch` + `maia3` с GitHub).
+(см. блок «Maia-3» в корневом `requirements.txt`: `torch` + `maia3` с GitHub).
 
 ## Нюансы
 

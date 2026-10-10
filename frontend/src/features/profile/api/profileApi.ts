@@ -45,6 +45,30 @@ export type ChessComSyncResult = {
   message: string;
 };
 
+export type ChessPlatform = 'lichess' | 'chesscom';
+
+export type PlatformVerificationCode = {
+  platform: ChessPlatform;
+  username: string;
+  verification_code: string;
+  expires_at: string;
+  instructions: string;
+};
+
+export type PlatformAccountLinkResult = {
+  platform: ChessPlatform;
+  username: string;
+  message: string;
+  updated_elo: number | null;
+  lichess_blitz_rating: number | null;
+  lichess_rapid_rating: number | null;
+  lichess_puzzle_rating: number | null;
+  chesscom_blitz_rating: number | null;
+  chesscom_rapid_rating: number | null;
+  chesscom_bullet_rating: number | null;
+  chesscom_daily_rating: number | null;
+};
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem('coolchess.accessToken');
   const response = await fetchApi(path, {
@@ -84,5 +108,19 @@ export function syncChessComAccount(chesscomUsername: string) {
   return request<ChessComSyncResult>('/api/users/sync-chesscom', {
     method: 'POST',
     body: JSON.stringify({ chesscom_username: chesscomUsername }),
+  });
+}
+
+export function createPlatformVerificationCode(platform: ChessPlatform, username: string) {
+  return request<PlatformVerificationCode>('/api/users/platform-verification-code', {
+    method: 'POST',
+    body: JSON.stringify({ platform, username: username.trim() }),
+  });
+}
+
+export function verifyPlatformAccount(platform: ChessPlatform, username: string) {
+  return request<PlatformAccountLinkResult>('/api/users/verify-platform-account', {
+    method: 'POST',
+    body: JSON.stringify({ platform, username: username.trim() }),
   });
 }

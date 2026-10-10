@@ -188,7 +188,8 @@ async def test_pvp_http_create_and_state(authorized_client):
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["game_id"].startswith("pvp-")
+    assert len(data["game_id"]) == 5
+    assert data["room_code"] == data["game_id"]
     assert data["color"] == "white"
     assert data["time_control"] == 300
     assert data["increment"] == 5

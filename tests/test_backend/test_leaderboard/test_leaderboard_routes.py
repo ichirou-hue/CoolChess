@@ -11,6 +11,7 @@ def make_player(email: str, elo: int, level: int, xp: int, user_id=None):
     user = MagicMock(spec=User)
     user.id = user_id or uuid.uuid4()
     user.email = email
+    user.display_name = email.split("@", 1)[0].title()
     user.elo_rating = elo
     user.level = level
     user.xp = xp
@@ -39,6 +40,7 @@ async def test_get_leaderboard_anonymous_by_elo(anonymous_client, mock_db_sessio
         assert len(data["top_players"]) == 2
         # Email маскируется в публичном топе (защита PII)
         assert data["top_players"][0]["email"] == "m***@chess.com"
+        assert data["top_players"][0]["display_name"] == "Magnus"
         assert data["top_players"][0]["rank"] == 1
         assert data["top_players"][0]["puzzles_solved"] == 150
         assert data["my_rank"] is None

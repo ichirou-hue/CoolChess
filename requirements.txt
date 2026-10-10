@@ -1,6 +1,6 @@
 # CoolChess — зависимости backend
 # Установка: pip install -r requirements.txt
-# Проверка: .\venv\Scripts\python.exe -m pytest -q
+# Окружение проекта: .venv в корне. Проверка: .venv/bin/python -m pytest -q
 
 # --- Web API ---
 fastapi>=0.110.0

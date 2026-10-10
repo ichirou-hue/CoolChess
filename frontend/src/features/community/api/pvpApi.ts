@@ -1,8 +1,9 @@
 import { fetchApi, readApiError, wsUrlFor } from '../../../shared/api/apiBase';
 
 export type PvpPlayer = {
-  user_id: string;
+  user_id: string | null;
   email: string;
+  display_name: string;
   elo: number;
   connected: boolean;
 };
@@ -37,10 +38,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function createPvpRoom(opponentId: string, timeControl = 180, increment = 2) {
-  return request<{ game_id: string; status: string; data: PvpRoomState }>('/api/pvp/rooms', {
+export function createPvpRoom(timeControl = 180, increment = 2) {
+  return request<{ game_id: string; room_code: string; color: string; ws_url: string; time_control: number; increment: number }>('/api/pvp/create', {
     method: 'POST',
-    body: JSON.stringify({ opponent_id: opponentId, time_control: timeControl, increment }),
+    body: JSON.stringify({ time_control: timeControl, increment }),
   });
 }
 

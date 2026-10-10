@@ -1,7 +1,18 @@
+import json
+from pathlib import Path
+
 import pytest
 from unittest.mock import MagicMock
 from sqlalchemy.exc import IntegrityError
 from auth.models import Puzzle
+
+
+def test_category_seed_has_at_least_ten_puzzles_per_topic():
+    seed_path = Path(__file__).resolve().parents[3] / "backend" / "puzzles" / "category_seed.json"
+    seed_rows = json.loads(seed_path.read_text(encoding="utf-8"))
+
+    for theme in ("mateIn1", "mateIn2", "fork", "pin", "quietMove"):
+        assert sum(theme in puzzle["themes"].split() for puzzle in seed_rows) >= 10
 
 
 def make_fake_puzzle(
@@ -76,6 +87,37 @@ async def test_get_random_puzzle_not_found(authorized_client):
     response = await client.get("/api/puzzles/random?min_rating=3500")
     assert response.status_code == 404
     assert "не найдена" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_get_puzzle_batch_success_distinct_and_capped(authorized_client):
+    client, user, db = authorized_client
+
+    batch = [
+        make_fake_puzzle(puzzle_id=f"p{i:02d}", rating=1400, themes="intermezzo middlegame", moves="d7d5 e2e4 d7d5")
+        for i in range(12)
+    ]
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = batch
+    db.execute.return_value = mock_result
+
+    response = await client.get(
+        "/api/puzzles/batch?limit=12&difficulty=intermediate&theme=intermezzo&progress=unsolved"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 10
+    assert len({item["id"] for item in data}) == len(data)
+    assert all(item["initial_move"] == "d7d5" for item in data)
+    assert all("intermezzo" in item["themes"] for item in data)
+
+
+@pytest.mark.asyncio
+async def test_get_puzzle_batch_unauthorized(anonymous_client):
+    response = await anonymous_client.get("/api/puzzles/batch?limit=10")
+    assert response.status_code == 401
 
 
 # --- 3. POST /api/puzzles/{id}/solve ---

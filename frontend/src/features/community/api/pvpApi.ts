@@ -1,8 +1,9 @@
 import { fetchApi, readApiError, wsUrlFor } from '../../../shared/api/apiBase';
 
 export type PvpPlayer = {
-  user_id: string;
+  user_id: string | null;
   email: string;
+  display_name: string;
   elo: number;
   connected: boolean;
 };
@@ -17,6 +18,7 @@ export type PvpRoomState = {
   game_over: boolean;
   result: string | null;
   reason: string | null;
+  waiting_opponent: boolean;
   white_player: PvpPlayer;
   black_player: PvpPlayer;
 };
@@ -37,10 +39,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function createPvpRoom(opponentId: string, timeControl = 180, increment = 2) {
-  return request<{ game_id: string; status: string; data: PvpRoomState }>('/api/pvp/rooms', {
+export function createPvpRoom(timeControl = 180, increment = 2) {
+  return request<{ game_id: string; room_code: string; color: string; ws_url: string; time_control: number; increment: number }>('/api/pvp/create', {
     method: 'POST',
-    body: JSON.stringify({ opponent_id: opponentId, time_control: timeControl, increment }),
+    body: JSON.stringify({ time_control: timeControl, increment }),
   });
 }
 
@@ -48,7 +50,7 @@ export function getPvpRoom(gameId: string) {
   return request<PvpRoomState>(`/api/pvp/rooms/${encodeURIComponent(gameId)}`);
 }
 
-export function createPvpSocket(gameId: string, onMessage: (message: { type: string; data?: PvpRoomState; move?: string; result?: string; reason?: string; message?: string }) => void) {
+export function createPvpSocket(gameId: string, onMessage: (message: { type: string; data?: PvpRoomState; move?: string; result?: string; reason?: string; message?: string; user_id?: string; connected?: boolean }) => void) {
   const token = sessionStorage.getItem('coolchess.accessToken');
   const wsUrl = wsUrlFor(`/ws/pvp/${encodeURIComponent(gameId)}?token=${encodeURIComponent(token ?? '')}`);
   const socket = new WebSocket(wsUrl);

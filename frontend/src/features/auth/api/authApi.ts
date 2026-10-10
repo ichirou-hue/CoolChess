@@ -6,6 +6,7 @@ export type AuthUser = {
   email: string;
   display_name: string | null;
   role: 'student' | 'coach' | 'admin' | string;
+  is_superuser: boolean;
   elo_rating: number;
 };
 
@@ -61,7 +62,43 @@ export async function register(email: string, password: string, displayName: str
     throw new Error('Backend не нашёл маршрут регистрации (/api/auth/register). Проверьте адрес API и перезапустите frontend после изменения VITE_API_URL.');
   }
   if (!response.ok) throw new Error(await readError(response));
-  return login(email, password);
+}
+
+export async function verifyEmail(email: string, code: string) {
+  const response = await fetchApi('/api/auth/verify-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim(), code: code.trim() }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+}
+
+export async function resendVerification(email: string) {
+  const response = await fetchApi('/api/auth/resend-verification', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim() }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json() as Promise<{ message: string }>;
+}
+
+export async function requestPasswordReset(email: string) {
+  const response = await fetchApi('/api/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim() }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+}
+
+export async function resetPassword(token: string, password: string) {
+  const response = await fetchApi('/api/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
 }
 
 export async function getMe() {

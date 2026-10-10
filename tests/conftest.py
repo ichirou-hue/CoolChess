@@ -22,6 +22,7 @@ def mock_user():
     user = MagicMock(spec=User)
     user.id = uuid.uuid4()
     user.email = "testplayer@coolchess.com"
+    user.display_name = "Test Player"
     user.is_active = True
     user.is_verified = True
     user.is_superuser = False
@@ -49,7 +50,6 @@ def mock_db_session():
     """Мок асинхронной сессии SQLAlchemy."""
     session = AsyncMock()
     session.add = MagicMock()
-    session.delete = AsyncMock()  # AsyncSession.delete — awaitable (выход из клана)
     session.execute = AsyncMock()
     session.commit = AsyncMock()
     session.refresh = AsyncMock()

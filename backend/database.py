@@ -13,8 +13,8 @@ load_dotenv(dotenv_path=ROOT_ENV)
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    # Дефолт синхронизирован с docker-compose.yml (host-порт 5433 -> 5432 в контейнере).
-    "postgresql+asyncpg://postgres:postgrespassword@localhost:5433/coolchess"
+    # Safe local default; Docker Compose provides its PostgreSQL URL explicitly.
+    "sqlite+aiosqlite:///./coolchess.db",
 )
 
 # Асинхронный движок SQLAlchemy

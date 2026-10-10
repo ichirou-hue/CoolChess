@@ -22,8 +22,8 @@ from database import Base, DATABASE_URL
 # 3. Регистрируем все модели в Base.metadata
 import auth.models   # User, Puzzle и связанные таблицы
 import games.models  # GameSession
-import clans.models  # Clan, ClanMember
 import learning.models  # CourseProgress
+import tournaments.models  # Tournament, TournamentParticipant
 
 target_metadata = Base.metadata
 

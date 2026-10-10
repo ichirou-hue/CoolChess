@@ -19,6 +19,7 @@ UUID-колонки используют backend-агностичный `GUID`
 |---|---|---|
 | `id` | UUID | PK (fastapi-users) |
 | `email`, `hashed_password` | String | уникальность email; нормализация в `auth/schemas.py` |
+| `display_name` | VARCHAR(32) | публичное имя/никнейм; обязателен при регистрации |
 | `is_active`, `is_verified`, `is_superuser` | Bool | флаги fastapi-users |
 | `role` | Enum(`UserRole`) | по умолчанию `student` |
 | `elo_rating` | Integer | по умолчанию 1200, минимум 100 после матчей |
@@ -27,6 +28,8 @@ UUID-колонки используют backend-агностичный `GUID`
 | `lichess_username` | VARCHAR(50), index | подтверждённый аккаунт |
 | `lichess_blitz_rating`, `lichess_rapid_rating`, `lichess_puzzle_rating` | Integer, nullable | из Lichess API |
 | `lichess_verification_code` | VARCHAR(32), nullable | случайный `coolchess-<hex>` |
+| `chesscom_username` | VARCHAR(50), index | имя публичного профиля Chess.com; владение не подтверждается |
+| `chesscom_blitz_rating`, `chesscom_rapid_rating`, `chesscom_bullet_rating`, `chesscom_daily_rating` | Integer, nullable | публичная статистика Chess.com |
 
 ### `puzzles`
 Задачи Lichess (`Puzzle` в `backend/auth/models.py`).
@@ -39,6 +42,10 @@ UUID-колонки используют backend-агностичный `GUID`
 | `rating`, `rating_deviation`, `popularity` | Integer | сложность и индекс `idx_puzzle_rating` |
 | `themes` | String | теги через пробел (маппинг — `docs/puzzle-topic-map.md`) |
 | `game_url` | String, nullable | ссылка на исходную партию |
+
+Миграция `seed_category_puzzles` добавляет стартовый пул beginner-уровня:
+не менее десяти задач для категорий «Мат в 1», «Мат в 2», «Вилка», «Связка»
+и «Лучший ход».
 
 ### `user_solved_puzzles`
 Many-to-many «кто что решил», защита от фарма наград.
@@ -63,35 +70,24 @@ Many-to-many «кто что решил», защита от фарма нагр
 | `moves_uci` | Text | ходы через пробел |
 | `created_at`, `updated_at` | DateTime | |
 
-### `clans`
-Кланы (`backend/clans/models.py`).
+### `tournaments` и `tournament_participants`
+Турниры (`backend/tournaments/models.py`) доступны для просмотра всем
+пользователям. Создавать события, добавлять игроков и распределять их по
+группам могут тренеры (`coach`) и администраторы (`admin`); игрок может
+самостоятельно записаться и выбрать желаемый цвет.
 
-| Колонка | Тип | Заметка |
-|---|---|---|
-| `id` | UUID | PK |
-| `name` | VARCHAR(50), unique, index | 3–50 символов |
-| `tag` | VARCHAR(6), unique, index | 2–6 символов, хранится в UPPER |
-| `description` | VARCHAR(255), nullable | |
-| `created_at` | DateTime(tz) | |
-| `leader_id` | UUID → `users.id` (RESTRICT) | удаление лидера при живом клане запрещено |
-
-### `clan_members`
-Членство «1 игрок = максимум 1 клан» (`ClanRole`: `leader`/`officer`/`member`).
-
-| Колонка | Тип | Заметка |
-|---|---|---|
-| `id` | UUID | PK |
-| `clan_id` | UUID → `clans.id` (CASCADE) | удаление клана чистит состав |
-| `user_id` | UUID → `users.id` (CASCADE), **unique** | один игрок — один клан |
-| `role` | Enum(`ClanRole`) | по умолчанию `member` |
-| `joined_at` | DateTime(tz) | |
-| `uq_clan_member` | Unique(`clan_id`, `user_id`) | защита от дублей |
+`tournaments` хранит название, описание, формат (`round_robin`, `swiss`,
+`single_elimination`), контроль времени, инкремент, лимит участников и статус
+регистрации. `tournament_participants` связывает турнир с игроком и хранит
+группу, выбранную сторону и время регистрации; уникальная пара
+`(tournament_id, user_id)` запрещает повторную запись.
 
 ### PvP-комнаты (без таблиц)
 `backend/pvp/` состояния в БД не хранит: `ChessGameRoom` (доска, часы
 `white_time_left`/`black_time_left`, `result`, `termination_reason`) живёт
 в `PVPConnectionManager.active_rooms` (in-memory синглтон `pvp_manager`).
-Перезапуск backend обнуляет все PvP-партии — это осознанное решение для прототипа.
+Комнаты получают короткий пятисимвольный код. Перезапуск backend обнуляет все
+PvP-партии — это осознанное решение для прототипа.
 
 ## Подключение
 
@@ -110,10 +106,10 @@ DATABASE_URL=sqlite+aiosqlite:///./coolchess.db
 | Скрипт | Назначение |
 |---|---|
 | `backend/alembic/versions/*` | **Источник истины.** История схемы; применяется через `alembic upgrade head` |
-| `backend/init_db.py` | `Base.metadata.create_all` — dev-инициализация без истории (импортирует `auth`/`games`/`clans.models`) |
+| `backend/init_db.py` | `Base.metadata.create_all` — dev-инициализация без истории (импортирует активные модели) |
 | `backend/update_schema.py` | **Legacy.** `ALTER TABLE ... ADD COLUMN` только для `users` на базах до Alembic; новые таблицы не создаёт |
 | `backend/schema.sql` | эталонная схема для ревью (генерируется `python dump_ddl.py > schema.sql`) |
-| `backend/dump_ddl.py` | дамп DDL из метаданных (импортирует `auth`/`games`/`clans.models`) |
+| `backend/dump_ddl.py` | дамп DDL из активных метаданных |
 | `backend/load_lichess_puzzles.py` | загрузка задач в таблицу `puzzles` |
 | `scripts/import_lichess_puzzles.py` | компактный `frontend/public/data/puzzles.json` из `lichess_db_puzzle.csv.zst` (исходник вне Git) |
 

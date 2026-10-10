@@ -175,6 +175,81 @@ def test_claim_black_seat():
     assert pvp_manager.claim_black_seat("game-claim-test", uuid.uuid4()) is False
 
 
+@pytest.mark.asyncio
+async def test_direct_invite_waits_for_both_players_to_connect():
+    from unittest.mock import AsyncMock
+
+    white_id = uuid.uuid4()
+    black_id = uuid.uuid4()
+    room = pvp_manager.create_room(
+        "direct-invite-acceptance",
+        PlayerConnection(user_id=white_id),
+        PlayerConnection(user_id=black_id),
+        requires_opponent_acceptance=True,
+    )
+
+    assert room.both_players_accepted is False
+    assert room.to_dict()["waiting_opponent"] is True
+
+    white_socket = AsyncMock()
+    await pvp_manager.connect_player(room.game_id, white_id, white_socket)
+    assert room.both_players_accepted is False
+
+    black_socket = AsyncMock()
+    await pvp_manager.connect_player(room.game_id, black_id, black_socket)
+    assert room.both_players_accepted is True
+    assert room.to_dict()["waiting_opponent"] is False
+    updated_state = white_socket.send_json.await_args.args[0]["data"]
+    assert updated_state["waiting_opponent"] is False
+    assert updated_state["black_player"]["connected"] is True
+
+
+@pytest.mark.asyncio
+async def test_unaccepted_direct_invite_is_not_settled(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    white_id = uuid.uuid4()
+    black_id = uuid.uuid4()
+    room = pvp_manager.create_room(
+        "direct-invite-no-settlement",
+        PlayerConnection(user_id=white_id),
+        PlayerConnection(user_id=black_id),
+        requires_opponent_acceptance=True,
+    )
+    room.end_game("0-1", "resignation")
+    session_factory = AsyncMock()
+    monkeypatch.setattr("database.async_session_maker", session_factory)
+
+    await pvp_manager.settle_ratings(room)
+
+    session_factory.assert_not_called()
+
+
+def test_direct_invite_cannot_move_or_start_clock_before_acceptance():
+    client = TestClient(app)
+    white_id = uuid.uuid4()
+    black_id = uuid.uuid4()
+    room = pvp_manager.create_room(
+        "direct-invite-before-acceptance",
+        PlayerConnection(user_id=white_id),
+        PlayerConnection(user_id=black_id),
+        requires_opponent_acceptance=True,
+    )
+
+    token_white = create_token_for_user(white_id)
+    with client.websocket_connect(
+        f"/ws/pvp/{room.game_id}?token={token_white}"
+    ) as websocket:
+        assert websocket.receive_json()["type"] == "game_state"
+        websocket.send_json({"action": "move", "move": "e2e4"})
+        error = websocket.receive_json()
+
+    assert error["type"] == "error"
+    assert "не принял приглашение" in error["message"]
+    assert room.board.ply() == 0
+    assert room.is_active is False
+
+
 # --- 4. HTTP-создание комнаты ---
 
 import pytest as _pytest
@@ -188,7 +263,8 @@ async def test_pvp_http_create_and_state(authorized_client):
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["game_id"].startswith("pvp-")
+    assert len(data["game_id"]) == 5
+    assert data["room_code"] == data["game_id"]
     assert data["color"] == "white"
     assert data["time_control"] == 300
     assert data["increment"] == 5
@@ -292,6 +368,7 @@ async def test_pvp_rooms_create_and_get(authorized_client):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "waiting"
+    assert data["data"]["waiting_opponent"] is True
     assert data["data"]["black_player"]["user_id"] == str(opponent.id)
 
     state = await client.get(f"/api/pvp/rooms/{data['game_id']}")

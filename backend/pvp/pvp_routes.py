@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import secrets
 import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query, status
@@ -31,6 +32,7 @@ class PvpCreateRequest(BaseModel):
 
 class PvpCreateResponse(BaseModel):
     game_id: str
+    room_code: str
     color: str = "white"
     ws_url: str
     time_control: int
@@ -60,10 +62,11 @@ async def create_pvp_room_direct(
     game_id = str(uuid.uuid4())
     room = pvp_manager.create_room(
         game_id,
-        PlayerConnection(user_id=user.id, email=user.email, elo=user.elo_rating),
-        PlayerConnection(user_id=opponent.id, email=opponent.email, elo=opponent.elo_rating),
+        PlayerConnection(user_id=user.id, email=user.email, display_name=user.display_name, elo=user.elo_rating),
+        PlayerConnection(user_id=opponent.id, email=opponent.email, display_name=opponent.display_name, elo=opponent.elo_rating),
         time_control=payload.time_control,
         increment=payload.increment,
+        requires_opponent_acceptance=True,
     )
     return {"game_id": game_id, "status": "waiting", "data": room.to_dict()}
 
@@ -108,8 +111,11 @@ async def create_pvp_room(
 
     Соперник занимает место чёрных первым подключением к WS.
     """
-    game_id = f"pvp-{uuid.uuid4().hex[:12]}"
-    white = PlayerConnection(user_id=user.id, email=user.email, elo=user.elo_rating)
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    game_id = "".join(secrets.choice(alphabet) for _ in range(5))
+    while pvp_manager.get_room(game_id) is not None:
+        game_id = "".join(secrets.choice(alphabet) for _ in range(5))
+    white = PlayerConnection(user_id=user.id, email=user.email, display_name=user.display_name, elo=user.elo_rating)
     black = PlayerConnection(user_id=None)  # открытое место
     pvp_manager.create_room(
         game_id,
@@ -120,6 +126,7 @@ async def create_pvp_room(
     )
     return PvpCreateResponse(
         game_id=game_id,
+        room_code=game_id,
         color="white",
         ws_url=f"/ws/pvp/{game_id}",
         time_control=payload.time_control,
@@ -128,7 +135,7 @@ async def create_pvp_room(
 
 
 @pvp_http_router.get("/{game_id}")
-async def get_pvp_state(game_id: str, user: User = Depends(current_active_user)):
+async def get_pvp_state(game_id: str, _user: User = Depends(current_active_user)):
     """Состояние комнаты по HTTP (тот же снапшот, что и `game_state` в WS)."""
     room = pvp_manager.get_room(game_id)
     if not room:
@@ -158,17 +165,19 @@ async def pvp_websocket_endpoint(
         and user_id not in room.spectators
         and room.black_seat_open
     ):
-        email, elo = "", 1200
+        email, display_name, elo = "", "", 1200
         try:
             async with async_session_maker() as session:
                 db_user = (
                     await session.execute(select(User).where(User.id == user_id))
                 ).scalar_one_or_none()
                 if db_user:
-                    email, elo = db_user.email, db_user.elo_rating
+                    email, display_name, elo = db_user.email, db_user.display_name, db_user.elo_rating
         except Exception as e:
             logger.warning(f"[PvP] Не удалось загрузить пользователя {user_id}: {e}")
-        pvp_manager.claim_black_seat(game_id, user_id, email=email, elo=elo)
+        pvp_manager.claim_black_seat(
+            game_id, user_id, email=email, display_name=display_name, elo=elo
+        )
 
     connected = await pvp_manager.connect_player(game_id, user_id, websocket)
     if not connected:
@@ -202,6 +211,15 @@ async def pvp_websocket_endpoint(
 
                 if not (is_white or is_black):
                     await websocket.send_json({"type": "error", "message": "Зрители не могут ходить."})
+                    continue
+
+                if not room.both_players_accepted:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": "Соперник ещё не принял приглашение. Ожидайте его подключения.",
+                        }
+                    )
                     continue
 
                 if (is_white and room.board.turn != True) or (is_black and room.board.turn != False):

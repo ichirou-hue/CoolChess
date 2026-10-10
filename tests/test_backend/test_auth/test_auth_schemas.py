@@ -36,14 +36,33 @@ def test_normalize_email_invalid_format():
 def test_user_create_schema_defaults():
     payload = {
         "email": "student@chess.org",
-        "password": "strong_password_123",
-        "display_name": "СмелыйКонь",
+        "password": "N0tChess!R0cks_2026",
+        "display_name": "Ученик",
     }
     user_data = UserCreate(**payload)
+    assert user_data.display_name == "Ученик"
     # Роль и стартовый Elo назначаются сервером (дефолты модели),
     # в схеме регистрации этих полей быть не должно.
     assert "role" not in UserCreate.model_fields
     assert "elo_rating" not in UserCreate.model_fields
+
+
+def test_user_create_normalizes_display_name():
+    user_data = UserCreate(
+        email="student@chess.org",
+        password="N0tChess!R0cks_2026",
+        display_name="  Сильный   Игрок  ",
+    )
+    assert user_data.display_name == "Сильный Игрок"
+
+
+def test_user_create_rejects_blank_display_name():
+    with pytest.raises(ValueError):
+        UserCreate(
+            email="student@chess.org",
+            password="N0tChess!R0cks_2026",
+            display_name="   ",
+        )
 
 
 def test_user_create_schema_ignores_privilege_escalation():
@@ -51,8 +70,9 @@ def test_user_create_schema_ignores_privilege_escalation():
     # пользователь всегда создается с серверным дефолтом STUDENT.
     user_data = UserCreate(
         email="attacker@chess.org",
-        password="strong_password_123",
-        display_name="ЛовкийКонь",
+        password="N0tChess!R0cks_2026",
+        display_name="Игрок",
+
         role="coach",  # type: ignore[call-arg] — лишнее поле отбрасывается
     )
     assert getattr(user_data, "role", None) is None

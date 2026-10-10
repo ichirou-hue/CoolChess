@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from datetime import datetime
 
 from games.models import Game, GameStatus, PlayerColor
+from games.game_routes import _board_for_game, _terminal_game_status
 
 
 def make_fake_game(
@@ -27,6 +28,26 @@ def make_fake_game(
     game.created_at = datetime(2026, 1, 1, 12, 0, 0)
     game.updated_at = datetime(2026, 1, 1, 12, 0, 0)
     return game
+
+
+def test_repeated_position_is_drawn_only_at_fivefold_repetition():
+    knight_cycle = "g1f3 g8f6 f3g1 f6g8"
+    claimable_game = make_fake_game(moves_uci=" ".join([knight_cycle] * 2))
+    automatic_draw_game = make_fake_game(moves_uci=" ".join([knight_cycle] * 4))
+
+    claimable_board = _board_for_game(claimable_game)
+    automatic_draw_board = _board_for_game(automatic_draw_game)
+
+    assert claimable_board.can_claim_threefold_repetition()
+    assert _terminal_game_status(claimable_board, PlayerColor.WHITE) is None
+    assert _terminal_game_status(automatic_draw_board, PlayerColor.WHITE) == GameStatus.DRAW
+
+
+def test_stalemate_is_a_draw():
+    board = chess.Board("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1")
+
+    assert board.is_stalemate()
+    assert _terminal_game_status(board, PlayerColor.WHITE) == GameStatus.DRAW
 
 
 # --- 1. ПРОВЕРКА АВТОРИЗАЦИИ (401) ---
@@ -219,6 +240,64 @@ async def test_make_move_player_checkmates_bot(authorized_client):
     assert data["coins_earned"] == 30
     assert user.xp == 100
     assert user.games_played == 1
+
+
+@pytest.mark.asyncio
+async def test_make_move_bot_checkmates_player_is_not_reported_as_draw(authorized_client, monkeypatch):
+    client, user, db = authorized_client
+    fen_before_player_move = "rnbqkbnr/pppp1ppp/8/4p3/8/5P2/PPPPP1PP/RNBQKBNR w KQkq - 0 2"
+    fake_game = make_fake_game(
+        user_id=user.id,
+        player_color=PlayerColor.WHITE,
+        current_fen=fen_before_player_move,
+        moves_uci="f2f3 e7e5",
+    )
+    board_after_bot = chess.Board(fen_before_player_move)
+    board_after_bot.push_uci("g2g4")
+    board_after_bot.push_uci("d8h4")
+
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = fake_game
+    db.execute.return_value = mock_res
+    monkeypatch.setattr(
+        "games.game_routes.maia_engine.predict_move",
+        lambda fen, target_rating: {"move_uci": "d8h4", "new_fen": board_after_bot.fen()},
+    )
+
+    response = await client.post(
+        f"/api/games/{fake_game.id}/move",
+        json={"move_uci": "g2g4"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "bot_won"
+    assert response.json()["winner"] == "bot"
+
+
+@pytest.mark.asyncio
+async def test_make_move_rejects_illegal_maia_reply_without_changing_game(authorized_client, monkeypatch):
+    client, user, db = authorized_client
+    fake_game = make_fake_game(user_id=user.id)
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = fake_game
+    db.execute.return_value = mock_res
+    monkeypatch.setattr(
+        "games.game_routes.maia_engine.predict_move",
+        lambda fen, target_rating: {
+            "move_uci": "e2e4",
+            "new_fen": chess.STARTING_FEN,
+        },
+    )
+
+    response = await client.post(
+        f"/api/games/{fake_game.id}/move",
+        json={"move_uci": "e2e4"},
+    )
+
+    assert response.status_code == 502
+    assert "Maia вернула некорректный ход" in response.json()["detail"]
+    assert fake_game.current_fen == chess.STARTING_FEN
+    db.commit.assert_not_awaited()
 
 
 # --- 5. СДАЧА ПАРТИИ (POST /api/games/{id}/resign) ---

@@ -1,9 +1,7 @@
-import asyncio
 import time
 import uuid
 import chess
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
 from typing import Optional, Dict
 from fastapi import WebSocket
 
@@ -22,6 +20,7 @@ def calculate_pvp_elo_delta(user_elo: int, opponent_elo: int, actual: float, k: 
 class PlayerConnection:
     user_id: Optional[uuid.UUID]  # None = открытое место (ждём соперника)
     email: str = ""
+    display_name: str = ""
     elo: int = 1200
     websocket: Optional[WebSocket] = None
     connected: bool = False
@@ -37,10 +36,13 @@ class ChessGameRoom:
         black_player: PlayerConnection,
         base_time_seconds: int = 180,  # 3 минуты по умолчанию
         increment_seconds: int = 2,    # +2 сек инкремент
+        requires_opponent_acceptance: bool = False,
     ):
         self.game_id = game_id
         self.white = white_player
         self.black = black_player
+        self.requires_opponent_acceptance = requires_opponent_acceptance
+        self.accepted_player_ids: set[uuid.UUID] = set()
         self.base_time = base_time_seconds
         self.increment = increment_seconds
 
@@ -155,6 +157,17 @@ class ChessGameRoom:
         """Место чёрных ждёт соперника (создано через POST /api/pvp/create)."""
         return self.black.user_id is None
 
+    @property
+    def both_players_accepted(self) -> bool:
+        player_ids = {self.white.user_id, self.black.user_id}
+        return (
+            not self.requires_opponent_acceptance
+            or (
+                None not in player_ids
+                and player_ids.issubset(self.accepted_player_ids)
+            )
+        )
+
     def touch(self) -> None:
         self.last_activity_wall = time.time()
 
@@ -163,6 +176,7 @@ class ChessGameRoom:
         return {
             "user_id": str(player.user_id) if player.user_id else None,
             "email": player.email,
+            "display_name": player.display_name,
             "elo": player.elo,
             "connected": player.connected,
         }
@@ -178,7 +192,7 @@ class ChessGameRoom:
             "game_over": self.game_over,
             "result": self.result,
             "reason": self.termination_reason,
-            "waiting_opponent": self.black_seat_open,
+            "waiting_opponent": self.black_seat_open or not self.both_players_accepted,
             "white_player": self._player_dict(self.white),
             "black_player": self._player_dict(self.black),
         }

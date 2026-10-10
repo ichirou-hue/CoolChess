@@ -7,17 +7,17 @@ from puzzles.puzzle_routes import puzzle_router
 from games.game_routes import game_router
 from leaderboard.leaderboard_routes import leaderboard_router
 from bot.bot_routes import bot_router
-from clans.clan_routes import clan_router
 from auth.users_routes import users_router
 from learning.course_routes import course_router
 from pvp.pvp_routes import pvp_router, pvp_http_router, pvp_api_router
+from tournaments.tournament_routes import tournament_router
 from pvp.manager import pvp_manager
 
 from auth.manager import (
     auth_backend,
     fastapi_users,
 )
-from auth.schemas import UserRead, UserCreate, UserUpdate
+from auth.schemas import UserRead, UserUpdate
 
 
 
@@ -58,10 +58,10 @@ app.include_router(leaderboard_router)
 app.include_router(bot_router)
 app.include_router(users_router)
 app.include_router(course_router)
-app.include_router(clan_router)
 app.include_router(pvp_router)
 app.include_router(pvp_http_router)
 app.include_router(pvp_api_router)
+app.include_router(tournament_router)
 
 # 2. Аутентификация и управление аккаунтом (fastapi-users)
 app.include_router(
@@ -70,17 +70,7 @@ app.include_router(
     tags=["Auth"],
 )
 app.include_router(
-    fastapi_users.get_register_router(UserRead, UserCreate),
-    prefix="/api/auth",
-    tags=["Auth"],
-)
-app.include_router(
     fastapi_users.get_reset_password_router(),
-    prefix="/api/auth",
-    tags=["Auth"],
-)
-app.include_router(
-    fastapi_users.get_verify_router(UserRead),
     prefix="/api/auth",
     tags=["Auth"],
 )

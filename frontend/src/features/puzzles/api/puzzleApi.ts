@@ -61,6 +61,16 @@ export function getRandomPuzzle(filters: string | PuzzleFilters = {}) {
   return request<Puzzle>(`/api/puzzles/random?${query.toString()}`);
 }
 
+export function getPuzzleBatch(filters: string | PuzzleFilters = {}, limit = 10) {
+  const normalized: PuzzleFilters = typeof filters === 'string' ? { theme: filters } : filters;
+  const query = new URLSearchParams({ limit: String(Math.min(10, Math.max(1, limit))) });
+  if (normalized.theme) query.set('theme', normalized.theme);
+  if (normalized.difficulty) query.set('difficulty', normalized.difficulty);
+  if (normalized.progress === 'solved') query.set('solved_only', 'true');
+  else if (normalized.progress !== 'all') query.set('exclude_solved', 'true');
+  return request<Puzzle[]>(`/api/puzzles/batch?${query.toString()}`);
+}
+
 export function submitPuzzleMove(puzzleId: string, movesUci: string) {
   return request<PuzzleSolveResult>(`/api/puzzles/${encodeURIComponent(puzzleId)}/solve`, {
     method: 'POST',

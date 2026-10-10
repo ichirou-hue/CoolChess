@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import time
 import uuid
@@ -40,6 +39,7 @@ class PVPConnectionManager:
         black_player: PlayerConnection,
         time_control: int = 180,
         increment: int = 2,
+        requires_opponent_acceptance: bool = False,
     ) -> ChessGameRoom:
         room = ChessGameRoom(
             game_id=game_id,
@@ -47,12 +47,18 @@ class PVPConnectionManager:
             black_player=black_player,
             base_time_seconds=time_control,
             increment_seconds=increment,
+            requires_opponent_acceptance=requires_opponent_acceptance,
         )
         self.active_rooms[game_id] = room
         return room
 
     def claim_black_seat(
-        self, game_id: str, user_id: uuid.UUID, email: str = "", elo: int = 1200
+        self,
+        game_id: str,
+        user_id: uuid.UUID,
+        email: str = "",
+        display_name: str = "",
+        elo: int = 1200,
     ) -> bool:
         """Первый подключившийся чужак занимает открытое место чёрных."""
         room = self.get_room(game_id)
@@ -62,6 +68,7 @@ class PVPConnectionManager:
             return False
         room.black.user_id = user_id
         room.black.email = email
+        room.black.display_name = display_name
         room.black.elo = elo
         room.touch()
         return True
@@ -77,9 +84,11 @@ class PVPConnectionManager:
         if room.white.user_id == user_id:
             room.white.websocket = websocket
             room.white.connected = True
+            room.accepted_player_ids.add(user_id)
         elif room.black.user_id is not None and room.black.user_id == user_id:
             room.black.websocket = websocket
             room.black.connected = True
+            room.accepted_player_ids.add(user_id)
         else:
             # Зритель (Spectator)
             room.spectators[user_id] = websocket
@@ -90,7 +99,12 @@ class PVPConnectionManager:
         # Оповещаем остальных об обновлении статуса подключения
         await self.broadcast_to_room(
             game_id,
-            {"type": "player_status", "user_id": str(user_id), "connected": True},
+            {
+                "type": "player_status",
+                "user_id": str(user_id),
+                "connected": True,
+                "data": room.to_dict(),
+            },
             exclude=websocket,
         )
         return True
@@ -211,7 +225,11 @@ class PVPConnectionManager:
 
     async def settle_ratings(self, room: ChessGameRoom):
         """Симметричный пересчёт Elo обоим участникам (K=32, пол 100)."""
-        if room.black_seat_open or room.white.user_id is None:
+        if (
+            room.black_seat_open
+            or room.white.user_id is None
+            or not room.both_players_accepted
+        ):
             return
         if room.white.user_id == room.black.user_id:
             return

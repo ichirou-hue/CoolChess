@@ -18,6 +18,34 @@ from puzzles.rewards import calculate_level
 game_router = APIRouter(prefix="/api/games", tags=["Партии с Maia Bot"])
 
 
+def _board_for_game(game: Game) -> chess.Board:
+    moves = game.moves_uci.split() if game.moves_uci else []
+    if not moves:
+        return chess.Board(game.current_fen)
+
+    board = chess.Board()
+    try:
+        for move_uci in moves:
+            board.push_uci(move_uci)
+    except (chess.IllegalMoveError, chess.InvalidMoveError, chess.AmbiguousMoveError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="История партии повреждена; начните новую игру.",
+        ) from exc
+
+    return board
+
+
+def _terminal_game_status(board: chess.Board, player_color: PlayerColor) -> Optional[GameStatus]:
+    outcome = board.outcome()
+    if outcome is None:
+        return None
+    if outcome.winner is None:
+        return GameStatus.DRAW
+    player_is_white = player_color == PlayerColor.WHITE
+    return GameStatus.PLAYER_WON if outcome.winner == player_is_white else GameStatus.BOT_WON
+
+
 def _build_game_response(
     game: Game,
     last_bot_move: Optional[str] = None,
@@ -135,7 +163,7 @@ async def make_move(
     if game.status != GameStatus.IN_PROGRESS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Партия уже завершена.")
 
-    board = chess.Board(game.current_fen)
+    board = _board_for_game(game)
 
     # 1. Валидация хода игрока
     try:
@@ -157,10 +185,10 @@ async def make_move(
     elo_delta = 0
 
     # 2. Проверка: не поставил ли игрок мат / пат
-    if board.is_game_over():
-        outcome = "win" if board.is_checkmate() else "draw"
-        game.status = GameStatus.PLAYER_WON if outcome == "win" else GameStatus.DRAW
-
+    terminal_status = _terminal_game_status(board, game.player_color)
+    if terminal_status is not None:
+        game.status = terminal_status
+        outcome = "win" if terminal_status == GameStatus.PLAYER_WON else "draw"
         rewards = calculate_match_rewards(user.elo_rating, game.bot_difficulty, outcome)
         apply_match_rewards_to_user(user, rewards)
         xp_earned = rewards["xp_earned"]
@@ -178,20 +206,32 @@ async def make_move(
     bot_res = maia_engine.predict_move(board.fen(), target_rating=game.bot_difficulty)
     bot_move_uci = bot_res.get("move_uci")
 
-    if bot_move_uci:
-        moves_list.append(bot_move_uci)
-        board_after_bot = chess.Board(bot_res["new_fen"])
-        game.current_fen = bot_res["new_fen"]
+    if not bot_move_uci:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Maia не вернула ход для незавершённой позиции. Попробуйте ещё раз.",
+        )
+    try:
+        bot_move = board.parse_uci(bot_move_uci)
+    except (chess.IllegalMoveError, chess.InvalidMoveError, chess.AmbiguousMoveError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Maia вернула некорректный ход. Партия не изменена; попробуйте ещё раз.",
+        ) from exc
 
-        if board_after_bot.is_game_over():
-            outcome = "loss" if board_after_bot.is_checkmate() else "draw"
-            game.status = GameStatus.BOT_WON if outcome == "loss" else GameStatus.DRAW
+    board.push(bot_move)
+    moves_list.append(bot_move.uci())
+    game.current_fen = board.fen()
 
-            rewards = calculate_match_rewards(user.elo_rating, game.bot_difficulty, outcome)
-            apply_match_rewards_to_user(user, rewards)
-            xp_earned = rewards["xp_earned"]
-            coins_earned = rewards["coins_earned"]
-            elo_delta = rewards["elo_delta"]
+    terminal_status = _terminal_game_status(board, game.player_color)
+    if terminal_status is not None:
+        game.status = terminal_status
+        outcome = "win" if terminal_status == GameStatus.PLAYER_WON else "loss" if terminal_status == GameStatus.BOT_WON else "draw"
+        rewards = calculate_match_rewards(user.elo_rating, game.bot_difficulty, outcome)
+        apply_match_rewards_to_user(user, rewards)
+        xp_earned = rewards["xp_earned"]
+        coins_earned = rewards["coins_earned"]
+        elo_delta = rewards["elo_delta"]
 
     game.moves_uci = " ".join(moves_list)
     await db.commit()

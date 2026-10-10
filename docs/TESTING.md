@@ -2,11 +2,13 @@
 
 ## Backend (pytest)
 
-```powershell
-.\venv\Scripts\python.exe -m pytest -q
+```bash
+.venv/bin/python -m pytest -q
 ```
 
-- Сейчас: **124 теста, 0 failed** (~1 сек).
+- Используйте единое Python-окружение `.venv` в корневой папке проекта.
+  В Windows команда: `.venv\Scripts\python.exe -m pytest -q`.
+- Последняя проверка: **129 тестов, 0 failed**.
 - Конфигурация — `pyproject.toml`: `pythonpath = ["backend"]`
   (импорты `server`, `database`, `auth`, ... работают из корня),
   `testpaths = ["tests"]`.
@@ -16,14 +18,34 @@
 - На Python 3.14 `AsyncMock` без настроенного `return_value` возвращает
   корутину из дочерних вызовов: моки БД надо wire'ить явно
   (`execute.return_value = MagicMock(scalar_one_or_none=...)`), как в
-  `test_auth_routes.py` и `test_clan_routes.py`.
+  `test_auth_routes.py`.
 
-### Фикстуры (`tests/conftest.py`)
+  ### Демо-аккаунты для ручной проверки
+
+  Чтобы развернуть готовые входы всех ролей в локальной или тестовой базе,
+  перейдите в `backend/` и выполните:
+
+  ```bash
+  ENV=development ENABLE_DEMO_ACCOUNTS=true ../.venv/bin/python seed_demo_accounts.py
+  ```
+
+  | Роль | Email | Пароль |
+  |---|---|---|
+  | Администратор | `admin@coolchess.com` | `Rook&River_74Moon` |
+  | Тренер | `coach@coolchess.com` | `Bishop!Cedar_83Lake` |
+  | Ученик | `student@coolchess.com` | `Knight#Cloud_59Pine` |
+
+  Скрипт идемпотентен и при повторном запуске сбрасывает эти три аккаунта на
+  указанные роли и пароли. В production запуск запрещён; не используйте общие
+  демо-пароли в публичной или рабочей базе. Старые локальные email на домене
+  `@coolchess.local` автоматически заменяются на валидные `@coolchess.com`.
+
+  ### Фикстуры (`tests/conftest.py`)
 
 | Фикстура | Что даёт |
 |---|---|
 | `mock_user` | `User` с `elo 1200`, `xp/coins 0`, роль `student` |
-| `mock_db_session` | `AsyncMock` сессии (`execute/commit/refresh/rollback` — awaitable, `add` — sync `MagicMock`, `delete` — awaitable `AsyncMock` для выхода из клана) |
+| `mock_db_session` | `AsyncMock` сессии (`execute/commit/refresh/rollback` — awaitable, `add` — sync `MagicMock`) |
 | `authorized_client` | `AsyncClient` + подмена `current_active_user` и `get_async_session` |
 | `anonymous_client` | `AsyncClient` без авторизации (проверка 401; WS-тесты строят свой `TestClient(app)`) |
 
@@ -31,20 +53,20 @@
 
 | Папка | Что проверяется |
 |---|---|
-| `test_auth/` | роуты, схемы (`UserCreate` — disposable-домены, нормализация email), модель `User` |
+| `test_auth/` | регистрация и подтверждение email-кодом, повторная отправка, запрет входа до подтверждения, схемы и нормализация email |
 | `test_bot/` | валидация FEN (400), difficulty (422 вне 1–3000), инференс/fallback `predict_move` |
-| `test_clans/` (18) | `list` (пусто/с данными, `members_count`/`total_elo`), `create` (успех/401/уже-в-клане/дубль), `join` (успех/уже-в-клане/404), `leave` (не-в-клане/лидер-запрет/успех), `detail` (успех/404), `disband` (403/успех), `transfer` (успех/404) |
 | `test_games/` | + старт с висящей партией: старая закрывается как сданная с Elo-штрафом без XP |
 | `test_pvp/` (11) | `ChessGameRoom`: ходы + инкремент, таймаут; `calculate_pvp_elo_delta`; claim места чёрных; HTTP `create` (+422/404); фоновый таймаут; чистка комнат; WS: `1008` без токена, flow `game_state → ping/pong → move_made → resign/game_over` |
+| `test_tournaments/` | RBAC создания, валидация параметров, создание тренером и выбор стороны игроком |
 | `test_games/` | экономика матчей (`elo_delta`, XP/монеты, resign без наград), роуты старта/ходов/сдачи |
 | `test_puzzles/` | тиры наград, `calculate_level`, anti-farm (`already_solved`, `IntegrityError`) |
 | `test_leaderboard/` | категории, `my_rank`, маскирование email |
-| `test_integrations/` | `lichess_service`: 404/429/502/503, парсинг `perfs` |
+| `test_integrations/` | сервисы Lichess и Chess.com: валидация ника, обработка HTTP-ошибок и парсинг рейтингов |
 
 ## База знаний (валидатор контента)
 
-```powershell
-python scripts/validate_knowledge_base.py
+```bash
+.venv/bin/python scripts/validate_knowledge_base.py
 ```
 
 Проверяет `content/manifest.json` (9 статей `ready`): существование файла,
@@ -55,14 +77,14 @@ YAML front matter (`topicId`, `moduleId`, `title`, `level`, `puzzleThemes`),
 
 Type-check + production-сборка:
 
-```powershell
+```bash
 cd frontend
 npm run build   # tsc -b && vite build
 ```
 
-После рефакторинга шагов из `docs/frontend-roadmap.md` — прогон маршрутов
-`#home`, `#auth`, `#learn`, `#puzzles`, `#play`, `#community`, `#profile`
-на desktop/планшете/телефоне (этап 6 roadmap).
+После сборки рекомендуется вручную проверить маршруты `#home`, `#auth`,
+`#learn`, `#puzzles`, `#play`, `#pvp`, `#tournaments`, `#community`, `#profile`
+на desktop/планшете/телефоне.
 
 ## Что добавить при развитии
 

@@ -2,12 +2,15 @@ import os
 import uuid
 import logging
 from pathlib import Path
+import smtplib
 from typing import Optional
+from urllib.parse import quote
 from dotenv import load_dotenv
 from fastapi import Depends, Request, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from fastapi_users import BaseUserManager, UUIDIDMixin, FastAPIUsers
+from fastapi_users.exceptions import InvalidPasswordException
 from fastapi_users.authentication import (
     AuthenticationBackend,
     BearerTransport,
@@ -15,7 +18,8 @@ from fastapi_users.authentication import (
 )
 from auth.models import User, UserRole
 from auth.db import get_user_db
-from auth.schemas import normalize_and_validate_email
+from auth.schemas import normalize_and_validate_email, validate_password_strength
+from auth.email_verification import email_delivery_configured, send_email
 
 # Load env files by project path, independent of the process working directory.
 # The root .env is canonical for local development; backend/.env is a fallback
@@ -83,7 +87,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             # Ненормализуемый ввод пропускаем как есть —
             # штатная проверка вернёт корректную ошибку входа.
             pass
-        return await super().authenticate(credentials)
+        user = await super().authenticate(credentials)
+        if user is not None and not user.is_verified:
+            return None
+        return user
 
     async def create(self, user_create, safe: bool = False, request: Optional[Request] = None):
         """Создание с защитной нормализацией email (оборона в глубину).
@@ -116,6 +123,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 detail="Этот email или никнейм уже занят.",
             ) from exc
 
+    async def validate_password(self, password: str, user: User) -> None:
+        try:
+            validate_password_strength(
+                password,
+                email=getattr(user, "email", None),
+                display_name=getattr(user, "display_name", None),
+            )
+        except ValueError as exc:
+            raise InvalidPasswordException(reason=str(exc)) from exc
+
     async def update(self, user_update, user: User, safe: bool = False, request: Optional[Request] = None):
         """Обновление с нормализацией смены email.
 
@@ -129,10 +146,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             else user_update.create_update_dict_superuser()
         )
         if "email" in update_dict and update_dict["email"]:
+            normalized_email = normalize_and_validate_email(update_dict["email"])
+            if normalized_email != user.email:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Смена email требует отдельного подтверждения нового адреса.",
+                )
             # Нормализуем до проверки дубликата в super().update():
             # _update сравнивает через get_by_email (case-insensitive),
             # а +алиасы/точки ловит только нормализация.
-            update_dict["email"] = normalize_and_validate_email(update_dict["email"])
+            update_dict["email"] = normalized_email
             # Подменяем объект обновления нормализованным значением,
             # чтобы super().update() проверил дубликат уже по нему.
             try:
@@ -153,12 +176,28 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def on_after_forgot_password(
         self, user: User, token: str, request: Optional[Request] = None
     ):
-        # SMTP не настроен: токен никуда не отправляется (см. POST /api/auth/forgot-password).
-        # Токен намеренно не логируем. После подключения почты — отправить письмо здесь.
-        logger.info(
-            f"[CoolChess Auth] Запрошен сброс пароля для {user.email} "
-            "(email-отправка не настроена, настройте SMTP)."
-        )
+        if not email_delivery_configured():
+            logger.warning(
+                "Password reset email was not sent because SMTP is not configured."
+            )
+            return
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+        reset_link = f"{frontend_url}/#auth/reset?token={quote(token, safe='')}"
+        try:
+            await send_email(
+                user.email,
+                "Сброс пароля CoolChess",
+                "Чтобы задать новый пароль, откройте ссылку:\n"
+                f"{reset_link}\n\n"
+                "Если вы не запрашивали сброс пароля, проигнорируйте это письмо.",
+            )
+        except (OSError, RuntimeError, smtplib.SMTPException, ValueError) as exc:
+            smtp_status = getattr(exc, "smtp_code", None)
+            logger.warning(
+                "Could not send password reset email (%s, smtp_status=%s).",
+                type(exc).__name__,
+                smtp_status,
+            )
 
 
 async def get_user_manager(user_db=Depends(get_user_db)):

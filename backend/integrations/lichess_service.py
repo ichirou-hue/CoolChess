@@ -1,8 +1,11 @@
-from typing import Optional, Dict, Any
+import re
+from typing import Dict, Any
+from urllib.parse import quote
 import httpx
 from fastapi import HTTPException, status
 
 LICHESS_API_BASE = "https://lichess.org/api"
+USERNAME_RE = re.compile(r"^[A-Za-z0-9_-]{2,30}$")
 
 
 class LichessService:
@@ -15,13 +18,13 @@ class LichessService:
         Возвращает распарсенный JSON с рейтингами и текстом био.
         """
         clean_username = username.strip().lower()
-        if not clean_username:
+        if not USERNAME_RE.fullmatch(clean_username):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Имя пользователя Lichess не может быть пустым"
+                detail="Укажите корректный ник Lichess (2–30 латинских букв, цифр, _ или -)."
             )
 
-        url = f"{LICHESS_API_BASE}/user/{clean_username}"
+        url = f"{LICHESS_API_BASE}/user/{quote(clean_username, safe='')}"
         headers = {
             "Accept": "application/json",
             "User-Agent": "CoolChess-App/1.0"

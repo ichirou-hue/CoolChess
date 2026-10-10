@@ -9,6 +9,7 @@ from leaderboard.leaderboard_routes import leaderboard_router
 from bot.bot_routes import bot_router
 from clans.clan_routes import clan_router
 from auth.users_routes import users_router
+from learning.course_routes import course_router
 from pvp.pvp_routes import pvp_router, pvp_http_router, pvp_api_router
 from pvp.manager import pvp_manager
 
@@ -56,6 +57,7 @@ app.include_router(game_router)
 app.include_router(leaderboard_router)
 app.include_router(bot_router)
 app.include_router(users_router)
+app.include_router(course_router)
 app.include_router(clan_router)
 app.include_router(pvp_router)
 app.include_router(pvp_http_router)

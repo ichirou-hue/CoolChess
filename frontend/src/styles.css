@@ -404,6 +404,34 @@ small { font-size: .8rem; }
 .theory-board-bottom > p { color: #465166; }
 .theory-control, .theory-board-bottom .button { min-height: 42px; }
 
+/* Clear controls for choosing a real Maia side before a new game. */
+.maia-color-picker { border: 0; display: grid; gap: 8px; grid-template-columns: 1fr 1fr; margin: 20px 0 4px; max-width: 340px; padding: 0; }
+.maia-color-picker legend { color: #687083; font-size: 11px; font-weight: 700; grid-column: 1 / -1; margin-bottom: 2px; }
+.maia-color-picker button { background: rgba(255,255,255,.72); border: 1px solid #dfe2ed; border-radius: 10px; color: #4b4f60; cursor: pointer; font: inherit; font-size: 12px; padding: 11px 14px; }
+.maia-color-picker button.selected { background: #464bff; border-color: #464bff; color: #fff; font-weight: 700; }
+.maia-color-picker:disabled { opacity: .65; }
+
+/* Keep the side to move visible beside every puzzle position. */
+.puzzle-turn-indicator { align-items: center; background: #f0efff; border: 1px solid #dfdfff; border-radius: 12px; display: flex; gap: 10px; margin: 16px 0; padding: 11px 14px; width: fit-content; }
+.puzzle-turn-indicator span { color: #687083; font-family: Geologica, sans-serif; font-size: 9px; letter-spacing: .08em; }
+.puzzle-turn-indicator strong { color: #383de0; font-size: 12px; }
+.puzzle-turn-indicator.black-to-move { background: #171821; border-color: #171821; }
+.puzzle-turn-indicator.black-to-move span { color: #b8bac8; }
+.puzzle-turn-indicator.black-to-move strong { color: #dce204; }
+
+/* Give the CoolChess rating more weight and show level progress horizontally. */
+.profile-wallet { background: linear-gradient(145deg, #171821, #292d4d); border: 1px solid rgba(220,226,4,.28); min-width: 265px; padding: 20px 22px; }
+.profile-wallet .profile-rating-label { color: #dce204; font-size: 9px; letter-spacing: .12em; }
+.profile-rating-value { align-items: baseline; display: flex; gap: 9px; margin: 5px 0 3px; }
+.profile-wallet .profile-rating-value strong { color: #fff; font-size: clamp(38px, 4vw, 52px); letter-spacing: -3px; line-height: 1; }
+.profile-rating-value b { color: #dce204; font-size: 12px; letter-spacing: .08em; }
+.profile-wallet > small { color: #b8bac8; font-size: 10px; }
+.profile-level-progress { align-items: center; display: flex; gap: 9px; margin-top: 14px; }
+.profile-level-progress > strong { align-items: center; background: rgba(255,255,255,.12); border-radius: 50%; color: #fff; display: inline-flex; flex: 0 0 27px; font-size: 11px; height: 27px; justify-content: center; }
+.profile-level-track { background: rgba(255,255,255,.2); border-radius: 8px; flex: 1 1 auto; height: 6px; min-width: 24px; overflow: hidden; }
+.profile-level-track i { background: #dce204; border-radius: inherit; display: block; height: 100%; transition: width .3s ease; }
+.profile-level-progress > small { color: #b8bac8; flex: 0 0 auto; font-size: 9px; margin-left: auto; white-space: nowrap; }
+
 /* Game review: distinct player columns and clickable positions. */
 .game-section { align-items: start; }
 .game-intro { align-self: start; }

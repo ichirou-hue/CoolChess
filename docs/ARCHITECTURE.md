@@ -26,7 +26,7 @@ PostgreSQL (compose, :5433) или SQLite (aiosqlite, dev-режим)
 (`puzzle`, `game`, `leaderboard`, `bot`, `users`, `clan`, `pvp-ws`, `pvp-http`)
 и стандартные роутеры `fastapi-users` (auth / register / reset-password /
 verify / users). Запуск из каталога `backend/`:
-`uvicorn server:app --reload --port 8080` (в compose — 1 воркер, см. ниже).
+Из корня репозитория: `python -m uvicorn server:app --app-dir backend --reload --reload-dir backend --port 8080` (в compose — 1 воркер, см. ниже).
 
 ## Backend-модули
 

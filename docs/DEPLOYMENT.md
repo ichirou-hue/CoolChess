@@ -4,7 +4,7 @@
 
 | Компонент | Порт | Как запустить |
 |---|---|---|
-| Backend (FastAPI) | `:8080` | `cd backend && uvicorn server:app --reload --port 8080` |
+| Backend (FastAPI) | `:8080` | Из корня: `python -m uvicorn server:app --app-dir backend --reload --reload-dir backend --port 8080` (PowerShell: `./scripts/run_backend.ps1`) |
 | Frontend (Vite dev) | `:5173` | `cd frontend && npm run dev` |
 | PostgreSQL (Docker) | `:5433` → `5432` | `docker compose up -d postgres` |
 | Nginx (Docker) | `:80` | `docker compose up -d nginx` (прокси `/api/`, `/docs`, `/ws/`, `/health` → `backend:8080`) |
@@ -48,7 +48,8 @@ docker compose up --build -d
 docker compose up -d postgres
 cd backend
 alembic upgrade head   # или: python init_db.py
-uvicorn server:app --reload --port 8080
+cd ..
+python -m uvicorn server:app --app-dir backend --reload --reload-dir backend --port 8080
 # отдельный терминал:
 cd frontend; npm install; npm run dev
 ```

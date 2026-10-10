@@ -147,8 +147,11 @@ alembic upgrade head   # основной путь (миграции)
 # для БД, созданной до Alembic, — докрутить колонки users:
 # python update_schema.py
 
-# 4. API (из каталога backend/, слушает порт 8080)
-uvicorn server:app --reload --port 8080
+# 4. API (из корня репозитория, слушает порт 8080)
+# PowerShell:
+.\scripts\run_backend.ps1
+# Любая оболочка:
+python -m uvicorn server:app --app-dir backend --reload --reload-dir backend --port 8080
 
 # 5. Фронтенд (отдельный терминал, порт 5173)
 cd frontend && npm install && npm run dev
@@ -197,7 +200,8 @@ docker compose logs -f backend
 docker compose up -d postgres
 cd backend
 alembic upgrade head   # или: python init_db.py
-uvicorn server:app --reload --port 8080
+cd ..
+python -m uvicorn server:app --app-dir backend --reload --reload-dir backend --port 8080
 # отдельный терминал: cd frontend && npm install && npm run dev
 ```
 
@@ -210,7 +214,8 @@ uvicorn server:app --reload --port 8080
 # DATABASE_URL=sqlite+aiosqlite:///./coolchess.db
 cd backend
 python init_db.py
-uvicorn server:app --reload --port 8080
+cd ..
+python -m uvicorn server:app --app-dir backend --reload --reload-dir backend --port 8080
 ```
 
 ### Состав сервисов

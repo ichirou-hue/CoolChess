@@ -1,6 +1,7 @@
 import os
 import uuid
 import logging
+from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 from fastapi import Depends, Request, HTTPException, status
@@ -14,7 +15,14 @@ from auth.models import User, UserRole
 from auth.db import get_user_db
 from auth.schemas import normalize_and_validate_email
 
-load_dotenv()
+# Load env files by project path, independent of the process working directory.
+# The root .env is canonical for local development; backend/.env is a fallback
+# for setups that only created the backend-specific file (for example Docker).
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+ROOT_ENV = BACKEND_DIR.parent / ".env"
+BACKEND_ENV = BACKEND_DIR / ".env"
+load_dotenv(dotenv_path=ROOT_ENV)
+load_dotenv(dotenv_path=BACKEND_ENV, override=False)
 
 logger = logging.getLogger(__name__)
 

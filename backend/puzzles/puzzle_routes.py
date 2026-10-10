@@ -40,12 +40,14 @@ class PuzzleResponse(BaseModel):
     game_url: Optional[str]
 
 class SolveRequest(BaseModel):
-    user_moves: str          # Ход игрока в UCI (например: "e2e4" или "d8d1")
+    user_moves: str          # Все ходы игрока в UCI через пробел, от начала задачи
 
 class SolveResponse(BaseModel):
     is_correct: bool
     message: str
     already_solved: bool
+    is_complete: bool = True
+    opponent_move: Optional[str] = None
     xp_earned: int = 0
     coins_earned: int = 0
     elo_change: int = 0
@@ -133,14 +135,29 @@ async def solve_puzzle(
         raise HTTPException(status_code=404, detail="Задача не найдена.")
 
     moves_list = puzzle.moves.split()
-    # Правильный ход игрока — второй ход в списке ходов Lichess
-    expected_solution = moves_list[1] if len(moves_list) > 1 else ""
+    submitted_moves = payload.user_moves.split()
+    # Lichess хранит линию начиная с хода соперника. Проверяем ходы игрока
+    # по одному, а после правильного хода возвращаем автоматический ответ соперника.
+    expected_user_moves = moves_list[1::2]
+    correct_prefix = submitted_moves and len(submitted_moves) <= len(expected_user_moves) and submitted_moves == expected_user_moves[:len(submitted_moves)]
 
-    if payload.user_moves.strip() != expected_solution:
+    if not correct_prefix:
         return SolveResponse(
             is_correct=False,
             message="Неверный ход. Попробуйте еще раз!",
             already_solved=False
+        )
+
+    is_complete = len(submitted_moves) == len(expected_user_moves)
+    if not is_complete:
+        opponent_index = len(submitted_moves) * 2
+        opponent_move = moves_list[opponent_index] if opponent_index < len(moves_list) else None
+        return SolveResponse(
+            is_correct=True,
+            message="Верный ход. Соперник ответил — продолжайте комбинацию.",
+            already_solved=False,
+            is_complete=False,
+            opponent_move=opponent_move,
         )
 
     # Проверяем, не решал ли игрок эту задачу раньше

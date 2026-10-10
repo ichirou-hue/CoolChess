@@ -15,6 +15,8 @@ export type PuzzleSolveResult = {
   is_correct: boolean;
   message: string;
   already_solved: boolean;
+  is_complete: boolean;
+  opponent_move: string | null;
   xp_earned: number;
   coins_earned: number;
   elo_change: number;
@@ -59,10 +61,10 @@ export function getRandomPuzzle(filters: string | PuzzleFilters = {}) {
   return request<Puzzle>(`/api/puzzles/random?${query.toString()}`);
 }
 
-export function submitPuzzleMove(puzzleId: string, moveUci: string) {
+export function submitPuzzleMove(puzzleId: string, movesUci: string) {
   return request<PuzzleSolveResult>(`/api/puzzles/${encodeURIComponent(puzzleId)}/solve`, {
     method: 'POST',
-    body: JSON.stringify({ user_moves: moveUci }),
+    body: JSON.stringify({ user_moves: movesUci }),
   });
 }
 
@@ -71,6 +73,6 @@ export function submitPuzzleMove(puzzleId: string, moveUci: string) {
 // Оставлены как алиасы, чтобы не ломать импорты после слияния.
 export type ServerPuzzle = Puzzle;
 export type SolveResult = PuzzleSolveResult;
-export function solvePuzzle(puzzleId: string, moveUci: string) {
-  return submitPuzzleMove(puzzleId, moveUci);
+export function solvePuzzle(puzzleId: string, movesUci: string) {
+  return submitPuzzleMove(puzzleId, movesUci);
 }

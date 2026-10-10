@@ -14,6 +14,8 @@ import { AuthPage as FeatureAuthPage } from './features/auth/ui/AuthPage';
 import { AuthProvider } from './features/auth/model/AuthProvider';
 import { useAuth } from './features/auth/model/AuthProvider';
 import { readCoursePlacement, saveCoursePlacement, type CoursePlacement } from './features/learning/model/coursePlacement';
+import * as courseProgressApi from './features/learning/api/courseProgressApi';
+import type { CourseMilestone, CourseProgressMap } from './features/learning/api/courseProgressApi';
 import { OpeningLibrary } from './features/learning/ui/OpeningLibrary';
 import { classifyMove, StockfishClient, type MoveClassification, type PositionAnalysis } from './features/analysis/model/stockfishClient';
 import { identifyOpening } from './features/analysis/model/openingBook';
@@ -113,6 +115,7 @@ function ChessGame() {
   const [resultDismissed, setResultDismissed] = useState(false);
   const [maiaAchievements, setMaiaAchievements] = useState<number[]>(readMaiaAchievements);
   const [thinking, setThinking] = useState(false);
+  const [playerColor, setPlayerColor] = useState<'white' | 'black'>('white');
   const [difficulty, setDifficulty] = useState(1500);
   const difficultyRef = useRef(1500);
   const [loading, setLoading] = useState(true);
@@ -143,6 +146,7 @@ function ChessGame() {
     gameRef.current = nextGame;
     gameStateRef.current = response;
     setGame(response);
+    setPlayerColor(response.player_color);
     setResultDismissed(false);
     setDifficulty(response.bot_difficulty);
     difficultyRef.current = response.bot_difficulty;
@@ -162,6 +166,7 @@ function ChessGame() {
       turnColor: nextGame.turn() === 'w' ? 'white' : 'black',
       check: response.is_check ? (nextGame.turn() === 'w' ? 'white' : 'black') : false,
       lastMove: last ? [last.slice(0, 2) as Key, last.slice(2, 4) as Key] : undefined,
+      orientation: response.player_color,
       movable: { color: canMove ? response.player_color : 'white', dests: canMove ? legalDests(nextGame) : new Map() },
     });
     if (response.status === 'player_won') {
@@ -201,7 +206,7 @@ function ChessGame() {
     }
     try {
       const active = await gameApi.getActiveGame();
-      syncBoard(active ?? await gameApi.startGame());
+      syncBoard(active ?? await gameApi.startGame(playerColor, difficulty));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Не удалось загрузить партию');
     } finally {
@@ -275,7 +280,7 @@ function ChessGame() {
     setLoading(true);
     setError(null);
     try {
-      syncBoard(await gameApi.startGame('white', difficulty));
+      syncBoard(await gameApi.startGame(playerColor, difficulty));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Не удалось начать новую партию');
     } finally {
@@ -321,8 +326,13 @@ function ChessGame() {
           : null;
   return <section className="game-section" id="play">
     <div className="game-intro">
-      <p className="eyebrow"><span>03</span> ИГРА ПРОТИВ MAIA</p><h2>Настоящая<br /><span>партия.</span></h2>
-      <p>Сыграй партию с Maia. Выбери силу соперника и разбирай каждый ход после игры.</p>
+      <p className="eyebrow">ИГРА ПРОТИВ MAIA</p><h2>Настоящая<br /><span>партия.</span></h2>
+      <p>Сыграй партию с Maia. Выбери сторону и силу соперника, а после игры разбери ходы.</p>
+      <fieldset className="maia-color-picker" disabled={loading || thinking}>
+        <legend>Мои фигуры в новой партии</legend>
+        <button className={playerColor === 'white' ? 'selected' : ''} type="button" aria-pressed={playerColor === 'white'} onClick={() => setPlayerColor('white')}>Белые</button>
+        <button className={playerColor === 'black' ? 'selected' : ''} type="button" aria-pressed={playerColor === 'black'} onClick={() => setPlayerColor('black')}>Чёрные</button>
+      </fieldset>
       <label className="maia-slider"><span><b>Сила Maia</b><strong>{difficulty} ELO</strong></span><input type="range" min="800" max="2600" step="100" value={difficulty} onChange={(event) => { const value = Number(event.target.value); difficultyRef.current = value; setDifficulty(value); }} disabled={loading || thinking || Boolean(game?.moves_uci.length)} /><small>{game?.moves_uci.length ? 'Сила в этой партии уже зафиксирована' : 'Выбранная сила применится с первого хода'}</small></label>
       <div className="game-controls"><button className="button button-primary" type="button" onClick={() => void newGame()} disabled={loading || thinking}>Новая партия <span>↗</span></button>{game?.status === 'in_progress' && <button className="button button-link" type="button" onClick={() => void resign()} disabled={loading || thinking}>Сдаться</button>}{statusText && <span className="engine-status">{statusText}</span>}{(error?.includes('401') || error?.includes('Сначала войдите')) && <a className="source-link" href="#auth">Войти в аккаунт ↗</a>}</div>
       <div className="maia-achievements"><div className="achievement-heading"><strong>Уровни Maia</strong><span>{maiaAchievements.length}/{maiaLevels.length} побед</span></div><div className="maia-level-map" aria-label="Пройденные уровни Maia">{maiaLevels.map((level) => <span className={maiaAchievements.includes(level) ? 'earned' : ''} title={`${level} ELO${maiaAchievements.includes(level) ? ' · победа' : ''}`} key={level}>{maiaAchievements.includes(level) ? '✓' : level}</span>)}</div></div>
@@ -584,9 +594,9 @@ function TheoryBoard({ visual, onLineViewed, kicker }: { visual: LessonVisual; o
     <div className="theory-board-bottom"><div>
       {visual.ideaChallenge && !ideaSolved && (practiceMode
         ? <span className="theory-control-note">Сделай ход на доске</span>
-        : <button className="button button-primary" type="button" onClick={beginChallenge}>{practiceFeedback ? 'Попробовать ещё раз' : 'Сыграть свою идею'}</button>)}
-      {visual.ideaChallenge && ideaSolved && <><button className="theory-control" type="button" onClick={resetBoard}>С начала позиции</button><button className="theory-control" type="button" onClick={playLine}>Показать выбранное продолжение</button></>}
-      {!visual.ideaChallenge && lineMoves.length > 0 && <><button className="theory-control" type="button" onClick={resetBoard} disabled={isPlayingLine}>Сначала</button><button className="theory-control" type="button" onClick={playLine} disabled={isPlayingLine}>{isPlayingLine ? 'Показываю линию…' : 'Показать линию'}</button></>}
+        : <button className="button button-primary" type="button" onClick={() => beginChallenge()}>{practiceFeedback ? 'Попробовать ещё раз' : 'Сыграть свою идею'}</button>)}
+      {visual.ideaChallenge && ideaSolved && <><button className="theory-control" type="button" onClick={() => resetBoard()}>С начала позиции</button><button className="theory-control" type="button" onClick={playLine}>Показать выбранное продолжение</button></>}
+      {!visual.ideaChallenge && lineMoves.length > 0 && <><button className="theory-control" type="button" onClick={() => resetBoard()} disabled={isPlayingLine}>Сначала</button><button className="theory-control" type="button" onClick={playLine} disabled={isPlayingLine}>{isPlayingLine ? 'Показываю линию…' : 'Показать линию'}</button></>}
       {!visual.ideaChallenge && lineMoves.length > 0 && !practiceFeedback && step < lineMoves.length && practiceMode && <span className="theory-control-note">Перетащи фигуру на доске</span>}
       {!visual.ideaChallenge && practiceFeedback && <><button className="theory-control" type="button" onClick={() => resetBoard(true)}>Попробовать другой ход</button><button className="theory-control" type="button" onClick={() => resetBoard(false)}>Вернуться к позиции</button></>}
       {lineMoves.length > 0 && (step >= lineMoves.length ? <span className="theory-line-done">Разбор просмотрен ✓</span> : !practiceMode && (!visual.ideaChallenge || ideaSolved) && <button className="button button-primary" type="button" onClick={advance}>{visual.ideaChallenge && step === 1 ? 'Показать ответ соперника →' : 'Следующий ход →'}</button>)}
@@ -668,13 +678,14 @@ function QuizBoard({ fen, label }: { fen: string; label: string }) {
   return <div className="quiz-board-wrap"><CoordinateBoard boardRef={boardRef} label={label} /></div>;
 }
 
-function LessonQuiz({ topicId, topicTitle, boardFen, questions, onPassed, onGoPractice }: {
+function LessonQuiz({ topicId, topicTitle, boardFen, questions, onPassed, onGoPractice, serverPassed = false }: {
   topicId: string;
   topicTitle: string;
   boardFen: string;
   questions: LessonQuizQuestion[];
   onPassed: () => void;
   onGoPractice?: () => void;
+  serverPassed?: boolean;
 }) {
   // Ответы по индексу вопроса: выбранный вариант + вердикт проверки.
   // Черновик переживает переключение вкладок (localStorage), сброс — со сменой темы (key).
@@ -682,6 +693,7 @@ function LessonQuiz({ topicId, topicTitle, boardFen, questions, onPassed, onGoPr
   const [checked, setChecked] = useState<Record<number, boolean>>(() => readQuizDraft(topicId).checked);
   const [passed, setPassed] = useState(() => readQuizStore()[topicId] ?? false);
   useEffect(() => { writeQuizDraft(topicId, { picked, checked }); }, [topicId, picked, checked]);
+  useEffect(() => { if (serverPassed) setPassed(true); }, [serverPassed]);
   const correctCount = questions.filter((question, index) => checked[index] && picked[index] === question.correct).length;
   const allCorrect = questions.length > 0 && correctCount === questions.length;
   useEffect(() => {
@@ -714,7 +726,9 @@ function OriginalLichessPuzzleLibrary() {
   const boardRef = useRef<HTMLDivElement>(null);
   const groundRef = useRef<Api | null>(null);
   const gameRef = useRef<Chess | null>(null);
+  const userMovesRef = useRef<string[]>([]);
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
+  const [moveSide, setMoveSide] = useState<'w' | 'b'>('w');
   const [status, setStatus] = useState<'loading' | 'ready' | 'submitting' | 'correct' | 'wrong' | 'error'>('loading');
   const [error, setError] = useState('');
   const [reward, setReward] = useState('');
@@ -723,12 +737,8 @@ function OriginalLichessPuzzleLibrary() {
   const [taskSearch, setTaskSearch] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState('beginner');
   const [progressFilter, setProgressFilter] = useState<'unsolved' | 'solved' | 'all'>('unsolved');
-  const [solvedByType, setSolvedByType] = useState<Record<string, number>>(() => {
-    try { return JSON.parse(localStorage.getItem('coolchess.puzzleTypeProgress.v1') ?? '{}'); }
-    catch { return {}; }
-  });
-
   const loadPuzzle = async () => {
+    userMovesRef.current = [];
     setStatus('loading');
     groundRef.current?.set({ movable: { color: 'white', dests: new Map() } });
     setError('');
@@ -763,6 +773,7 @@ function OriginalLichessPuzzleLibrary() {
       }
     }
     gameRef.current = game;
+    setMoveSide(game.turn());
     groundRef.current?.destroy();
     groundRef.current = Chessground(boardRef.current, { fen: game.fen(), coordinates: false, orientation: game.turn() === 'w' ? 'white' : 'black', turnColor: game.turn() === 'w' ? 'white' : 'black', lastMove, movable: { free: false, color: game.turn() === 'w' ? 'white' : 'black', dests: legalDests(game), events: { after: (orig, dest) => { void submitMove(orig as Key, dest as Key); } } }, highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 240 } });
     return () => groundRef.current?.destroy();
@@ -777,7 +788,8 @@ function OriginalLichessPuzzleLibrary() {
     setError('');
     groundRef.current?.set({ movable: { color: 'white', dests: new Map() } });
     try {
-      const result = await puzzleApi.submitPuzzleMove(puzzle.id, uci);
+      const nextUserMoves = [...userMovesRef.current, uci];
+      const result = await puzzleApi.submitPuzzleMove(puzzle.id, nextUserMoves.join(' '));
       if (!result.is_correct) {
         setStatus('wrong');
         groundRef.current?.set({ fen: current.fen(), turnColor: current.turn() === 'w' ? 'white' : 'black', movable: { color: current.turn() === 'w' ? 'white' : 'black', dests: legalDests(current) } });
@@ -785,17 +797,17 @@ function OriginalLichessPuzzleLibrary() {
         return;
       }
       const played = current.move({ from: orig as Square, to: dest as Square, promotion: promotion || 'q' });
-      setStatus('correct');
-      if (!result.already_solved) {
-        const progressKey = taskType || 'all';
-        setSolvedByType((currentProgress) => {
-          const nextProgress = { ...currentProgress, [progressKey]: (currentProgress[progressKey] ?? 0) + 1 };
-          localStorage.setItem('coolchess.puzzleTypeProgress.v1', JSON.stringify(nextProgress));
-          return nextProgress;
-        });
+      userMovesRef.current = nextUserMoves;
+      let lastMove: [Key, Key] | undefined = played ? [played.from as Key, played.to as Key] : undefined;
+      if (result.opponent_move) {
+        const reply = current.move({ from: result.opponent_move.slice(0, 2) as Square, to: result.opponent_move.slice(2, 4) as Square, promotion: result.opponent_move[4] as 'q' | 'r' | 'b' | 'n' | undefined });
+        if (reply) lastMove = [reply.from as Key, reply.to as Key];
       }
-      setReward(result.already_solved ? 'Задача уже была решена — награда не начисляется повторно.' : `Награда: +${result.xp_earned} XP · +${result.coins_earned} ♟`);
-      groundRef.current?.set({ fen: current.fen(), lastMove: played ? [played.from as Key, played.to as Key] : undefined, movable: { color: current.turn() === 'w' ? 'white' : 'black', dests: new Map() } });
+      const complete = result.is_complete !== false;
+      setMoveSide(current.turn());
+      setStatus(complete ? 'correct' : 'ready');
+      if (complete) setReward(result.already_solved ? 'Задача уже была решена — награда не начисляется повторно.' : `Награда: +${result.xp_earned} XP · +${result.coins_earned} ♟`);
+      groundRef.current?.set({ fen: current.fen(), turnColor: current.turn() === 'w' ? 'white' : 'black', lastMove, movable: { color: current.turn() === 'w' ? 'white' : 'black', dests: complete ? new Map() : legalDests(current) } });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Не удалось проверить ход');
       setStatus('error');
@@ -804,8 +816,12 @@ function OriginalLichessPuzzleLibrary() {
   };
 
   const tags = puzzle?.themes.filter((theme) => !['short', 'long', 'veryLong', 'master', 'masterVsMaster'].includes(theme)).slice(0, 4) ?? [];
-  const puzzleIdea = tags.includes('mateIn1') || tags.includes('mateIn2') || tags.includes('mateIn3')
-    ? 'Найди форсированный мат'
+  const puzzleIdea = tags.includes('mateIn2')
+    ? 'Поставь мат в два хода'
+    : tags.includes('mateIn1')
+      ? 'Поставь мат в один ход'
+      : tags.includes('mateIn3')
+        ? 'Найди форсированный мат'
     : tags.includes('fork')
       ? 'Найди двойной удар'
       : tags.includes('pin')
@@ -817,9 +833,19 @@ function OriginalLichessPuzzleLibrary() {
             : tags.includes('defensiveMove')
               ? 'Найди единственный защитный ход'
               : 'Найди лучший ход в позиции';
+  const moveSideLabel = moveSide === 'w' ? 'белых' : 'чёрных';
+  const puzzleInstruction = tags.includes('mateIn2')
+    ? `Ходи ${moveSideLabel}: найди комбинацию с матом за два хода.`
+    : tags.includes('mateIn1')
+      ? `Ходи ${moveSideLabel}: поставь мат одним ходом.`
+      : tags.includes('fork')
+        ? `Ходи ${moveSideLabel}: найди двойной удар.`
+        : tags.includes('pin')
+          ? `Ходи ${moveSideLabel}: используй связку.`
+          : `Сейчас ход ${moveSideLabel}. Реши задачу по теме «${puzzleIdea.toLocaleLowerCase('ru')}».`;
   const gameUrl = puzzle?.game_url ? (puzzle.game_url.startsWith('http') ? puzzle.game_url : `https://${puzzle.game_url}`) : null;
   const needsAuth = /401|авторизац|войдите|войти/i.test(error);
-  return <section className="puzzle-section" id="puzzles"><div className="section-heading"><span className="section-number">04</span><h2>Решай по шагам.<br /><span>Расти в тактике.</span></h2><p>Начни с простых задач, выбери тему и следи за своими решениями.</p></div><div className="puzzle-workshop"><div className="puzzle-filter-heading"><div><strong>Мастерская задач</strong><small>Выбери тему, сложность и статус</small></div><label className="puzzle-search">⌕<input value={taskSearch} onChange={(event) => setTaskSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void loadPuzzle(); }} placeholder="Поиск по теме: мат, вилка…" aria-label="Поиск задач по теме" /></label></div><div className="puzzle-type-tabs">{[{ tag: '', label: 'Все задачи' }, { tag: 'mateIn1', label: 'Мат в 1' }, { tag: 'mateIn2', label: 'Мат в 2' }, { tag: 'fork', label: 'Вилка' }, { tag: 'pin', label: 'Связка' }, { tag: 'quietMove', label: 'Лучший ход' }].map((item) => <button type="button" className={taskType === item.tag ? 'selected' : ''} key={item.tag || 'all'} onClick={() => { setTaskType(item.tag); setTaskSearch(''); }}><span>{item.label}</span><small>{solvedByType[item.tag || 'all'] ?? 0} / 10 до цели</small><i><b style={{ width: `${Math.min((solvedByType[item.tag || 'all'] ?? 0) * 10, 100)}%` }} /></i></button>)}</div><div className="puzzle-filter-row"><label>Сложность<select value={difficultyFilter} onChange={(event) => setDifficultyFilter(event.target.value)}><option value="beginner">Начинающий · до 1200</option><option value="intermediate">Средний · 1200–1599</option><option value="advanced">Продвинутый · 1600–1999</option><option value="master">Мастер · 2000–2399</option><option value="grandmaster">Гроссмейстер · 2400+</option><option value="all">Любая</option></select></label><label>Решение<select value={progressFilter} onChange={(event) => setProgressFilter(event.target.value as 'unsolved' | 'solved' | 'all')}><option value="unsolved">Не решённые</option><option value="solved">Решённые</option><option value="all">Все задачи</option></select></label><button className="button button-primary" type="button" onClick={() => void loadPuzzle()} disabled={status === 'loading' || status === 'submitting'}>Найти задачу ↗</button></div></div><div className="puzzle-layout"><div className={`puzzle-board${puzzle ? '' : ' is-empty'}`}><CoordinateBoard boardRef={boardRef} label="Доска шахматной задачи" />{!puzzle && <div className="puzzle-board-state"><span className="puzzle-board-state-icon">{status === 'loading' ? '♟' : '!'}</span><strong>{status === 'loading' ? 'Загружаем задачу…' : 'Подходящих задач нет'}</strong><small>{status === 'error' ? needsAuth ? 'Войди, чтобы загружать задачи и сохранять решения.' : 'Попробуй изменить тему, сложность или статус решения.' : 'Подключаем шахматную позицию к серверу.'}</small>{status === 'error' && (needsAuth ? <a className="source-link" href="#auth">Войти и решать задачи ↗</a> : <button className="source-link" type="button" onClick={() => void loadPuzzle()}>Повторить с этими фильтрами ↗</button>)}</div>}</div><div className="puzzle-copy"><p className="eyebrow">ЗАДАЧА {index}</p><h3>{puzzleIdea}</h3><p className="puzzle-instruction"><strong>Твоя задача:</strong> найди лучший ход за свою сторону и покажи, какую угрозу или выгоду он создаёт.</p>{puzzle && <div className="puzzle-meta"><span><strong>{puzzle.rating}</strong><small>сложность позиции</small></span><span><strong>{puzzle.popularity}</strong><small>популярность</small></span></div>}<div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? 'Отлично! Ход найден.' : status === 'wrong' ? 'Неверный ход — попробуй ещё.' : status === 'submitting' ? 'Проверяем ход…' : status === 'loading' ? 'Загружаем задачу…' : status === 'error' ? error : 'Твой ход'}</strong></div>{status === 'error' && needsAuth && <a className="source-link" href="#auth">Войти в аккаунт и повторить ↗</a>}{reward && <p className="puzzle-reward">{reward}</p>}{error && status !== 'error' && <p className="puzzle-reward">{error}</p>}<div className="puzzle-actions"><button className="button button-primary" type="button" onClick={() => void loadPuzzle()} disabled={status === 'loading' || status === 'submitting'}>Следующая задача <span>↗</span></button>{gameUrl && <a className="source-link" href={gameUrl} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a>}</div></div></div></section>;
+  return <section className="puzzle-section" id="puzzles"><div className="section-heading"><h2>Решай по шагам.<br /><span>Расти в тактике.</span></h2><p>Начни с простых задач, выбери тему и следи за своими решениями.</p></div><div className="puzzle-workshop"><div className="puzzle-filter-heading"><div><strong>Мастерская задач</strong><small>Выбери тему, сложность и статус</small></div><label className="puzzle-search">⌕<input value={taskSearch} onChange={(event) => setTaskSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void loadPuzzle(); }} placeholder="Поиск по теме: мат, вилка…" aria-label="Поиск задач по теме" /></label></div><div className="puzzle-type-tabs">{[{ tag: '', label: 'Все задачи' }, { tag: 'mateIn1', label: 'Мат в 1' }, { tag: 'mateIn2', label: 'Мат в 2' }, { tag: 'fork', label: 'Вилка' }, { tag: 'pin', label: 'Связка' }, { tag: 'quietMove', label: 'Лучший ход' }].map((item) => <button type="button" className={taskType === item.tag ? 'selected' : ''} key={item.tag || 'all'} onClick={() => { setTaskType(item.tag); setTaskSearch(''); }}><span>{item.label}</span></button>)}</div><div className="puzzle-filter-row"><label>Сложность<select value={difficultyFilter} onChange={(event) => setDifficultyFilter(event.target.value)}><option value="beginner">Начинающий · до 1200</option><option value="intermediate">Средний · 1200–1599</option><option value="advanced">Продвинутый · 1600–1999</option><option value="master">Мастер · 2000–2399</option><option value="grandmaster">Гроссмейстер · 2400+</option><option value="all">Любая</option></select></label><label>Решение<select value={progressFilter} onChange={(event) => setProgressFilter(event.target.value as 'unsolved' | 'solved' | 'all')}><option value="unsolved">Не решённые</option><option value="solved">Решённые</option><option value="all">Все задачи</option></select></label><button className="button button-primary" type="button" onClick={() => void loadPuzzle()} disabled={status === 'loading' || status === 'submitting'}>Найти задачу ↗</button></div></div><div className="puzzle-layout"><div className={`puzzle-board${puzzle ? '' : ' is-empty'}`}><CoordinateBoard boardRef={boardRef} label="Доска шахматной задачи" />{!puzzle && <div className="puzzle-board-state"><span className="puzzle-board-state-icon">{status === 'loading' ? '♟' : '!'}</span><strong>{status === 'loading' ? 'Загружаем задачу…' : 'Подходящих задач нет'}</strong><small>{status === 'error' ? needsAuth ? 'Войди, чтобы загружать задачи и сохранять решения.' : 'Попробуй изменить тему, сложность или статус решения.' : 'Подключаем шахматную позицию к серверу.'}</small>{status === 'error' && (needsAuth ? <a className="source-link" href="#auth">Войти и решать задачи ↗</a> : <button className="source-link" type="button" onClick={() => void loadPuzzle()}>Повторить с этими фильтрами ↗</button>)}</div>}</div><div className="puzzle-copy"><p className="eyebrow">ЗАДАЧА {index}</p><h3>{puzzleIdea}</h3><div className={`puzzle-turn-indicator ${moveSide === 'w' ? 'white-to-move' : 'black-to-move'}`}><span>ХОД СЕЙЧАС</span><strong>{moveSide === 'w' ? 'БЕЛЫЕ' : 'ЧЁРНЫЕ'}</strong></div><p className="puzzle-instruction">{puzzleInstruction}</p>{puzzle && <div className="puzzle-meta"><span><strong>{puzzle.rating}</strong><small>сложность позиции</small></span></div>}{status !== 'ready' && <div className={`puzzle-feedback ${status}`}><span>{status === 'correct' ? '✓' : status === 'wrong' ? '!' : '✦'}</span><strong>{status === 'correct' ? 'Отлично! Ход найден.' : status === 'wrong' ? 'Неверный ход — попробуй ещё.' : status === 'submitting' ? 'Проверяем ход…' : status === 'loading' ? 'Загружаем задачу…' : error}</strong></div>}{status === 'error' && needsAuth && <a className="source-link" href="#auth">Войти в аккаунт и повторить ↗</a>}{reward && <p className="puzzle-reward">{reward}</p>}{error && status !== 'error' && <p className="puzzle-reward">{error}</p>}<div className="puzzle-actions"><button className="button button-primary" type="button" onClick={() => void loadPuzzle()} disabled={status === 'loading' || status === 'submitting'}>Следующая задача <span>↗</span></button>{gameUrl && <a className="source-link" href={gameUrl} target="_blank" rel="noreferrer">Открыть исходную партию ↗</a>}</div></div></div></section>;
 }
 
 // Сколько уникальных задач нужно решить, чтобы закрыть практику темы.
@@ -876,6 +902,21 @@ function writeDemoStore(topicId: string) {
   }
 }
 
+function readLocalCourseCompletions(): CourseProgressMap {
+  const claimed = readStudentState().claimed;
+  const quizzes = readQuizStore();
+  const practice = readPracticeStore();
+  return Object.fromEntries(courseModules.flatMap((module) => module.topics.map((topic) => {
+    const state = {
+      theory_completed: claimed.includes(`theory:${topic.id}`),
+      quiz_completed: quizzes[topic.id] === true,
+      practice_completed: claimed.includes(`practice:${topic.id}`)
+        || (practice[topic.id]?.length ?? 0) >= PRACTICE_QUOTA,
+    };
+    return Object.values(state).some(Boolean) ? [[topic.id, state]] : [];
+  })));
+}
+
 // Офлайн-запас практики: если сервер не отдал задачу (пустая БД, сеть),
 // берём позицию из public/data/puzzles.json и проверяем ход на устройстве.
 // Формат совпадает с выдачей Lichess: moves[0] — показанный ход соперника,
@@ -920,7 +961,7 @@ function samePracticeMove(actual: string, expected: string): boolean {
   return expected.length === 5 ? actual === expected : actual.slice(0, 4) === expected.slice(0, 4);
 }
 
-function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: string }) {
+function LessonPracticeBoard({ themes, topicId, alreadyCompleted, onCompleted }: { themes: string[]; topicId: string; alreadyCompleted: boolean; onCompleted: () => void }) {
   // Практика по теме идёт через сервер: задача подбирается по тегу темы,
   // ход соперника уже показан на доске, backend проверяет ключевой ход
   // и начисляет XP/монеты за первое верное решение.
@@ -937,7 +978,8 @@ function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: s
   const statusRef = useRef(status);
   statusRef.current = status;
   // Офлайн-режим: верное решение локальной задачи (null — проверяет сервер).
-  const solutionRef = useRef<string | null>(null);
+  const solutionRef = useRef<string[] | null>(null);
+  const userMovesRef = useRef<string[]>([]);
   // Счёт ведём через ref, а не через setState-апдейтер: апдейтеры выполняются
   // позже вызова, и запись/событие по ним отставали на один ход.
   const solvedRef = useRef<string[]>(readPracticeStore()[topicId] ?? []);
@@ -946,7 +988,8 @@ function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: s
   // Если тема уже была закрыта раньше — сразу свободный режим:
   // доска доступна, но повторного «прохождения» и дубля наград нет.
   // Разовый бонус за практику уже забран — сразу свободный режим.
-  const [practiceBonus, setPracticeBonus] = useState(() => readStudentState().claimed.includes(`practice:${topicId}`));
+  const [practiceBonus, setPracticeBonus] = useState(() => alreadyCompleted || readStudentState().claimed.includes(`practice:${topicId}`));
+  useEffect(() => { if (alreadyCompleted) setPracticeBonus(true); }, [alreadyCompleted]);
   const themeKey = themes.join(',');
   const solvedCount = Math.min(solvedRef.current.length, PRACTICE_QUOTA);
   // Пока бонус не забран — показываем экран прохождения; после — свободный режим.
@@ -959,6 +1002,7 @@ function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: s
 
   const loadPuzzle = async (rotation = 0) => {
     const requestId = (requestIdRef.current += 1);
+    userMovesRef.current = [];
     setStatus('loading');
     groundRef.current?.set({ movable: { color: 'white', dests: new Map() } });
     setError('');
@@ -991,7 +1035,7 @@ function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: s
         const pool = fresh.length ? fresh : themed;
         if (!pool.length) throw new Error('empty pool');
         const candidate = pool[Math.floor(Math.random() * pool.length)];
-        solutionRef.current = candidate.moves[1] ?? null;
+        solutionRef.current = candidate.moves;
         setPuzzle({
           id: `local:${candidate.id}`,
           fen: candidate.fen,
@@ -1002,8 +1046,8 @@ function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: s
           game_url: candidate.gameUrl,
         });
         setRequestIndex((value) => value + 1);
-        setStatus(solutionRef.current ? 'ready' : 'error');
-        if (!solutionRef.current) setError('В локальной задаче нет решения.');
+        setStatus(solutionRef.current.some((_, index) => index % 2 === 1) ? 'ready' : 'error');
+        if (!solutionRef.current.some((_, index) => index % 2 === 1)) setError('В локальной задаче нет решения.');
       } catch {
         if (requestId !== requestIdRef.current) return;
         solutionRef.current = null;
@@ -1042,8 +1086,19 @@ function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: s
     const uci = `${orig}${dest}${promotion}`;
     setStatus('submitting');
     groundRef.current?.set({ movable: { color: 'white', dests: new Map() } });
-    const registerSolved = (xpEarned: number, alreadySolved: boolean) => {
+    const registerStep = (nextUserMoves: string[], xpEarned: number, alreadySolved: boolean, complete: boolean, opponentMove?: string | null) => {
       const played = current.move({ from: orig as Square, to: dest as Square, promotion: promotion || 'q' });
+      userMovesRef.current = nextUserMoves;
+      let lastMove: [Key, Key] | undefined = played ? [played.from as Key, played.to as Key] : undefined;
+      if (opponentMove) {
+        const reply = current.move({ from: opponentMove.slice(0, 2) as Square, to: opponentMove.slice(2, 4) as Square, promotion: opponentMove[4] as 'q' | 'r' | 'b' | 'n' | undefined });
+        if (reply) lastMove = [reply.from as Key, reply.to as Key];
+      }
+      if (!complete) {
+        setStatus('ready');
+        groundRef.current?.set({ fen: current.fen(), turnColor: current.turn() === 'w' ? 'white' : 'black', lastMove, movable: { color: current.turn() === 'w' ? 'white' : 'black', dests: legalDests(current) } });
+        return;
+      }
       if (!alreadySolved && !solvedRef.current.includes(puzzle.id)) {
         // Всё делаем синхронно здесь: ref актуален всегда, хранилище пишем
         // до события — итог практики больше не отстаёт на один ход.
@@ -1055,10 +1110,11 @@ function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: s
         if (solvedRef.current.length >= PRACTICE_QUOTA) {
           const claimed = awardPawns(`practice:${topicId}`, PRACTICE_BONUS, 'puzzle');
           setPracticeBonus(claimed.claimed.includes(`practice:${topicId}`));
+          onCompleted();
         }
       }
       setStatus('correct');
-      groundRef.current?.set({ fen: current.fen(), lastMove: played ? [played.from as Key, played.to as Key] : undefined, movable: { color: current.turn() === 'w' ? 'white' : 'black', dests: new Map() } });
+      groundRef.current?.set({ fen: current.fen(), turnColor: current.turn() === 'w' ? 'white' : 'black', lastMove, movable: { color: current.turn() === 'w' ? 'white' : 'black', dests: new Map() } });
     };
     const registerWrong = () => {
       setStatus('wrong');
@@ -1068,22 +1124,27 @@ function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: s
     // Офлайн-режим: сверяем ход с решением из локального запаса.
     const localSolution = solutionRef.current;
     if (localSolution) {
-      if (!samePracticeMove(uci, localSolution)) {
+      const nextUserMoves = [...userMovesRef.current, uci];
+      const expectedUserMoves = localSolution.filter((_, index) => index % 2 === 1);
+      if (nextUserMoves.length > expectedUserMoves.length || nextUserMoves.some((move, index) => !samePracticeMove(move, expectedUserMoves[index]))) {
         registerWrong();
         return;
       }
       const xp = offlinePracticeXp(puzzle.rating);
       const already = solvedRef.current.includes(puzzle.id);
-      registerSolved(xp, already);
+      const complete = nextUserMoves.length === expectedUserMoves.length;
+      const opponentMove = complete ? null : localSolution[nextUserMoves.length * 2];
+      registerStep(nextUserMoves, xp, already, complete, opponentMove);
       return;
     }
     try {
-      const result = await puzzleApi.submitPuzzleMove(puzzle.id, uci);
+      const nextUserMoves = [...userMovesRef.current, uci];
+      const result = await puzzleApi.submitPuzzleMove(puzzle.id, nextUserMoves.join(' '));
       if (!result.is_correct) {
         registerWrong();
         return;
       }
-      registerSolved(result.xp_earned, result.already_solved);
+      registerStep(nextUserMoves, result.xp_earned, result.already_solved, result.is_complete !== false, result.opponent_move);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Не удалось проверить ход');
       setStatus('error');
@@ -1097,8 +1158,18 @@ function LessonPracticeBoard({ themes, topicId }: { themes: string[]; topicId: s
   const moveSide = puzzle?.initial_move ? (fenSide === 'w' ? 'b' : 'w') : fenSide;
   const moveSideLabel = moveSide === 'w' ? 'белых' : 'чёрных';
   const moveSideTitle = moveSide === 'w' ? 'БЕЛЫЕ' : 'ЧЁРНЫЕ';
+  const activeThemes = puzzle?.themes ?? themes;
+  const practicePrompt = activeThemes.includes('mateIn2')
+    ? `Найди мат за два хода. Начинай за ${moveSideLabel}.`
+    : activeThemes.includes('mateIn1')
+      ? `Поставь мат одним ходом за ${moveSideLabel}.`
+      : activeThemes.includes('fork')
+        ? `Найди двойной удар за ${moveSideLabel}.`
+        : activeThemes.includes('pin')
+          ? `Найди связку за ${moveSideLabel}.`
+          : `Реши позицию по теме урока. Ход ${moveSideLabel}.`;
   const needsAuth = /401|авторизац|войдите|войти/i.test(error);
-  return <div className="lesson-practice"><div className="practice-header"><div><span className="block-kicker">ПРАКТИКА ПО ТЕМЕ</span><strong>Реши {PRACTICE_QUOTA} задачи по теме — каждая засчитывается один раз</strong></div></div><div className="practice-progress"><div className="practice-dots">{Array.from({ length: PRACTICE_QUOTA }, (_, position) => <i key={position} className={position < solvedCount ? 'done' : ''} />)}</div><span>Решено {solvedCount}/{PRACTICE_QUOTA}{sessionXp > 0 ? ` · +${sessionXp} XP за тему` : ''}{practiceBonus ? ' · пройдено ✓' : ''}</span></div><div className="practice-board-wrap"><CoordinateBoard boardRef={boardRef} label="Позиция по текущей теме" /></div>  {done && <div className="practice-done"><div><strong>{practiceBonus ? `Практика пройдена ✓ +${PRACTICE_BONUS} ♟` : `Практика пройдена ✓ ${solvedCount}/${PRACTICE_QUOTA}`}</strong><small>{practiceBonus ? `+${sessionXp} XP за задачи уже на твоём счёте.` : 'Начисляем бонус за практику…'}</small></div></div>}<div className="practice-info"><div className="practice-turn-content"><div className={`practice-turn-indicator ${moveSide === 'w' ? 'white-to-move' : 'black-to-move'}`}><span>СЕЙЧАС ХОДЯТ</span><strong>{moveSideTitle}</strong></div><p className={`practice-turn-feedback ${status}`}>{status === 'correct' ? 'Верно, позиция решена.' : status === 'wrong' ? 'Ход не подходит — попробуй найти лучший.' : status === 'submitting' ? 'Проверяем выбранный ход…' : status === 'error' ? (needsAuth ? 'Войди, чтобы сохранить решение.' : error) : status === 'loading' ? 'Подготавливаем позицию…' : `Найди лучший ход за ${moveSideLabel}.`}</p>{status === 'error' && needsAuth && <a className="source-link" href="#auth">Войти и решать за XP ↗</a>}</div><button type="button" className="practice-next" onClick={() => void loadPuzzle(1)} disabled={status === 'loading' || status === 'submitting'}>Другая позиция ↗</button></div></div>;
+  return <div className="lesson-practice"><div className="practice-header"><div><span className="block-kicker">ПРАКТИКА ПО ТЕМЕ</span><strong>Реши {PRACTICE_QUOTA} задачи по теме — каждая засчитывается один раз</strong></div></div><div className="practice-progress"><div className="practice-dots">{Array.from({ length: PRACTICE_QUOTA }, (_, position) => <i key={position} className={position < solvedCount ? 'done' : ''} />)}</div><span>Решено {solvedCount}/{PRACTICE_QUOTA}{sessionXp > 0 ? ` · +${sessionXp} XP за тему` : ''}{practiceBonus ? ' · пройдено ✓' : ''}</span></div><div className="practice-board-wrap"><CoordinateBoard boardRef={boardRef} label="Позиция по текущей теме" /></div>  {done && <div className="practice-done"><div><strong>{practiceBonus ? `Практика пройдена ✓ +${PRACTICE_BONUS} ♟` : `Практика пройдена ✓ ${solvedCount}/${PRACTICE_QUOTA}`}</strong><small>{practiceBonus ? `+${sessionXp} XP за задачи уже на твоём счёте.` : 'Начисляем бонус за практику…'}</small></div></div>}<div className="practice-info"><div className="practice-turn-content"><div className={`practice-turn-indicator ${moveSide === 'w' ? 'white-to-move' : 'black-to-move'}`}><span>СЕЙЧАС ХОДЯТ</span><strong>{moveSideTitle}</strong></div><p className={`practice-turn-feedback ${status}`}>{status === 'correct' ? 'Верно, позиция решена.' : status === 'wrong' ? 'Ход не подходит — попробуй ещё.' : status === 'submitting' ? 'Проверяем выбранный ход…' : status === 'error' ? (needsAuth ? 'Войди, чтобы сохранить решение.' : error) : status === 'loading' ? 'Подготавливаем позицию…' : practicePrompt}</p>{status === 'error' && needsAuth && <a className="source-link" href="#auth">Войти и решать за XP ↗</a>}</div><button type="button" className="practice-next" onClick={() => void loadPuzzle(1)} disabled={status === 'loading' || status === 'submitting'}>Другая позиция ↗</button></div></div>;
 }
 
 function LichessPuzzleLibrary() {
@@ -1155,7 +1226,7 @@ function CommunityPage() {
 
   const sortedValue = (player: LeaderboardResponse['top_players'][number]) => category === 'elo' ? `${player.elo_rating} ELO` : category === 'level' ? `ур. ${player.level}` : `${player.puzzles_solved} задач`;
   const clanPanel = <ClanPanel user={user} clans={clans} loading={clansLoading} error={clansError} busy={clanBusy} name={clanName} tag={clanTag} description={clanDescription} setName={setClanName} setTag={setClanTag} setDescription={setClanDescription} create={() => { void runClanAction(async () => { await clanApi.createClan(clanName.trim(), clanTag.trim(), clanDescription.trim()); setClanName(''); setClanTag(''); setClanDescription(''); }); }} join={(clanId) => { void runClanAction(() => clanApi.joinClan(clanId)); }} leave={() => { void runClanAction(() => clanApi.leaveClan()); }} />;
-  return <section className="community-page" id="community"><div className="community-hero"><div><span className="eyebrow"><span>03</span> СООБЩЕСТВО COOLCHESS</span><h2>Решай вместе.<br /><em>Расти быстрее.</em></h2><p>Сравнивай рейтинг, уровень и количество решённых задач с учениками школы.</p></div><div className="community-live"><span className="live-label">СЕРВЕРНЫЕ ДАННЫЕ</span><strong>{data?.top_players.length ?? '—'}</strong><small>учеников в текущем списке рейтинга</small><div className="live-stack"><span>♟</span><span>♞</span><span>♜</span></div></div></div><div className="community-grid"><div className="community-card race-large"><div className="card-kicker">СОРЕВНОВАНИЯ</div><h3>Гонки и PvP</h3><p>Для живых гонок, онлайн-статуса и партий друг с другом понадобится отдельный API. Пока доступен рейтинг учеников.</p><div className="race-track"><span className="race-line" /><i style={{ left: '63%' }}>♟</i><i style={{ left: '74%' }}>♞</i></div><span className="source-link">Онлайн-лобби пока не подключено</span></div><div className="community-card online-card"><div className="community-card-title"><h3>Твоя позиция</h3><span>СЕЙЧАС</span></div>{data?.my_rank ? <><div className="community-player"><span>#{data.my_rank.rank}</span><div><strong>Твой результат</strong><small>{data.my_rank.elo_rating} ELO · уровень {data.my_rank.level}</small></div><i /></div><div className="community-player"><span>♟</span><div><strong>{data.my_rank.xp} XP</strong><small>{data.my_rank.puzzles_solved} решённых задач</small></div></div></> : <p>{loading ? 'Загружаем твоё место…' : 'Войди в аккаунт, чтобы увидеть своё место.'}</p>}</div><div className="community-card leaderboard-large"><div className="community-card-title"><h3>Рейтинг учеников</h3><div className="leaderboard-filters">{(['elo', 'level', 'puzzles'] as const).map((item) => <button className={category === item ? 'selected' : ''} key={item} type="button" onClick={() => { setError(''); setCategory(item); }}>{item === 'elo' ? 'ELO' : item === 'level' ? 'Уровень' : 'Задачи'}</button>)}</div></div>{error ? <p className="puzzle-reward">{error}</p> : loading ? <p>Загружаем рейтинг…</p> : data?.top_players.length ? data.top_players.map((player) => <div className={player.user_id === user?.id ? 'ranking-row current' : 'ranking-row'} key={player.user_id}><b>{String(player.rank).padStart(2, '0')}</b><span>{player.email.split('@')[0]}</span><small>{player.puzzles_solved} задач</small><strong>{sortedValue(player)}</strong></div>) : <p>Пока нет учеников в рейтинге.</p>}</div>{clanPanel}</div></section>;
+  return <section className="community-page" id="community"><div className="community-hero"><div><span className="eyebrow">СООБЩЕСТВО COOLCHESS</span><h2>Решай вместе.<br /><em>Расти быстрее.</em></h2><p>Сравнивай рейтинг, уровень и количество решённых задач с учениками школы.</p></div><div className="community-live"><span className="live-label">Сейчас онлайн</span><strong>{data?.top_players.length ?? '—'}</strong><small>учеников в текущем списке рейтинга</small><div className="live-stack"><span>♟</span><span>♞</span><span>♜</span></div></div></div><div className="community-grid"><div className="community-card race-large"><div className="card-kicker">СОРЕВНОВАНИЯ</div><h3>Гонки и PvP</h3><p>Для живых гонок, онлайн-статуса и партий друг с другом понадобится отдельный API. Пока доступен рейтинг учеников.</p><div className="race-track"><span className="race-line" /><i style={{ left: '63%' }}>♟</i><i style={{ left: '74%' }}>♞</i></div><span className="source-link">Онлайн-лобби пока не подключено</span></div><div className="community-card online-card"><div className="community-card-title"><h3>Твоя позиция</h3><span>СЕЙЧАС</span></div>{data?.my_rank ? <><div className="community-player"><span>#{data.my_rank.rank}</span><div><strong>Твой результат</strong><small>{data.my_rank.elo_rating} ELO · уровень {data.my_rank.level}</small></div><i /></div><div className="community-player"><span>♟</span><div><strong>{data.my_rank.xp} XP</strong><small>{data.my_rank.puzzles_solved} решённых задач</small></div></div></> : <p>{loading ? 'Загружаем твоё место…' : 'Войди в аккаунт, чтобы увидеть своё место.'}</p>}</div><div className="community-card leaderboard-large"><div className="community-card-title"><h3>Рейтинг учеников</h3><div className="leaderboard-filters">{(['elo', 'level', 'puzzles'] as const).map((item) => <button className={category === item ? 'selected' : ''} key={item} type="button" onClick={() => { setError(''); setCategory(item); }}>{item === 'elo' ? 'ELO' : item === 'level' ? 'Уровень' : 'Задачи'}</button>)}</div></div>{error ? <p className="puzzle-reward">{error}</p> : loading ? <p>Загружаем рейтинг…</p> : data?.top_players.length ? data.top_players.map((player) => <div className={player.user_id === user?.id ? 'ranking-row current' : 'ranking-row'} key={player.user_id}><b>{String(player.rank).padStart(2, '0')}</b><span>{player.email.split('@')[0]}</span><small>{player.puzzles_solved} задач</small><strong>{sortedValue(player)}</strong></div>) : <p>Пока нет учеников в рейтинге.</p>}</div>{clanPanel}</div></section>;
 }
 
 function ClanPanel({
@@ -1246,6 +1317,50 @@ function CoursePlacementPanel({ onStart }: { onStart: (placement: CoursePlacemen
 }
 
 function LearnPage() {
+  const { user } = useAuth();
+  const [serverProgress, setServerProgress] = useState<CourseProgressMap>({});
+  const localProgressOwnerKey = 'coolchess.courseProgress.owner.v1';
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) {
+      setServerProgress({});
+      return () => { cancelled = true; };
+    }
+    const localProgress = readLocalCourseCompletions();
+    const owner = localStorage.getItem(localProgressOwnerKey);
+    const canImportLocalProgress = !owner || owner === user.id;
+    void courseProgressApi.getCourseProgress().then(async (saved) => {
+      const merged: CourseProgressMap = { ...saved };
+      if (canImportLocalProgress) {
+        await Promise.all(Object.entries(localProgress).map(async ([id, local]) => {
+          const response = await courseProgressApi.syncCourseProgress(id, local);
+          const previous = merged[id];
+          merged[id] = {
+            theory_completed: response.theory_completed || previous?.theory_completed === true,
+            quiz_completed: response.quiz_completed || previous?.quiz_completed === true,
+            practice_completed: response.practice_completed || previous?.practice_completed === true,
+          };
+        }));
+        localStorage.setItem(localProgressOwnerKey, user.id);
+      }
+      if (!cancelled) setServerProgress(merged);
+    }).catch(() => {
+      if (!cancelled) setServerProgress({});
+    });
+    return () => { cancelled = true; };
+  }, [user?.id]);
+  const markServerProgress = (topicId: string, milestone: CourseMilestone) => {
+    setServerProgress((current) => ({
+      ...current,
+      [topicId]: {
+        theory_completed: current[topicId]?.theory_completed ?? false,
+        quiz_completed: current[topicId]?.quiz_completed ?? false,
+        practice_completed: current[topicId]?.practice_completed ?? false,
+        [milestone]: true,
+      },
+    }));
+    if (user) void courseProgressApi.markCourseProgress(topicId, milestone).catch(() => undefined);
+  };
   // Первый урок берём из данных курса, а не хардкодим:
   // иначе кнопка «Открыть первый урок» и дефолт могут разъехаться.
   const firstTopicId = courseModules[0].topics[0].id;
@@ -1259,15 +1374,15 @@ function LearnPage() {
   const module = courseModules.find((item) => item.topics.some((topic) => topic.id === topicId)) ?? courseModules[0];
   const topic = module.topics.find((item) => item.id === topicId) ?? module.topics[0];
   // Награда за теорию выдаётся один раз на тему (claimed в localStorage).
-  const [theoryClaimed, setTheoryClaimed] = useState(() => readStudentState().claimed.includes(`theory:${topic.id}`));
+  const [theoryClaimed, setTheoryClaimed] = useState(() => readStudentState().claimed.includes(`theory:${topic.id}`) || serverProgress[topic.id]?.theory_completed === true);
   useEffect(() => {
     const syncClaim = () => {
-      setTheoryClaimed(readStudentState().claimed.includes(`theory:${topic.id}`));
+      setTheoryClaimed(readStudentState().claimed.includes(`theory:${topic.id}`) || serverProgress[topic.id]?.theory_completed === true);
     };
     syncClaim();
     window.addEventListener('coolchess:state', syncClaim);
     return () => window.removeEventListener('coolchess:state', syncClaim);
-  }, [topic.id]);
+  }, [topic.id, serverProgress]);
   // Статусы для дерева тем: перечитываем localStorage при каждом
   // событии теории/практики, чтобы пункты зеленели сразу после прохождения.
   const [statusTick, setStatusTick] = useState(0);
@@ -1279,9 +1394,9 @@ function LearnPage() {
   }, []);
   void statusTick;
   const claimedTopics = readStudentState().claimed;
-  const theoryDone = (id: string) => claimedTopics.includes(`theory:${id}`);
+  const theoryDone = (id: string) => claimedTopics.includes(`theory:${id}`) || serverProgress[id]?.theory_completed === true;
   // Практика закрыта, когда забран разовый бонус за квоту 3/3.
-  const practiceDone = (id: string) => claimedTopics.includes(`practice:${id}`);
+  const practiceDone = (id: string) => claimedTopics.includes(`practice:${id}`) || serverProgress[id]?.practice_completed === true;
   const article = lessonContent[topic.id];
   const visual = lessonVisuals[topic.id] ?? { fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', moves: [], title: topic.title, caption: 'Разбери позицию и назови главную идею.', focus: 'e4 d4' };
   const [demoViewed, setDemoViewed] = useState(() => readDemoStore()[topic.id] ?? (topic.id !== 'opening-library' && visual.moves.length === 0));
@@ -1289,6 +1404,7 @@ function LearnPage() {
   const completeTheory = () => {
     const next = awardPawns(`theory:${topic.id}`, 20, 'theory');
     setTheoryClaimed(next.claimed.includes(`theory:${topic.id}`));
+    markServerProgress(topic.id, 'theory_completed');
     setReviewViewed(false);
   };
   // Трекер теории: разбор считается досмотренным, когда линия на демо-доске
@@ -1321,9 +1437,12 @@ function LearnPage() {
   const [quizTick, setQuizTick] = useState(0);
   void quizTick;
   const quizQuestions = lessonQuiz[topic.id] ?? [];
-  const quizPassed = (readQuizStore()[topic.id] ?? false) || quizQuestions.length === 0;
+  const quizPassed = (readQuizStore()[topic.id] ?? false) || serverProgress[topic.id]?.quiz_completed === true || quizQuestions.length === 0;
   const practiceLocked = quizQuestions.length > 0 && !quizPassed;
-  const markQuizPassed = () => setQuizTick((value) => value + 1);
+  const markQuizPassed = () => {
+    markServerProgress(topic.id, 'quiz_completed');
+    setQuizTick((value) => value + 1);
+  };
   // Выбор урока из дерева (и кнопка «следующий урок»): переключаем рабочую зону.
   const selectTopic = (nextId: string) => {
     setTopicId(nextId);
@@ -1343,8 +1462,7 @@ function LearnPage() {
   // Данные для итогового табло шага 4: бонус практики и текущий счёт квоты.
   // Практика пишет счёт синхронно и шлёт событие coolchess:practice
   // о каждом зачтённом решении — по нему перечитываем хранилище.
-  const practiceBonusClaimed = claimedTopics.includes(`practice:${topic.id}`);
-  const practiceSolved = Math.min((readPracticeStore()[topic.id] ?? []).length, PRACTICE_QUOTA);
+  const practiceBonusClaimed = claimedTopics.includes(`practice:${topic.id}`) || serverProgress[topic.id]?.practice_completed === true;
   if (showPlacement) return <section className="learn-page course-placement-page"><main className="learn-page-main"><CoursePlacementPanel onStart={beginCourse} /></main></section>;
   return <section className="learn-page"><aside className="learn-page-sidebar"><div className="sidebar-title"><span className="sidebar-logo">♟</span><div><strong>Курс ученика</strong><small>{placement ? 'Маршрут можно изменить' : 'Выбери тему для изучения'}</small></div></div><button className="learn-route-reset" type="button" onClick={() => setShowPlacement(true)}>Изменить старт курса</button>{courseModules.map((item) => {
     const moduleDoneCount = item.topics.filter((moduleTopic) => theoryDone(moduleTopic.id) && practiceDone(moduleTopic.id)).length;
@@ -1380,11 +1498,11 @@ function LearnPage() {
           <button className="button button-primary" type="button" onClick={() => goStep('quiz')}>К проверке знаний →</button>
         </div>
       </article>}
-      {step === 'quiz' && <LessonQuiz key={topic.id} topicId={topic.id} topicTitle={topic.title} boardFen={visual.fen} questions={quizQuestions} onPassed={markQuizPassed} onGoPractice={() => goStep('practice')} />}
+      {step === 'quiz' && <LessonQuiz key={topic.id} topicId={topic.id} topicTitle={topic.title} boardFen={visual.fen} questions={quizQuestions} onPassed={markQuizPassed} onGoPractice={() => goStep('practice')} serverPassed={serverProgress[topic.id]?.quiz_completed === true} />}
       {step === 'practice' && <section className="learn-practice lesson-tab-practice" id="lesson-practice">
         <div className="learn-practice-card">
-          <div className="learn-practice-heading"><div><h2>Сделай ход сам.</h2><p>Квиз пройден — доска твоя. Найди лучший ход: сервер проверит ответ и начислит XP и монеты. Подборка — по тегам выбранной темы: {topic.puzzleThemes.join(', ') || 'базовая позиция'}.</p></div></div>
-          <LessonPracticeBoard key={topic.id} topicId={topic.id} themes={topic.puzzleThemes} />
+          <div className="learn-practice-heading"><div><h2>Сделай ход сам.</h2><p>Квиз пройден — доска твоя. Сторона хода показана рядом с доской. Если решение состоит из нескольких ходов, соперник ответит автоматически. Подборка — по теме урока: {topic.puzzleThemes.join(', ') || 'базовая позиция'}.</p></div></div>
+          <LessonPracticeBoard key={topic.id} topicId={topic.id} themes={topic.puzzleThemes} alreadyCompleted={practiceBonusClaimed} onCompleted={() => markServerProgress(topic.id, 'practice_completed')} />
           {practiceBonusClaimed && <div className="practice-success"><div><strong>Приём закреплён ✓ — практика темы пройдена!</strong><small>Так держать. Можно закрепить ещё или идти дальше по курсу.</small></div>{nextTopic && <button className="button button-primary" type="button" onClick={() => selectTopic(nextTopic.id)}>Следующий урок: {nextTopic.title} →</button>}</div>}
         </div>
       </section>}
@@ -1465,7 +1583,12 @@ function ProfilePage() {
   };
 
   const displayName = user?.email.split('@')[0] ?? 'Ученик';
-  return <section className="profile-page"><div className="profile-hero"><div className="profile-avatar-large">{displayName[0]?.toUpperCase() ?? 'У'}</div><div><span className="eyebrow"><span>06</span> ПРОФИЛЬ УЧЕНИКА</span><h1>{displayName} <em>в игре.</em></h1><p>{profile?.email ?? user?.email ?? 'Данные профиля загружаются с сервера.'}</p></div><div className="profile-wallet"><span>РЕЙТИНГ COOLCHESS</span><strong>{loading ? '…' : profile?.elo_rating ?? '—'}</strong><small>{profile ? `уровень ${profile.level} · ${profile.coins} ♟` : user?.role ?? 'ученик'}</small></div></div>{error && <p className="puzzle-reward">{error}</p>}<div className="profile-grid"><div className="profile-card streak-card"><span className="profile-card-kicker">ОПЫТ</span><strong>{loading ? '…' : profile?.xp ?? '—'} XP</strong><p>накопленный опыт</p><small>Уровень {loading ? '…' : profile?.level ?? '—'} · серверные данные</small></div><div className="profile-card"><span className="profile-card-kicker">БАЛАНС</span><strong>{loading ? '…' : profile?.coins ?? '—'} ♟</strong><p>доступные пешки</p><small>Подтверждено сервером</small></div><div className="profile-card"><span className="profile-card-kicker">ЗАДАЧИ</span><strong>{loading ? '…' : rankData?.my_rank?.puzzles_solved ?? '—'}</strong><p>решено правильно</p><small>{rankData?.my_rank ? `Место в рейтинге: ${rankData.my_rank.rank}` : 'Пока нет статистики'}</small></div><div className="profile-card"><span className="profile-card-kicker">LICHESS</span><strong>{profile?.lichess_username ? '✓' : '—'}</strong><p>{profile?.lichess_username ?? 'Аккаунт не привязан'}</p><small>{profile?.lichess_rapid_rating ? `Rapid ${profile.lichess_rapid_rating}` : 'Подключи профиль для синхронизации'}</small></div><div className="profile-card"><span className="profile-card-kicker">CHESS.COM</span><strong>{profile?.chesscom_username ? '✓' : '—'}</strong><p>{profile?.chesscom_username ?? 'Аккаунт не указан'}</p><small>{profile?.chesscom_rapid_rating ? `Rapid ${profile.chesscom_rapid_rating}` : 'Нет Rapid'} · {profile?.chesscom_blitz_rating ? `Blitz ${profile.chesscom_blitz_rating}` : 'Нет Blitz'}</small></div></div><div className="profile-activity"><div><h2>Связать Lichess</h2><p>Скопируй проверочный код в описание профиля Lichess, затем укажи свой ник здесь.</p>{verification && <p><strong>{verification}</strong></p>}{linkMessage && <p>{linkMessage}</p>}</div><div className="lichess-link-controls"><input value={lichessName} onChange={(event) => setLichessName(event.target.value)} placeholder="Ник на Lichess" aria-label="Ник на Lichess" /><button className="button button-link" type="button" onClick={() => void startLichessLink()}>Получить код</button><button className="button button-primary" type="button" disabled={!lichessName.trim() || linkBusy} onClick={() => void submitLichessLink()}>{linkBusy ? 'Проверяем…' : 'Проверить и связать'}</button></div></div><div className="profile-activity chesscom-activity"><div><h2>Добавить Chess.com</h2><p>Укажи публичный ник, чтобы показать рейтинги в профиле. Chess.com не подтверждает, что этот аккаунт принадлежит тебе.</p>{chesscomMessage && <p role="status">{chesscomMessage}</p>}</div><div className="lichess-link-controls"><input value={chesscomName} onChange={(event) => setChesscomName(event.target.value)} placeholder="Ник на Chess.com" aria-label="Ник на Chess.com" /><button className="button button-primary" type="button" disabled={!chesscomName.trim() || chesscomBusy} onClick={() => void submitChessComSync()}>{chesscomBusy ? 'Обновляем…' : 'Получить рейтинги'}</button></div></div></section>;
+  const profileLevel = profile?.level ?? 1;
+  const profileXp = profile?.xp ?? 0;
+  const levelStartXp = (profileLevel - 1) ** 2 * 100;
+  const levelNextXp = profileLevel ** 2 * 100;
+  const levelProgress = Math.min(100, Math.max(0, ((profileXp - levelStartXp) / Math.max(1, levelNextXp - levelStartXp)) * 100));
+  return <section className="profile-page"><div className="profile-hero"><div className="profile-avatar-large">{displayName[0]?.toUpperCase() ?? 'У'}</div><div><span className="eyebrow">ПРОФИЛЬ УЧЕНИКА</span><h1>{displayName} <em>в игре.</em></h1><p>{profile?.email ?? user?.email ?? 'Данные профиля загружаются с сервера.'}</p></div><div className="profile-wallet"><span className="profile-rating-label">РЕЙТИНГ COOLCHESS</span><div className="profile-rating-value"><strong>{loading ? '…' : profile?.elo_rating ?? '—'}</strong><b>ELO</b></div><small>{profile ? `${profile.coins} ♟ на счету` : user?.role ?? 'ученик'}</small><div className="profile-level-progress" aria-label={`Прогресс уровня ${profileLevel}`}><strong>{profileLevel}</strong><div className="profile-level-track"><i style={{ width: `${levelProgress}%` }} /></div><strong>{profileLevel + 1}</strong><small>{profileXp} / {levelNextXp} XP</small></div></div></div>{error && <p className="puzzle-reward">{error}</p>}<div className="profile-grid"><div className="profile-card streak-card"><span className="profile-card-kicker">ОПЫТ</span><strong>{loading ? '…' : profile?.xp ?? '—'} XP</strong><p>накопленный опыт</p><small>Уровень {loading ? '…' : profile?.level ?? '—'}</small></div><div className="profile-card"><span className="profile-card-kicker">БАЛАНС</span><strong>{loading ? '…' : profile?.coins ?? '—'} ♟</strong><p>доступные пешки</p></div><div className="profile-card"><span className="profile-card-kicker">ЗАДАЧИ</span><strong>{loading ? '…' : rankData?.my_rank?.puzzles_solved ?? '—'}</strong><p>решено правильно</p><small>{rankData?.my_rank ? `Место в рейтинге: ${rankData.my_rank.rank}` : 'Пока нет статистики'}</small></div><div className="profile-card"><span className="profile-card-kicker">LICHESS</span><strong>{profile?.lichess_username ? '✓' : '—'}</strong><p>{profile?.lichess_username ?? 'Аккаунт не привязан'}</p><small>{profile?.lichess_rapid_rating ? `Rapid ${profile.lichess_rapid_rating}` : 'Подключи профиль для синхронизации'}</small></div><div className="profile-card"><span className="profile-card-kicker">CHESS.COM</span><strong>{profile?.chesscom_username ? '✓' : '—'}</strong><p>{profile?.chesscom_username ?? 'Аккаунт не указан'}</p><small>{profile?.chesscom_rapid_rating ? `Rapid ${profile.chesscom_rapid_rating}` : 'Нет Rapid'} · {profile?.chesscom_blitz_rating ? `Blitz ${profile.chesscom_blitz_rating}` : 'Нет Blitz'}</small></div></div><div className="profile-activity"><div><h2>Связать Lichess</h2><p>Скопируй проверочный код в описание профиля Lichess, затем укажи свой ник здесь.</p>{verification && <p><strong>{verification}</strong></p>}{linkMessage && <p>{linkMessage}</p>}</div><div className="lichess-link-controls"><input value={lichessName} onChange={(event) => setLichessName(event.target.value)} placeholder="Ник на Lichess" aria-label="Ник на Lichess" /><button className="button button-link" type="button" onClick={() => void startLichessLink()}>Получить код</button><button className="button button-primary" type="button" disabled={!lichessName.trim() || linkBusy} onClick={() => void submitLichessLink()}>{linkBusy ? 'Проверяем…' : 'Проверить и связать'}</button></div></div><div className="profile-activity chesscom-activity"><div><h2>Добавить Chess.com</h2><p>Укажи публичный ник, чтобы показать рейтинги в профиле. Chess.com не подтверждает, что этот аккаунт принадлежит тебе.</p>{chesscomMessage && <p role="status">{chesscomMessage}</p>}</div><div className="lichess-link-controls"><input value={chesscomName} onChange={(event) => setChesscomName(event.target.value)} placeholder="Ник на Chess.com" aria-label="Ник на Chess.com" /><button className="button button-primary" type="button" disabled={!chesscomName.trim() || chesscomBusy} onClick={() => void submitChessComSync()}>{chesscomBusy ? 'Обновляем…' : 'Получить рейтинги'}</button></div></div></section>;
 }
 
 function PvpPage() {
@@ -1558,7 +1681,7 @@ function PvpPage() {
   const sendAction = (action: 'resign' | 'draw_offer' | 'draw_accept') => socketRef.current?.send(JSON.stringify({ action }));
   const displayName = (email: string) => email.split('@')[0];
   if (!user) return <section className="pvp-page"><div className="community-card"><h1>PvP</h1><p>Войди в аккаунт, чтобы создать или подключить PvP-комнату.</p><a className="button button-primary" href="#auth">Войти ↗</a></div></section>;
-  return <section className="pvp-page"><div className="pvp-heading"><span className="eyebrow"><span>07</span> ЖИВАЯ ПАРТИЯ</span><h1>Играй<br /><em>с человеком.</em></h1><p>Создай комнату для соперника или подключись по коду. Ходы и часы синхронизируются через WebSocket.</p></div><div className="pvp-layout"><div className="pvp-board-card"><CoordinateBoard boardRef={boardRef} label="PvP шахматная доска" />{room && <div className="pvp-clocks"><span>{displayName(room.white_player.email)} <b>{Math.ceil(room.white_time)}с</b></span><span>{displayName(room.black_player.email)} <b>{Math.ceil(room.black_time)}с</b></span></div>}</div><aside className="pvp-panel"><h2>Лобби PvP</h2><label>{room ? 'Ссылка или код комнаты' : 'UUID соперника или код комнаты'}<input value={opponentId} onChange={(event) => setOpponentId(event.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" /></label><div className="pvp-actions"><button className="button button-primary" type="button" disabled={busy || !opponentId.trim() || Boolean(room)} onClick={() => void createRoom()}>Создать комнату</button><button className="button button-link" type="button" disabled={busy || !opponentId.trim()} onClick={() => void joinRoom()}>{busy ? 'Подключаемся…' : 'Подключиться'}</button>{room && <button className="button button-link" type="button" onClick={() => void copyInviteLink()}>Скопировать приглашение</button>}</div>{error && <p className="puzzle-reward">{error}</p>}{message && <p className="source-link">{message}</p>}{room && <><div className="pvp-players"><p><strong>Белые:</strong> {displayName(room.white_player.email)} {room.white_player.connected ? '●' : '○'}</p><p><strong>Чёрные:</strong> {displayName(room.black_player.email)} {room.black_player.connected ? '●' : '○'}</p></div><div className="pvp-actions"><button className="button button-link" type="button" onClick={() => sendAction('draw_offer')}>Предложить ничью</button><button className="button button-link" type="button" onClick={() => sendAction('draw_accept')}>Принять ничью</button><button className="button button-link" type="button" onClick={() => sendAction('resign')}>Сдаться</button></div></>}</aside></div></section>;
+  return <section className="pvp-page"><div className="pvp-heading"><span className="eyebrow">ЖИВАЯ ПАРТИЯ</span><h1>Играй<br /><em>с человеком.</em></h1><p>Создай комнату для соперника или подключись по коду. Ходы и часы синхронизируются через WebSocket.</p></div><div className="pvp-layout"><div className="pvp-board-card"><CoordinateBoard boardRef={boardRef} label="PvP шахматная доска" />{room && <div className="pvp-clocks"><span>{displayName(room.white_player.email)} <b>{Math.ceil(room.white_time)}с</b></span><span>{displayName(room.black_player.email)} <b>{Math.ceil(room.black_time)}с</b></span></div>}</div><aside className="pvp-panel"><h2>Лобби PvP</h2><label>{room ? 'Ссылка или код комнаты' : 'UUID соперника или код комнаты'}<input value={opponentId} onChange={(event) => setOpponentId(event.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" /></label><div className="pvp-actions"><button className="button button-primary" type="button" disabled={busy || !opponentId.trim() || Boolean(room)} onClick={() => void createRoom()}>Создать комнату</button><button className="button button-link" type="button" disabled={busy || !opponentId.trim()} onClick={() => void joinRoom()}>{busy ? 'Подключаемся…' : 'Подключиться'}</button>{room && <button className="button button-link" type="button" onClick={() => void copyInviteLink()}>Скопировать приглашение</button>}</div>{error && <p className="puzzle-reward">{error}</p>}{message && <p className="source-link">{message}</p>}{room && <><div className="pvp-players"><p><strong>Белые:</strong> {displayName(room.white_player.email)} {room.white_player.connected ? '●' : '○'}</p><p><strong>Чёрные:</strong> {displayName(room.black_player.email)} {room.black_player.connected ? '●' : '○'}</p></div><div className="pvp-actions"><button className="button button-link" type="button" onClick={() => sendAction('draw_offer')}>Предложить ничью</button><button className="button button-link" type="button" onClick={() => sendAction('draw_accept')}>Принять ничью</button><button className="button button-link" type="button" onClick={() => sendAction('resign')}>Сдаться</button></div></>}</aside></div></section>;
 }
 
 function AppV2() {

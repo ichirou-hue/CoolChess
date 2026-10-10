@@ -23,6 +23,7 @@ from database import Base, DATABASE_URL
 import auth.models   # User, Puzzle и связанные таблицы
 import games.models  # GameSession
 import clans.models  # Clan, ClanMember
+import learning.models  # CourseProgress
 
 target_metadata = Base.metadata
 

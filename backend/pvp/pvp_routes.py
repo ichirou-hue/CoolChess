@@ -66,6 +66,7 @@ async def create_pvp_room_direct(
         PlayerConnection(user_id=opponent.id, email=opponent.email, display_name=opponent.display_name, elo=opponent.elo_rating),
         time_control=payload.time_control,
         increment=payload.increment,
+        requires_opponent_acceptance=True,
     )
     return {"game_id": game_id, "status": "waiting", "data": room.to_dict()}
 
@@ -134,7 +135,7 @@ async def create_pvp_room(
 
 
 @pvp_http_router.get("/{game_id}")
-async def get_pvp_state(game_id: str, user: User = Depends(current_active_user)):
+async def get_pvp_state(game_id: str, _user: User = Depends(current_active_user)):
     """Состояние комнаты по HTTP (тот же снапшот, что и `game_state` в WS)."""
     room = pvp_manager.get_room(game_id)
     if not room:
@@ -210,6 +211,15 @@ async def pvp_websocket_endpoint(
 
                 if not (is_white or is_black):
                     await websocket.send_json({"type": "error", "message": "Зрители не могут ходить."})
+                    continue
+
+                if not room.both_players_accepted:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": "Соперник ещё не принял приглашение. Ожидайте его подключения.",
+                        }
+                    )
                     continue
 
                 if (is_white and room.board.turn != True) or (is_black and room.board.turn != False):

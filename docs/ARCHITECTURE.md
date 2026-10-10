@@ -75,6 +75,8 @@ verify / users). Запуск из каталога `backend/`:
 1. `POST /api/pvp/create` (JWT в header) — уникальный пятисимвольный код комнаты,
    создатель — белые, место чёрных открыто (`black.user_id=None`,
    `waiting_opponent=true`).
+   Для прямого приглашения `POST /api/pvp/rooms` часы и результат матча ждут
+   подключения обоих игроков.
 2. WS `GET /ws/pvp/{id}?token=` (`decode_jwt`, audience `fastapi-users:auth`);
    неуспех — закрытие `1008`. Первый чужак занимает место чёрных (`claim_black_seat`
    с подгрузкой email/elo из БД), остальные — зрители в `room.spectators`.

@@ -45,8 +45,9 @@ python -m pip install -r requirements.txt
 ```
 
 В PowerShell активация выглядит как `.\.venv\Scripts\Activate.ps1`.
-Создайте `.env` из `.env.example`, задайте уникальные `JWT_SECRET` и
-`VERIFY_SECRET` (не менее 32 символов), настройте `DATABASE_URL` и SMTP
+Создайте `.env` из `.env.example`, задайте сгенерированный уникальный `POSTGRES_PASSWORD`,
+а также `JWT_SECRET` и `VERIFY_SECRET` (не менее 32 символов). Для локального
+backend укажите тот же пароль в `DATABASE_URL`; настройте SMTP
 (`SMTP_HOST`, `SMTP_FROM_EMAIL` и параметры подключения), чтобы отправлять
 коды подтверждения регистрации.
 Для локального PostgreSQL при запуске через Compose используется

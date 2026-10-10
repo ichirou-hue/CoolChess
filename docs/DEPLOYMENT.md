@@ -24,7 +24,7 @@
 | `JWT_SECRET` | `python -c "import secrets; print(secrets.token_urlsafe(32))"` | да |
 | `VERIFY_SECRET` | `python -c "import secrets; print(secrets.token_urlsafe(32))"` | да |
 | `ENV` | `development` | нет |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` / `POSTGRES_PORT` | `postgres` / `postgrespassword` / `coolchess` / `5433` | для compose |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` / `POSTGRES_PORT` | `postgres` / уникальный сгенерированный пароль / `coolchess` / `5433` | для compose |
 | `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | нет (есть дефолт) |
 | `VITE_API_URL` | пусто для Vite proxy | нет |
 | `SMTP_HOST`, `SMTP_PORT` | `smtp.mail.ru`, `465` | значения по умолчанию |
@@ -69,10 +69,18 @@ python -m pip install -r requirements.txt
 ```powershell
 cp .env.example .env
 cp backend/.env.example backend/.env
-# заполнить JWT_SECRET / VERIFY_SECRET в обоих файлах!
+# заполнить POSTGRES_PASSWORD, JWT_SECRET и VERIFY_SECRET в корневом .env
+# заполнить JWT_SECRET / VERIFY_SECRET в backend/.env
 docker compose up --build -d
 # опционально: python backend/load_lichess_puzzles.py
 ```
+
+Compose не содержит пароля PostgreSQL по умолчанию и завершится с ошибкой,
+если `POSTGRES_PASSWORD` не задан. Сгенерируйте уникальный URL-safe пароль,
+например `python -c "import secrets; print(secrets.token_urlsafe(32))"`,
+и задайте его только в корневом `.env`. Порт PostgreSQL опубликован только на
+`127.0.0.1`; наружу доступны nginx и необходимые приложению endpoints, а не
+сам сервер базы данных.
 
 Для разработки (только БД в Docker, остальное локально):
 

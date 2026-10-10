@@ -18,6 +18,7 @@ export type PvpRoomState = {
   game_over: boolean;
   result: string | null;
   reason: string | null;
+  waiting_opponent: boolean;
   white_player: PvpPlayer;
   black_player: PvpPlayer;
 };
@@ -49,7 +50,7 @@ export function getPvpRoom(gameId: string) {
   return request<PvpRoomState>(`/api/pvp/rooms/${encodeURIComponent(gameId)}`);
 }
 
-export function createPvpSocket(gameId: string, onMessage: (message: { type: string; data?: PvpRoomState; move?: string; result?: string; reason?: string; message?: string }) => void) {
+export function createPvpSocket(gameId: string, onMessage: (message: { type: string; data?: PvpRoomState; move?: string; result?: string; reason?: string; message?: string; user_id?: string; connected?: boolean }) => void) {
   const token = sessionStorage.getItem('coolchess.accessToken');
   const wsUrl = wsUrlFor(`/ws/pvp/${encodeURIComponent(gameId)}?token=${encodeURIComponent(token ?? '')}`);
   const socket = new WebSocket(wsUrl);

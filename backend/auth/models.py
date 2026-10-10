@@ -9,6 +9,7 @@ from sqlalchemy import (
     Table,
     Enum as SQLEnum,
     Index,
+    func,
 )
 from fastapi_users_db_sqlalchemy.generics import GUID
 from sqlalchemy.orm import relationship
@@ -50,6 +51,10 @@ user_solved_puzzles = Table(
 class User(SQLAlchemyBaseUserTableUUID, Base):
     __tablename__ = "users"
 
+    display_name = Column(String(40), nullable=True)
+    __table_args__ = (
+        Index("uq_users_display_name_lower", func.lower(display_name), unique=True),
+    )
     role = Column(SQLEnum(UserRole), default=UserRole.STUDENT, nullable=False)
     elo_rating = Column(Integer, default=1200, nullable=False)
 

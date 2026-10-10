@@ -22,9 +22,10 @@ export function AuthPage() {
     const form = new FormData(event.currentTarget);
     const email = String(form.get('email') ?? '').trim();
     const password = String(form.get('password') ?? '');
+    const displayName = String(form.get('display_name') ?? '').trim();
     setPending(true);
     try {
-      if (isRegister) await register(email, password);
+      if (isRegister) await register(email, password, displayName);
       else await login(email, password);
       window.location.hash = '#home';
     } catch {
@@ -51,7 +52,7 @@ export function AuthPage() {
         <div className="mb-7 grid grid-cols-2 rounded-xl bg-[#ececf4] p-1"><button type="button" onClick={() => switchMode('login')} className={`rounded-lg px-4 py-3 text-xs font-bold transition ${!isRegister ? 'bg-white text-[#111] shadow-sm' : 'text-[#777985]'}`}>Войти</button><button type="button" onClick={() => switchMode('register')} className={`rounded-lg px-4 py-3 text-xs font-bold transition ${isRegister ? 'bg-white text-[#111] shadow-sm' : 'text-[#777985]'}`}>Регистрация</button></div>
         {error && <div className="mb-5 rounded-xl border border-[#f1b8b8] bg-[#fff0f0] px-4 py-3 text-xs font-semibold text-[#a32929]">{error}</div>}
         <form className="space-y-4" onSubmit={submit}>
-          {isRegister && <label className="block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-[#777985]">Имя ученика</span><input name="name" type="text" placeholder="Например, Егор" className="h-13 w-full rounded-xl border border-[#e1e2eb] bg-white px-4 text-sm outline-none transition placeholder:text-[#b6b7c1] focus:border-[#464bff] focus:ring-4 focus:ring-[#464bff]/10" /></label>}
+          {isRegister && <label className="block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-[#777985]">Никнейм</span><input required minLength={3} maxLength={24} name="display_name" type="text" autoComplete="nickname" placeholder="Например, КоньНаЦентре" className="h-13 w-full rounded-xl border border-[#e1e2eb] bg-white px-4 text-sm outline-none transition placeholder:text-[#b6b7c1] focus:border-[#464bff] focus:ring-4 focus:ring-[#464bff]/10" /></label>}
           <label className="block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-[#777985]">Email</span><input required name="email" type="email" placeholder="you@example.com" className="h-13 w-full rounded-xl border border-[#e1e2eb] bg-white px-4 text-sm outline-none transition placeholder:text-[#b6b7c1] focus:border-[#464bff] focus:ring-4 focus:ring-[#464bff]/10" /></label>
           <label className="block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-[#777985]">Пароль</span><div className="relative"><input required name="password" minLength={6} type={showPassword ? 'text' : 'password'} placeholder="Минимум 6 символов" className="h-13 w-full rounded-xl border border-[#e1e2eb] bg-white px-4 pr-20 text-sm outline-none transition placeholder:text-[#b6b7c1] focus:border-[#464bff] focus:ring-4 focus:ring-[#464bff]/10" /><button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-1 text-[10px] font-bold text-[#464bff]">{showPassword ? 'Скрыть' : 'Показать'}</button></div></label>
           {isRegister && <label className="flex items-start gap-3 text-xs leading-5 text-[#777985]"><input required type="checkbox" className="mt-1 accent-[#464bff]" /><span>Я принимаю условия использования CoolChess и политику конфиденциальности.</span></label>}

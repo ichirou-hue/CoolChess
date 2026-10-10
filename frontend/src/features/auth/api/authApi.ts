@@ -4,6 +4,7 @@ import { fetchApi, readApiError } from '../../../shared/api/apiBase';
 export type AuthUser = {
   id: string;
   email: string;
+  display_name: string | null;
   role: 'student' | 'coach' | 'admin' | string;
   elo_rating: number;
 };
@@ -48,13 +49,13 @@ export async function login(email: string, password: string) {
   return getMe();
 }
 
-export async function register(email: string, password: string) {
+export async function register(email: string, password: string, displayName: string) {
   // Роль и стартовый Elo назначает сервер — клиент их не передает.
   // Email тримим; регистр/алиасы нормализует сервер (1 почта = 1 аккаунт).
   const response = await fetchApi('/api/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email.trim(), password }),
+    body: JSON.stringify({ email: email.trim(), password, display_name: displayName.trim() }),
   });
   if (response.status === 404) {
     throw new Error('Backend не нашёл маршрут регистрации (/api/auth/register). Проверьте адрес API и перезапустите frontend после изменения VITE_API_URL.');

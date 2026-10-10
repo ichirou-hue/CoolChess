@@ -1,4 +1,5 @@
 import uuid
+import re
 from pydantic import field_validator
 from fastapi import HTTPException, status
 from fastapi_users import schemas
@@ -39,6 +40,7 @@ def normalize_and_validate_email(email: str) -> str:
 class UserRead(schemas.BaseUser[uuid.UUID]):
     role: UserRole
     elo_rating: int
+    display_name: Optional[str] = None
 
 
 # Схема регистрации нового пользователя с проверкой безопасности.
@@ -47,6 +49,16 @@ class UserRead(schemas.BaseUser[uuid.UUID]):
 # (дефолты колонок в models.User). Клиент не может передать их
 # в теле запроса — иначе любой мог бы зарегистрироваться тренером.
 class UserCreate(schemas.BaseUserCreate):
+    display_name: str = Field(..., min_length=3, max_length=24)
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_display_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not re.fullmatch(r"[\w-]{3,24}", cleaned, flags=re.UNICODE):
+            raise ValueError("Никнейм должен содержать 3–24 буквы, цифры, дефис или подчёркивание.")
+        return cleaned
+
     @field_validator("email")
     @classmethod
     def validate_email_safety(cls, v: str) -> str:

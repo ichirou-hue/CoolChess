@@ -83,6 +83,11 @@ async def get_leaderboard(
         item = LeaderboardUserItem(
             rank=idx,
             user_id=user.id,
+            display_name=(
+                user.display_name.strip()
+                if isinstance(user.display_name, str) and user.display_name.strip()
+                else mask_email(user.email)
+            ),
             email=mask_email(user.email),
             elo_rating=user.elo_rating,
             level=user.level,

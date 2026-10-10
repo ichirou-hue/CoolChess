@@ -37,6 +37,7 @@ def test_user_create_schema_defaults():
     payload = {
         "email": "student@chess.org",
         "password": "strong_password_123",
+        "display_name": "СмелыйКонь",
     }
     user_data = UserCreate(**payload)
     # Роль и стартовый Elo назначаются сервером (дефолты модели),
@@ -51,6 +52,7 @@ def test_user_create_schema_ignores_privilege_escalation():
     user_data = UserCreate(
         email="attacker@chess.org",
         password="strong_password_123",
+        display_name="ЛовкийКонь",
         role="coach",  # type: ignore[call-arg] — лишнее поле отбрасывается
     )
     assert getattr(user_data, "role", None) is None

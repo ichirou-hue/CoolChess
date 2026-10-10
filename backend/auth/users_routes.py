@@ -47,6 +47,7 @@ async def _get_db_user(db: AsyncSession, user_id: uuid.UUID) -> User:
 async def get_player_profile(user: User = Depends(current_active_user)):
     return {
         "email": user.email,
+        "display_name": user.display_name,
         "role": user.role,
         "elo_rating": user.elo_rating,
         "xp": user.xp,

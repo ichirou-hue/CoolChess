@@ -8,7 +8,7 @@ type AuthContextValue = {
   loading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
 };
@@ -38,9 +38,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try { setUser(await authApi.login(email, password)); }
       catch (reason) { const message = reason instanceof Error ? reason.message : 'Не удалось войти'; setError(message); throw reason; }
     },
-    register: async (email, password) => {
+    register: async (email, password, displayName) => {
       setError(null);
-      try { setUser(await authApi.register(email, password)); }
+      try { setUser(await authApi.register(email, password, displayName)); }
       catch (reason) { const message = reason instanceof Error ? reason.message : 'Не удалось зарегистрироваться'; setError(message); throw reason; }
     },
     logout: async () => { await authApi.logout(); setUser(null); },

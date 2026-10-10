@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 from fastapi import Depends, Request, HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from fastapi_users import BaseUserManager, UUIDIDMixin, FastAPIUsers
 from fastapi_users.authentication import (
     AuthenticationBackend,
@@ -94,7 +96,25 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user_create.email = normalize_and_validate_email(user_create.email)
         except HTTPException:
             pass
-        return await super().create(user_create, safe=safe, request=request)
+        user_create.display_name = user_create.display_name.strip()
+        existing_nickname = await self.user_db.session.scalar(
+            select(User.id).where(
+                func.lower(User.display_name) == user_create.display_name.lower()
+            )
+        )
+        if existing_nickname is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Этот никнейм уже занят.",
+            )
+        try:
+            return await super().create(user_create, safe=safe, request=request)
+        except IntegrityError as exc:
+            await self.user_db.session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Этот email или никнейм уже занят.",
+            ) from exc
 
     async def update(self, user_update, user: User, safe: bool = False, request: Optional[Request] = None):
         """Обновление с нормализацией смены email.

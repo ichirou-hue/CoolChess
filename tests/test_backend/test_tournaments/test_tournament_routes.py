@@ -119,3 +119,43 @@ async def test_player_can_choose_tournament_side(authorized_client):
 
     assert response.status_code == 200
     assert response.json()["participants"][0]["preferred_color"] == "black"
+
+
+@pytest.mark.asyncio
+async def test_joining_full_tournament_checks_capacity_under_row_lock(authorized_client):
+    client, user, db = authorized_client
+    tournament_id = uuid.uuid4()
+    existing_participant = TournamentParticipant(
+        id=uuid.uuid4(),
+        tournament_id=tournament_id,
+        user_id=uuid.uuid4(),
+        joined_at=datetime.now(timezone.utc),
+        user=user,
+    )
+    tournament = Tournament(
+        id=tournament_id,
+        name="Кубок школы",
+        format="round_robin",
+        time_control=300,
+        increment=0,
+        max_players=1,
+        status="registration",
+        created_at=datetime.now(timezone.utc),
+        created_by_id=uuid.uuid4(),
+        participants=[existing_participant],
+    )
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = tournament
+    db.execute.return_value = result
+
+    response = await client.post(
+        f"/api/tournaments/{tournament_id}/participants",
+        json={},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "В турнире уже достигнут лимит участников."
+    assert db.execute.await_count == 1
+    locked_query = db.execute.await_args.args[0]
+    assert locked_query._for_update_arg is not None
+    db.add.assert_not_called()

@@ -41,6 +41,10 @@ MISSING_COLUMNS = [
     ("users", "chesscom_verification_username", "VARCHAR(50)"),
     ("users", "chesscom_verification_expires_at", "TIMESTAMP WITH TIME ZONE"),
     ("users", "chesscom_verification_attempts", "INTEGER NOT NULL DEFAULT 0"),
+    ("users", "email_verification_code_hash", "VARCHAR(64)"),
+    ("users", "email_verification_expires_at", "TIMESTAMP WITH TIME ZONE"),
+    ("users", "email_verification_sent_at", "TIMESTAMP WITH TIME ZONE"),
+    ("users", "email_verification_attempts", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

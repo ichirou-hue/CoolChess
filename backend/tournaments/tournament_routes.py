@@ -69,12 +69,20 @@ def _tournament_dict(tournament: Tournament, current_user_id: Optional[uuid.UUID
     }
 
 
-async def _load_tournament(db: AsyncSession, tournament_id: uuid.UUID) -> Tournament:
-    result = await db.execute(
+async def _load_tournament(
+    db: AsyncSession,
+    tournament_id: uuid.UUID,
+    *,
+    for_update: bool = False,
+) -> Tournament:
+    query = (
         select(Tournament)
         .options(selectinload(Tournament.participants).selectinload(TournamentParticipant.user))
         .where(Tournament.id == tournament_id)
     )
+    if for_update:
+        query = query.with_for_update()
+    result = await db.execute(query)
     tournament = result.scalar_one_or_none()
     if tournament is None:
         raise HTTPException(status_code=404, detail="Турнир не найден.")
@@ -139,7 +147,9 @@ async def add_tournament_participant(
     user: User = Depends(current_active_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    tournament = await _load_tournament(db, tournament_id)
+    # Serialize registrations on the tournament row so concurrent requests
+    # cannot both observe and consume the same remaining slot.
+    tournament = await _load_tournament(db, tournament_id, for_update=True)
     participant_id = payload.user_id or user.id
     if participant_id != user.id and not _is_manager(user):
         raise HTTPException(status_code=403, detail="Добавлять других игроков может только учитель или администратор.")

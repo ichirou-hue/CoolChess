@@ -1,7 +1,7 @@
 # API CoolChess
 
 Базовый URL локально: `http://127.0.0.1:8080`. Интерактивная документация:
-`/docs` (Swagger), `/redoc`. Healthcheck: `GET /health` → `{"status": "ok"}`.
+`/docs` (Swagger), `/redoc`. Healthcheck: `GET /health` → `{"status": "ok", "app": "CoolChess Server"}`.
 
 Авторизация защищённых ручек: заголовок `Authorization: Bearer <jwt>`.
 Токен выдаёт `POST /api/auth/jwt/login` (см. раздел Auth).
@@ -24,7 +24,7 @@
 `.env.example`; код действует 10 минут и допускает не более пяти попыток.
 Ссылка сброса пароля отправляется на email и ведёт на сайт (`FRONTEND_URL`).
 Email нормализуется (lowercase, `+`-алиасы, точки Gmail) и проверяется против
-списка одноразовых доменов. `display_name` — имя/никнейм 2–32 символа.
+списка одноразовых доменов. `display_name` — имя/никнейм 3–24 символа.
 Подробнее — `docs/auth-contract.md`.
 
 ## Профиль, тренер, шахматные профили, админ
@@ -52,7 +52,7 @@ CoolChess не запрашивает.
 |---|---|---|---|
 | `POST` | `/api/bot/move` | нет | ход Maia: `{"fen": "...", "difficulty": 1500}` → `{move_uci, move_san, new_fen, is_check, is_game_over}` |
 
-`difficulty` — тир 1–5 или Elo; вне диапазона 1–3000 → `422`.
+`difficulty` — Elo 800–2600 (вне диапазона → `422`).
 Без весов `maia3-5m.pt` возвращается первый легальный ход (fallback, поле `fallback: true` в ответе).
 
 ## Задачи (`/api/puzzles`)
@@ -60,7 +60,7 @@ CoolChess не запрашивает.
 | Метод | Адрес | Auth | Что делает |
 |---|---|---|---|
 | `GET` | `/api/puzzles/random` | да | случайная задача; фильтры: `difficulty` (`beginner`/`intermediate`/`advanced`/`master`/`grandmaster`), `min_rating`, `max_rating`, `theme` |
-| `GET` | `/api/puzzles/batch?limit=10` | да | случайный набор задач для категории; `limit` от 1 до 10, поддерживает те же фильтры и статусы решения |
+| `GET` | `/api/puzzles/batch?limit=10` | да | случайный набор задач для категории; `limit` от 1 (верх режется до 10 без `422`), поддерживает те же фильтры и статусы решения |
 | `POST` | `/api/puzzles/{puzzle_id}/solve` | да | `{"user_moves": "e2e4"}` → `{is_correct, already_solved, xp_earned, coins_earned, elo_change, new_level}` |
 
 Ответ `random`: `{id, fen, initial_move, rating, popularity, themes, game_url}` —
@@ -74,7 +74,7 @@ CoolChess не запрашивает.
 | Метод | Адрес | Auth | Что делает |
 |---|---|---|---|
 | `GET` | `/api/games/active` | да | текущая незавершённая партия или `null` |
-| `POST` | `/api/games/start` | да | `{"player_color": "white", "difficulty": 1300}` (тир 1–5 или Elo 1–2500); висящие активные партии закрываются как сданные — с Elo-штрафом, без XP |
+| `POST` | `/api/games/start` | да | `{"player_color": "white", "difficulty": 1300}` (Elo 800–2600); висящие активные партии закрываются как сданные — с Elo-штрафом, без XP |
 | `POST` | `/api/games/{game_id}/move` | да | `{"move_uci": "e2e4"}` → обновлённая позиция + ответный ход бота |
 | `POST` | `/api/games/{game_id}/resign` | да | сдача: Elo как за поражение, без XP/монет |
 | `GET` | `/api/games/my` | да | история партий (`id`, `status`, `moves_count`, `created_at`) |

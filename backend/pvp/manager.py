@@ -58,7 +58,7 @@ class PVPConnectionManager:
         user_id: uuid.UUID,
         email: str = "",
         display_name: str = "",
-        elo: int = 1200,
+        elo: int = 1000,
     ) -> bool:
         """Первый подключившийся чужак занимает открытое место чёрных."""
         room = self.get_room(game_id)

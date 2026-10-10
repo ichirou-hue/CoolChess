@@ -169,6 +169,7 @@ backend/
   games/            партии с ботом и награды
   puzzles/          задачи и проверка решений
   leaderboard/      рейтинг игроков
+  learning/         прогресс курсов
   pvp/              PvP-комнаты и WebSocket
   tournaments/      турниры и управление участниками
   integrations/     Lichess и Chess.com

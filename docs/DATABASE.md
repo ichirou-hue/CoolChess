@@ -28,8 +28,12 @@ UUID-колонки используют backend-агностичный `GUID`
 | `games_played`, `tournaments_played`, `tournaments_won`, `tournaments_podium` | Integer | статистика |
 | `lichess_username` | VARCHAR(50), index | подтверждённый аккаунт |
 | `lichess_blitz_rating`, `lichess_rapid_rating`, `lichess_puzzle_rating` | Integer, nullable | из Lichess API |
-| `lichess_verification_code` | VARCHAR(32), nullable | случайный `coolchess-<hex>` |
-| `chesscom_username` | VARCHAR(50), index | имя публичного профиля Chess.com; владение не подтверждается |
+| `lichess_verification_code` | VARCHAR(32), nullable | случайный `coolchess-verify-<hex>`, живёт 15 минут |
+| `lichess_verification_username`, `chesscom_verification_username` | VARCHAR(50), nullable | ник, к которому привязан код |
+| `lichess/chesscom_verification_expires_at`, `..._attempts` | TIMESTAMP / Integer | срок кода и счётчик попыток (максимум 5) |
+| `email_verification_code_hash` | VARCHAR(64), nullable | HMAC-хеш 6-значного кода (код живёт 10 минут, resend не чаще 60 секунд, максимум 5 попыток) |
+| `email_verification_expires_at`, `email_verification_sent_at`, `email_verification_attempts` | TIMESTAMP / TIMESTAMP / Integer | сроки и счётчики email-верификации |
+| `chesscom_username` | VARCHAR(50), index | имя публичного профиля Chess.com; владение подтверждается кодом через `verify-platform-account` |
 | `chesscom_blitz_rating`, `chesscom_rapid_rating`, `chesscom_bullet_rating`, `chesscom_daily_rating` | Integer, nullable | публичная статистика Chess.com |
 
 ### `puzzles`
@@ -83,6 +87,12 @@ Many-to-many «кто что решил», защита от фарма нагр
 группу, выбранную сторону и время регистрации; уникальная пара
 `(tournament_id, user_id)` запрещает повторную запись.
 
+### `course_progress`
+
+Прогресс курсов: PK (`user_id`, `topic_id`), монотонные флаги
+`theory_completed` / `quiz_completed` / `practice_completed` + `updated_at`.
+API: `GET /api/learning/progress`, `PATCH /api/learning/progress/{topic_id}`.
+
 ### PvP-комнаты (без таблиц)
 `backend/pvp/` состояния в БД не хранит: `ChessGameRoom` (доска, часы
 `white_time_left`/`black_time_left`, `result`, `termination_reason`) живёт
@@ -98,8 +108,8 @@ PvP-партии — это осознанное решение для прот�
 ```
 # PostgreSQL (Docker/prod)
 DATABASE_URL=postgresql+asyncpg://postgres:postgrespassword@localhost:5433/coolchess
-# SQLite (dev без Docker)
-DATABASE_URL=sqlite+aiosqlite:///./coolchess.db
+# SQLite (dev без Docker): дефолт привязан к backend/coolchess.db и не зависит
+# от рабочего каталога (см. backend/database.py), явно задавать не нужно
 ```
 
 ## Управление схемой

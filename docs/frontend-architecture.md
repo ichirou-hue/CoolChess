@@ -112,12 +112,12 @@ frontend/src/
 5. Типы ответа backend описываем рядом с API и не дублируем строками в компонентах.
 6. Компонент не должен одновременно рисовать UI, хранить бизнес-правила и отправлять HTTP-запросы.
 7. Не создаём файл для каждой мелкой строки или одноразового `div` — файл должен иметь самостоятельную ответственность.
-8. Все новые маршруты добавляются только в `frontend/src/app/routes.tsx`.
+8. Все новые маршруты добавляются в `frontend/src/main.tsx` (хелпер хэш-роутинга — `frontend/src/app/useHashRoute.ts`).
 
 ## Состояние приложения
 
 - Серверные данные: позже подключить TanStack Query.
-- Auth session: backend HttpOnly cookie + `GET /api/auth/me`.
+- Auth session: JWT Bearer + `GET /api/users/me` (токен в `sessionStorage`).
 - Локальные UI-состояния: React hooks.
 - Прогресс, пешки и серия: временно adapter в `features/wallet` и `features/streak`; после появления backend заменить adapter на API без изменения страниц.
 

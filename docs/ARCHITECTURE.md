@@ -12,6 +12,7 @@ FastAPI (backend/server.py, :8080)
   ├── puzzles/       задачи Lichess + награды
   ├── games/         партии с ботом + награды
   ├── leaderboard/   топы и позиция игрока
+  ├── learning/      прогресс курсов (`/api/learning`)
   ├── tournaments/   турниры и участники (REST)
   ├── pvp/           PvP-комнаты + WS + серверные часы (in-memory)
   └── integrations/  публичные API Lichess и Chess.com
@@ -23,9 +24,10 @@ PostgreSQL (compose, :5433) или SQLite (aiosqlite, dev-режим)
 Точка входа backend — `backend/server.py`: создаёт `FastAPI(title="CoolChess API")`
 с `lifespan` (старт/стоп фонового таймера PvP), настраивает CORS из
 `CORS_ORIGINS`, подключает доменные роутеры задач, партий, лидерборда, бота,
-пользователей, турниров и PvP
-и стандартные роутеры `fastapi-users` (auth / register / reset-password /
-verify / users). Запуск из каталога `backend/`:
+пользователей, обучения, турниров и PvP
+и роутеры `fastapi-users` (auth / reset-password / users). Регистрация,
+подтверждение и повторная отправка email-кода — кастомные
+(`POST /api/auth/register`, `/api/auth/verify-email`, `/api/auth/resend-verification`). Запуск из каталога `backend/`:
 Из корня репозитория: `python -m uvicorn server:app --app-dir backend --reload --reload-dir backend --port 8080` (в compose — 1 воркер, см. ниже).
 
 ## Backend-модули
@@ -39,7 +41,7 @@ verify / users). Запуск из каталога `backend/`:
 | `leaderboard/` | `leaderboard_routes.py`, `schemas.py` | топ по `elo`/`level`/`puzzles`, `my_rank`, маскирование email |
 | `tournaments/` | `models.py`, `tournament_routes.py` | Настройки турниров и участники в БД; форматы round-robin/swiss/single-elimination; создание, регистрация, выбор стороны и распределение по группам с RBAC. Автоматическое формирование пар ещё не реализовано |
 | `pvp/` | `models.py`, `manager.py`, `pvp_routes.py` | `ChessGameRoom` (доска `python-chess`, часы, инкремент, TTL), `PVPConnectionManager` (синглтон `pvp_manager`, фоновый таймер 1с, `settle_ratings`), короткий пятисимвольный код комнаты, HTTP `POST /api/pvp/create` + WS `/ws/pvp/{game_id}?token=` |
-| `integrations/` | `lichess_service.py`, `chesscom_service.py` | Lichess: проверка владельца по коду Bio и синхронизация рейтингов; Chess.com: чтение публичных рейтингов по нику без подтверждения владельца |
+| `integrations/` | `lichess_service.py`, `chesscom_service.py` | Lichess: проверка владельца по коду Bio и синхронизация рейтингов; Chess.com: чтение публичных рейтингов по нику + проверка владения кодом через `verify-platform-account` |
 | корень | `database.py`, `init_db.py`, `update_schema.py`, `schema.sql`, `dump_ddl.py`, `load_lichess_puzzles.py` | engine/сессии, создание и миграция схемы, загрузка задач |
 
 ## Ключевые потоки
@@ -60,16 +62,16 @@ verify / users). Запуск из каталога `backend/`:
 3. Награды — строго по тиру рейтинга задачи (`get_fixed_puzzle_rewards`).
 
 ### Привязка рейтинговых аккаунтов
-1. `GET /api/users/lichess-verification-code` — одноразовая генерация
-   `coolchess-<hex>` (случайный; детерминированный от `user.id` запрещён,
-   т.к. id виден в лидерборде).
-2. Ученик вставляет код в Bio профиля lichess.org.
-3. `POST /api/users/sync-lichess` — сервер читает публичный профиль через
-   Lichess API, ищет код в Bio, при успехе сохраняет рейтинги; новичку
-   (`games_played == 0`, `elo == 1200`) калибрует стартовый Elo из rapid/blitz.
-4. `POST /api/users/sync-chesscom` — читает публичную статистику Chess.com по
-   нику и сохраняет доступные рейтинги. Публичный endpoint не подтверждает
-   владение аккаунтом. Пароли Chess.com и Lichess не запрашиваются.
+1. `POST /api/users/platform-verification-code` — одноразовая генерация
+   `coolchess-verify-<hex>` для Lichess или Chess.com (код привязан к нику,
+   живёт 15 минут; старые ручки `lichess-verification-code`/`sync-lichess` —
+   legacy).
+2. Ученик вставляет код в Bio профиля lichess.org (для Chess.com — в поле
+   Location профиля).
+3. `POST /api/users/verify-platform-account` — сервер читает публичный профиль,
+   ищет код, при успехе сохраняет рейтинги и гасит код; новичку
+   (`games_played == 0`, `elo == 1000`) калибрует стартовый Elo из rapid/blitz.
+   Пароли Chess.com и Lichess не запрашиваются.
 
 ### PvP-партия (HTTP create → WS)
 1. `POST /api/pvp/create` (JWT в header) — уникальный пятисимвольный код комнаты,

@@ -24,11 +24,24 @@ import auth.models   # User, Puzzle и связанные таблицы
 import games.models  # GameSession
 import learning.models  # CourseProgress
 import tournaments.models  # Tournament, TournamentParticipant
+from fastapi_users_db_sqlalchemy.generics import GUID as FastAPIUsersGUID
 
 target_metadata = Base.metadata
 
 # Подставляем URL из database.py вместо шаблонного значения alembic.ini
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
+
+
+def compare_type(context, inspected_column, metadata_column, inspected_type, metadata_type):
+    """Точечное сравнение типов для `alembic check` / autogenerate.
+
+    SQLite отражает GUID-колонки как NUMERIC — это артефакт рефлексии, а не
+    дрифт схемы (на PostgreSQL обе стороны UUID). Игнорируем только его,
+    остальное сравнивается штатно (возврат None = default comparison).
+    """
+    if isinstance(metadata_type, FastAPIUsersGUID):
+        return False
+    return None
 
 
 def run_migrations_offline() -> None:
@@ -39,6 +52,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        compare_type=compare_type,
     )
 
     with context.begin_transaction():
@@ -46,7 +60,11 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        compare_type=compare_type,
+    )
 
     with context.begin_transaction():
         context.run_migrations()

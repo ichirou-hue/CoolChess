@@ -165,7 +165,7 @@ async def pvp_websocket_endpoint(
         and user_id not in room.spectators
         and room.black_seat_open
     ):
-        email, display_name, elo = "", "", 1200
+        email, display_name, elo = "", "", 1000
         try:
             async with async_session_maker() as session:
                 db_user = (

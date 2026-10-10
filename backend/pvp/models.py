@@ -21,7 +21,7 @@ class PlayerConnection:
     user_id: Optional[uuid.UUID]  # None = открытое место (ждём соперника)
     email: str = ""
     display_name: str = ""
-    elo: int = 1200
+    elo: int = 1000
     websocket: Optional[WebSocket] = None
     connected: bool = False
 

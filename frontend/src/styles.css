@@ -1252,6 +1252,30 @@ html[data-theme="dark"] .footer { color: #f1f3fa; }
 .theory-demo-board coords.files coord { transform: translateY(-3px); }
 .learn-article-board .theory-board-col { justify-self: center; width: calc(100% - 45px); }
 
+/* Keep the learning board and its coordinate gutters 10px narrower than the play reference. */
+.learn-article-board .theory-board-col { width: calc(100% - 55px); }
+
+/* NAG feedback has its own readable space above the move history. */
+.move-nag-callout { align-items: flex-start; background: #f3eff9; border: 1px solid #e3def0; border-left: 4px solid #464bff; border-radius: 11px; display: flex; gap: 12px; margin: 14px 0; padding: 12px 14px; }
+.move-nag-callout > span { color: #464bff; flex: 0 0 auto; font-family: Geologica, sans-serif; font-size: 18px; font-weight: 800; }
+.move-nag-callout strong { color: #25283a; display: block; font-size: 11px; }
+.move-nag-callout p { color: #666b7c; font-size: 10px; line-height: 1.5; margin: 4px 0 0; }
+html[data-theme="dark"] .move-nag-callout { background: #202536; border-color: #343b4d; }
+html[data-theme="dark"] .move-nag-callout strong { color: #e6e9f0; }
+html[data-theme="dark"] .move-nag-callout p { color: #b9c2d5; }
+
+/* Keep the auth illustration tied to the viewport while the form changes height. */
+@media (min-width: 1024px) { .min-h-screen > .grid > section:first-child { height: 100vh; } }
+
+/* Anonymous PvP entry is a normal content card; its CTA must follow the copy. */
+.pvp-auth-card { align-items: flex-start; display: flex; flex-direction: column; gap: 14px; margin: 8vh auto; max-width: 520px; padding: clamp(24px, 5vw, 52px); position: static; }
+.pvp-auth-card h1, .pvp-auth-card p { margin: 0; }
+.pvp-auth-card .button { align-self: flex-start; position: static; }
+
+/* The PvP board uses the standard frame without the decorative yellow outer edge. */
+.pvp-board-card { border: 0; box-shadow: 0 16px 36px rgba(17,17,17,.12); }
+@media (max-width: 760px) { .pvp-board-card { box-shadow: 0 12px 28px rgba(17,17,17,.12); } }
+
 /* Let the play board and coordinate frame shrink inside narrow grid columns. */
 .game-section .game-layout,
 .game-section .game-board-stage,

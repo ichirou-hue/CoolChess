@@ -31,7 +31,20 @@ export function translateDetail(detail: unknown): string | null {
   if (Array.isArray(detail)) {
     const parts = detail.map((item) => {
       if (typeof item === 'string') return translateDetail(item) ?? item;
-      if (item && typeof item === 'object' && 'msg' in item) return String((item as { msg?: string }).msg ?? 'Ошибка проверки данных');
+      if (item && typeof item === 'object' && 'msg' in item) {
+        const raw = String((item as { msg?: string }).msg ?? '');
+        const message = raw.replace(/^Value error,\s*/i, '').replace(/^Input should be /i, '');
+        const context = item as { loc?: unknown[] };
+        const field = context.loc?.at(-1);
+        const fieldNames: Record<string, string> = { email: 'Email', password: 'Пароль', display_name: 'Никнейм', name: 'Никнейм', verification_code: 'Код подтверждения' };
+        const label = typeof field === 'string' ? fieldNames[field] : undefined;
+        if (/field required/i.test(message) || /missing/i.test(message)) return `${label ?? 'Поле'} обязательно для заполнения.`;
+        if (/valid email/i.test(message)) return 'Укажите корректный email.';
+        if (/at least (\d+) characters?/i.test(message)) return `${label ?? 'Значение'} должно содержать не менее ${message.match(/\d+/)?.[0]} символов.`;
+        if (/at most (\d+) characters?/i.test(message)) return `${label ?? 'Значение'} должно содержать не более ${message.match(/\d+/)?.[0]} символов.`;
+        if (/string/i.test(message) && /input/i.test(raw)) return `${label ?? 'Поле'} должно быть текстом.`;
+        return message || 'Проверьте введённые данные.';
+      }
       return 'Ошибка проверки данных';
     });
     return parts.join(', ');
@@ -54,7 +67,19 @@ export async function readApiError(response: Response): Promise<string> {
   } catch {
     // Сервер вернул пустой или не-JSON ответ.
   }
-  return `Ошибка сервера (${response.status})`;
+  const statusMessages: Record<number, string> = {
+    400: 'Не удалось выполнить запрос. Проверьте введённые данные.',
+    401: 'Войдите в аккаунт, чтобы продолжить.',
+    403: 'У вас недостаточно прав для этого действия.',
+    404: 'Запрошенные данные не найдены.',
+    409: 'Эти данные уже используются. Проверьте никнейм или email.',
+    422: 'Проверьте заполнение полей и исправьте отмеченные данные.',
+    429: 'Слишком много запросов. Подождите немного и попробуйте снова.',
+    500: 'На сервере произошла внутренняя ошибка. Попробуйте позже.',
+    502: 'Сервер временно недоступен. Попробуйте позже.',
+    503: 'Сервис временно остановлен. Попробуйте позже.',
+  };
+  return statusMessages[response.status] ?? `Не удалось выполнить запрос (код ${response.status}).`;
 }
 
 export function toNetworkError(error: unknown): Error {

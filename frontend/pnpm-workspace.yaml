@@ -1,2 +1,2 @@
 allowBuilds:
-  stockfish: set this to true or false
+  stockfish: true

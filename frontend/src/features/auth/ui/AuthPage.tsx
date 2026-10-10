@@ -112,7 +112,7 @@ export function AuthPage() {
 
   return <main className="min-h-screen overflow-hidden bg-[#f7f7fb] text-[#111]">
     <div className="grid min-h-screen lg:grid-cols-[minmax(420px,0.78fr)_minmax(520px,1.22fr)]">
-      <section className="relative hidden overflow-hidden bg-[#464bff] p-10 text-white lg:flex lg:flex-col lg:justify-between">
+      <section className="relative hidden h-screen self-start overflow-hidden bg-[#464bff] p-10 text-white lg:sticky lg:top-0 lg:flex lg:flex-col lg:justify-between">
         <div className="absolute -right-32 -top-28 h-96 w-96 rounded-full bg-[#dce204] opacity-90 blur-[1px]" />
         <div className="absolute -bottom-44 -left-36 h-[520px] w-[520px] rounded-full border-[72px] border-white/10" />
         <a href="#home" className="relative z-10 inline-flex w-fit items-center" aria-label="На главную"><img src="/coolchess-logo.svg" alt="CoolChess" className="h-14 w-[280px] object-contain object-left brightness-0 invert" /></a>

@@ -112,7 +112,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         if existing_nickname is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Этот никнейм уже занят.",
+                detail="Этот никнейм уже занят или слишком похож на существующий (например, O и 0). Попробуйте другой вариант.",
             )
         try:
             created_user = await super().create(user_create, safe=safe, request=request)

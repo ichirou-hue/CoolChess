@@ -3,7 +3,7 @@ import random
 from typing import Optional, List
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, ConfigDict
 
@@ -53,6 +53,46 @@ class SolveResponse(BaseModel):
     coins_earned: int = 0
     elo_change: int = 0
     new_level: Optional[int] = None
+
+
+PUZZLE_PROGRESS_CATEGORIES = {
+    "all": None,
+    "mateIn1": "mateIn1",
+    "mateIn2": "mateIn2",
+    "fork": "fork",
+    "pin": "pin",
+    "quietMove": "quietMove",
+}
+
+
+def _theme_filter(theme: str):
+    return or_(
+        Puzzle.themes == theme,
+        Puzzle.themes.like(f"{theme} %"),
+        Puzzle.themes.like(f"% {theme} %"),
+        Puzzle.themes.like(f"% {theme}"),
+    )
+
+
+@puzzle_router.get("/progress")
+async def get_puzzle_progress(
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    categories = {}
+    for category, theme in PUZZLE_PROGRESS_CATEGORIES.items():
+        condition = _theme_filter(theme) if theme else None
+        total_query = select(func.count(Puzzle.id))
+        solved_query = select(func.count(user_solved_puzzles.c.puzzle_id)).select_from(
+            user_solved_puzzles.join(Puzzle, Puzzle.id == user_solved_puzzles.c.puzzle_id)
+        ).where(user_solved_puzzles.c.user_id == user.id)
+        if condition is not None:
+            total_query = total_query.where(condition)
+            solved_query = solved_query.where(condition)
+        total = int((await db.execute(total_query)).scalar_one())
+        solved = int((await db.execute(solved_query)).scalar_one())
+        categories[category] = {"solved": solved, "total": total}
+    return {"categories": categories}
 
 
 def _apply_progress_filters(

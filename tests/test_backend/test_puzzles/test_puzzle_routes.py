@@ -52,6 +52,29 @@ async def test_solve_puzzle_unauthorized(anonymous_client):
     assert response.status_code == 401
 
 
+@pytest.mark.asyncio
+async def test_puzzle_progress_unauthorized(anonymous_client):
+    response = await anonymous_client.get("/api/puzzles/progress")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_puzzle_progress_returns_database_counts_per_category(authorized_client):
+    client, user, db = authorized_client
+    counts = [200, 2, 80, 1, 40, 0, 30, 1, 25, 0, 12, 0]
+    db.execute.side_effect = [
+        MagicMock(scalar_one=MagicMock(return_value=count)) for count in counts
+    ]
+
+    response = await client.get("/api/puzzles/progress")
+
+    assert response.status_code == 200
+    categories = response.json()["categories"]
+    assert categories["all"] == {"solved": 2, "total": 200}
+    assert categories["mateIn1"] == {"solved": 1, "total": 80}
+    assert categories["mateIn2"] == {"solved": 0, "total": 40}
+
+
 # --- 2. GET /api/puzzles/random ---
 
 @pytest.mark.asyncio

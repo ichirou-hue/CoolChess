@@ -23,6 +23,10 @@ export type PuzzleSolveResult = {
   new_level: number | null;
 };
 
+export type PuzzleProgress = {
+  categories: Record<string, { solved: number; total: number }>;
+};
+
 const tokenKey = 'coolchess.accessToken';
 
 export function hasToken() {
@@ -69,6 +73,10 @@ export function getPuzzleBatch(filters: string | PuzzleFilters = {}, limit = 10)
   if (normalized.progress === 'solved') query.set('solved_only', 'true');
   else if (normalized.progress !== 'all') query.set('exclude_solved', 'true');
   return request<Puzzle[]>(`/api/puzzles/batch?${query.toString()}`);
+}
+
+export function getPuzzleProgress() {
+  return request<PuzzleProgress>('/api/puzzles/progress');
 }
 
 export function submitPuzzleMove(puzzleId: string, movesUci: string) {

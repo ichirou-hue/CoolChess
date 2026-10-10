@@ -34,6 +34,14 @@ def test_distinct_nicks_have_distinct_keys():
     assert canonicalize_display_name("Player1") != canonicalize_display_name("Player2")
 
 
+def test_zero_and_letter_o_share_key():
+    assert canonicalize_display_name("Player0") == canonicalize_display_name("PlayerO")
+
+
+def test_cyrillic_te_maps_to_latin_t():
+    assert canonicalize_display_name("т") == canonicalize_display_name("t")
+
+
 def _payload(**overrides):
     data = {
         "email": "bowie@chess.org",

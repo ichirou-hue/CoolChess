@@ -19,10 +19,11 @@ UUID-колонки используют backend-агностичный `GUID`
 |---|---|---|
 | `id` | UUID | PK (fastapi-users) |
 | `email`, `hashed_password` | String | уникальность email; нормализация в `auth/schemas.py` |
-| `display_name` | VARCHAR(32) | публичное имя/никнейм; обязателен при регистрации |
+| `display_name` | VARCHAR(40) | публичное имя/никнейм; обязателен при регистрации |
+| `display_name_key` | VARCHAR(64), unique | канонический ключ ника: регистр важен, двойники из разных раскладок дают один ключ |
 | `is_active`, `is_verified`, `is_superuser` | Bool | флаги fastapi-users |
 | `role` | Enum(`UserRole`) | по умолчанию `student` |
-| `elo_rating` | Integer | по умолчанию 1200, минимум 100 после матчей |
+| `elo_rating` | Integer | по умолчанию 1000, минимум 100 после матчей |
 | `xp`, `level`, `coins` | Integer | геймификация (см. `docs/ECONOMY.md`) |
 | `games_played`, `tournaments_played`, `tournaments_won`, `tournaments_podium` | Integer | статистика |
 | `lichess_username` | VARCHAR(50), index | подтверждённый аккаунт |

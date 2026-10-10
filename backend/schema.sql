@@ -12,7 +12,8 @@ CREATE TABLE puzzles (
 
 
 CREATE TABLE users (
-	display_name VARCHAR(32) DEFAULT 'Игрок' NOT NULL,
+	display_name VARCHAR(40),
+	display_name_key VARCHAR(64),
 	role userrole NOT NULL,
 	elo_rating INTEGER NOT NULL,
 	xp INTEGER NOT NULL,
@@ -106,3 +107,4 @@ CREATE TABLE tournament_participants (
 	FOREIGN KEY(tournament_id) REFERENCES tournaments (id) ON DELETE CASCADE,
 	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
 );
+

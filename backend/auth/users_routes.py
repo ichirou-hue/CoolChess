@@ -365,7 +365,7 @@ async def _verify_platform_link(
         db_user.lichess_rapid_rating = ratings.get("rapid_rating")
         db_user.lichess_puzzle_rating = ratings.get("puzzle_rating")
         chosen_rating = ratings.get("rapid_rating") or ratings.get("blitz_rating")
-        if chosen_rating and db_user.games_played == 0 and db_user.elo_rating == 1200:
+        if chosen_rating and db_user.games_played == 0 and db_user.elo_rating == 1000:
             db_user.elo_rating = chosen_rating
     else:
         db_user.chesscom_username = canonical_username

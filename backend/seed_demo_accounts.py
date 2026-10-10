@@ -7,6 +7,7 @@ from fastapi_users.password import PasswordHelper
 from sqlalchemy import select
 
 from auth.models import User, UserRole
+from auth.display_names import canonicalize_display_name
 from database import async_session_maker, engine
 
 
@@ -70,6 +71,7 @@ async def seed_demo_accounts() -> None:
 
             user.hashed_password = password_helper.hash(account["password"])
             user.display_name = account["display_name"]
+            user.display_name_key = canonicalize_display_name(account["display_name"])
             user.role = account["role"]
             user.is_active = True
             user.is_verified = True

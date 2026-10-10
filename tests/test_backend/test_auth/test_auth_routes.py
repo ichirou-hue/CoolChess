@@ -224,7 +224,7 @@ async def test_sync_lichess_fails_without_verification_code_in_bio(anonymous_cli
 async def test_sync_lichess_success_with_verification_code(anonymous_client, mock_db_session):
     mock_student = create_mock_user(role=UserRole.STUDENT)
     mock_student.games_played = 0
-    mock_student.elo_rating = 1200
+    mock_student.elo_rating = 1000
 
     app.dependency_overrides[current_active_user] = lambda: mock_student
     app.dependency_overrides[get_async_session] = lambda: mock_db_session
@@ -299,7 +299,7 @@ async def test_verify_platform_lichess_bio_saves_ratings_and_consumes_code(
 ):
     user = create_mock_user()
     user.games_played = 0
-    user.elo_rating = 1200
+    user.elo_rating = 1000
     code = "coolchess-verify-a1b2c3d4"
     user.lichess_verification_code = code
     user.lichess_verification_username = "MagnusCarlsen"

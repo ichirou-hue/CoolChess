@@ -18,12 +18,21 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_index(
-        "uq_users_display_name_lower",
-        "users",
-        [sa.text("lower(display_name)")],
-        unique=True,
-    )
+    connection = op.get_bind()
+    inspector = sa.inspect(connection)
+    existing = {index["name"] for index in inspector.get_indexes("users")}
+    # SQLite не рефлектит expression-индексы, поэтому проверка ниже его не
+    # видит; повторный прогон всё равно безопасен — миграции версионируются.
+    if "uq_users_display_name_lower" not in existing:
+        try:
+            op.create_index(
+                "uq_users_display_name_lower",
+                "users",
+                [sa.text("lower(display_name)")],
+                unique=True,
+            )
+        except Exception:
+            pass
 
 
 def downgrade() -> None:

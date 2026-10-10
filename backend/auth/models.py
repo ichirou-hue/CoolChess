@@ -9,7 +9,6 @@ from sqlalchemy import (
     Table,
     Enum as SQLEnum,
     Index,
-    func,
 )
 from fastapi_users_db_sqlalchemy.generics import GUID
 from sqlalchemy.orm import relationship
@@ -52,11 +51,16 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     __tablename__ = "users"
 
     display_name = Column(String(40), nullable=True)
+    # Канонический ключ ника для проверки уникальности: визуально одинаковые
+    # ники из разных алфавитов (латиница/кириллица/греческий) дают один ключ,
+    # а регистр сохраняется — «Тест» и «тест» считаются разными никами.
+    # См. auth.display_names.canonicalize_display_name.
+    display_name_key = Column(String(64), nullable=True)
     __table_args__ = (
-        Index("uq_users_display_name_lower", func.lower(display_name), unique=True),
+        Index("uq_users_display_name_key", display_name_key, unique=True),
     )
     role = Column(SQLEnum(UserRole), default=UserRole.STUDENT, nullable=False)
-    elo_rating = Column(Integer, default=1200, nullable=False)
+    elo_rating = Column(Integer, default=1000, nullable=False)
 
     # Геймификация и статистика
     xp = Column(Integer, default=0, nullable=False)

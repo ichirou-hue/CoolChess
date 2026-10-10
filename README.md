@@ -57,7 +57,8 @@ backend укажите тот же пароль в `DATABASE_URL`; настро�
 DATABASE_URL=sqlite+aiosqlite:///./coolchess.db
 ```
 
-Примените миграции и запустите backend из каталога `backend/`:
+Примените миграции из каталога `backend/`, а API запускайте либо из корня,
+либо из `backend/` (команды отличаются — `--app-dir backend` нужен только из корня):
 
 ```bash
 cd backend
@@ -67,13 +68,16 @@ alembic upgrade head   # основной путь (миграции)
 # для БД, созданной до Alembic, — докрутить колонки users:
 # python update_schema.py
 
-# 4. API (из корня репозитория, слушает порт 8080)
+# 4. API (слушает порт 8080)
+# Вариант А — из корня репозитория:
 # PowerShell:
 .\scripts\run_backend.ps1
-# Любая оболочка:
+# Любая оболочка (из корня):
 python -m uvicorn server:app --app-dir backend --reload --reload-dir backend --port 8080
+# Вариант Б — уже находясь в каталоге backend/ (без --app-dir):
+python -m uvicorn server:app --reload --port 8080
 
-# 5. Фронтенд (отдельный терминал, порт 5173)
+# 5. Фронтенд (отдельный терминал, порт 5173, из корня)
 cd frontend && npm install && npm run dev
 ```
 

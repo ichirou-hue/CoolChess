@@ -11,10 +11,14 @@ from sqlalchemy.orm import DeclarativeBase
 ROOT_ENV = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=ROOT_ENV)
 
+# Дефолтный SQLite-файл привязан к каталогу backend/, а не к CWD:
+# иначе запуск из корня и из backend/ используют разные базы
+# (пустой файл без таблиц давал 500 «no such table: users» при регистрации).
+_BACKEND_DIR = Path(__file__).resolve().parent
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     # Safe local default; Docker Compose provides its PostgreSQL URL explicitly.
-    "sqlite+aiosqlite:///./coolchess.db",
+    f"sqlite+aiosqlite:///{_BACKEND_DIR / 'coolchess.db'}",
 )
 
 # Асинхронный движок SQLAlchemy

@@ -19,20 +19,30 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "users",
-        sa.Column("display_name", sa.String(length=32), server_default="Игрок", nullable=False),
-    )
     connection = op.get_bind()
-    rows = connection.execute(sa.text("SELECT id, email FROM users")).fetchall()
-    for user_id, email in rows:
-        nickname = (email.split("@", 1)[0].strip() or "Игрок")[:32]
-        connection.execute(
-            sa.text("UPDATE users SET display_name = :name WHERE id = :id"),
-            {"name": nickname, "id": user_id},
+    inspector = sa.inspect(connection)
+    existing_columns = {
+        column["name"]
+        for column in inspector.get_columns("users")
+    } if inspector.has_table("users") else set()
+    # Ветка dev (e21f3a9c5b7d) добавляет ту же колонку: при слиянии голов
+    # upgrade выполняет обе ветки, поэтому добавление условное.
+    if "display_name" not in existing_columns:
+        op.add_column(
+            "users",
+            sa.Column("display_name", sa.String(length=32), server_default="Игрок", nullable=False),
         )
+        rows = connection.execute(sa.text("SELECT id, email FROM users")).fetchall()
+        for user_id, email in rows:
+            nickname = (email.split("@", 1)[0].strip() or "Игрок")[:32]
+            connection.execute(
+                sa.text("UPDATE users SET display_name = :name WHERE id = :id"),
+                {"name": nickname, "id": user_id},
+            )
 
-    op.create_table(
+    existing_tables = set(inspector.get_table_names())
+    if "tournaments" not in existing_tables:
+        op.create_table(
         "tournaments",
         sa.Column("id", fastapi_users_db_sqlalchemy.generics.GUID(), nullable=False),
         sa.Column("name", sa.String(length=80), nullable=False),
@@ -47,19 +57,20 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["created_by_id"], ["users.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_table(
-        "tournament_participants",
-        sa.Column("id", fastapi_users_db_sqlalchemy.generics.GUID(), nullable=False),
-        sa.Column("tournament_id", fastapi_users_db_sqlalchemy.generics.GUID(), nullable=False),
-        sa.Column("user_id", fastapi_users_db_sqlalchemy.generics.GUID(), nullable=False),
-        sa.Column("group_name", sa.String(length=24), nullable=True),
-        sa.Column("preferred_color", sa.String(length=8), nullable=True),
-        sa.Column("joined_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["tournament_id"], ["tournaments.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("tournament_id", "user_id", name="uq_tournament_participant"),
-    )
+    if "tournament_participants" not in existing_tables:
+        op.create_table(
+            "tournament_participants",
+            sa.Column("id", fastapi_users_db_sqlalchemy.generics.GUID(), nullable=False),
+            sa.Column("tournament_id", fastapi_users_db_sqlalchemy.generics.GUID(), nullable=False),
+            sa.Column("user_id", fastapi_users_db_sqlalchemy.generics.GUID(), nullable=False),
+            sa.Column("group_name", sa.String(length=24), nullable=True),
+            sa.Column("preferred_color", sa.String(length=8), nullable=True),
+            sa.Column("joined_at", sa.DateTime(timezone=True), nullable=False),
+            sa.ForeignKeyConstraint(["tournament_id"], ["tournaments.id"], ondelete="CASCADE"),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
+            sa.PrimaryKeyConstraint("id"),
+            sa.UniqueConstraint("tournament_id", "user_id", name="uq_tournament_participant"),
+        )
 
 
 def downgrade() -> None:

@@ -18,7 +18,19 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("users", sa.Column("display_name", sa.String(length=40), nullable=True))
+    # Ветка feature (7d4b8f0a2c31) добавляет ту же колонку: при слиянии голов
+    # upgrade выполняет обе ветки, поэтому добавление условное.
+    connection = op.get_bind()
+    inspector = sa.inspect(connection)
+    has_column = (
+        inspector.has_table("users")
+        and any(
+            column["name"] == "display_name"
+            for column in inspector.get_columns("users")
+        )
+    )
+    if not has_column:
+        op.add_column("users", sa.Column("display_name", sa.String(length=40), nullable=True))
 
 
 def downgrade() -> None:

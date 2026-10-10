@@ -17,6 +17,7 @@ from database import engine
 # добавленных после первоначального create_all.
 MISSING_COLUMNS = [
     ("users", "display_name", "VARCHAR(32) NOT NULL DEFAULT 'Игрок'"),
+    ("users", "display_name_key", "VARCHAR(64)"),
     ("users", "xp", "INTEGER NOT NULL DEFAULT 0"),
     ("users", "level", "INTEGER NOT NULL DEFAULT 1"),
     ("users", "coins", "INTEGER NOT NULL DEFAULT 0"),
@@ -67,6 +68,19 @@ async def sync_schema():
                     print(f"[DB] SKIP (уже есть): {table}.{column}")
                 else:
                     raise
+        # Уникальный индекс канонических ключей ников (защита от дублей
+        # через разные раскладки). SQLite и PostgreSQL понимают IF NOT EXISTS.
+        async with engine.begin() as conn:
+            try:
+                await conn.execute(
+                    text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS "
+                        "uq_users_display_name_key ON users (display_name_key)"
+                    )
+                )
+                print("[DB] OK: users.display_name_key unique index")
+            except OperationalError as exc:
+                print(f"[DB] SKIP (индекс): {exc}")
     print("[DB] Структура базы данных успешно синхронизирована!")
     await engine.dispose()
 

@@ -7,7 +7,7 @@ from typing import Optional
 from urllib.parse import quote
 from dotenv import load_dotenv
 from fastapi import Depends, Request, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from fastapi_users import BaseUserManager, UUIDIDMixin, FastAPIUsers
 from fastapi_users.exceptions import InvalidPasswordException
@@ -18,6 +18,7 @@ from fastapi_users.authentication import (
 )
 from auth.models import User, UserRole
 from auth.db import get_user_db
+from auth.display_names import canonicalize_display_name, clean_display_name
 from auth.schemas import normalize_and_validate_email, validate_password_strength
 from auth.email_verification import email_delivery_configured, send_email
 
@@ -103,11 +104,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user_create.email = normalize_and_validate_email(user_create.email)
         except HTTPException:
             pass
-        user_create.display_name = user_create.display_name.strip()
+        user_create.display_name = clean_display_name(user_create.display_name)
+        nickname_key = canonicalize_display_name(user_create.display_name)
         existing_nickname = await self.user_db.session.scalar(
-            select(User.id).where(
-                func.lower(User.display_name) == user_create.display_name.lower()
-            )
+            select(User.id).where(User.display_name_key == nickname_key)
         )
         if existing_nickname is not None:
             raise HTTPException(
@@ -115,13 +115,23 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 detail="Этот никнейм уже занят.",
             )
         try:
-            return await super().create(user_create, safe=safe, request=request)
+            created_user = await super().create(user_create, safe=safe, request=request)
         except IntegrityError as exc:
             await self.user_db.session.rollback()
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Этот email или никнейм уже занят.",
             ) from exc
+        # Канонический ключ не входит в схему регистрации (иначе клиент мог бы
+        # подсунуть чужой ключ), поэтому выставляем его сервером после создания.
+        if created_user.display_name:
+            created_user.display_name_key = canonicalize_display_name(
+                created_user.display_name
+            )
+            self.user_db.session.add(created_user)
+            await self.user_db.session.commit()
+            await self.user_db.session.refresh(created_user)
+        return created_user
 
     async def validate_password(self, password: str, user: User) -> None:
         try:

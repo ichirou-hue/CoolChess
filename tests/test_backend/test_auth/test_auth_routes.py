@@ -214,7 +214,7 @@ async def test_sync_lichess_fails_without_verification_code_in_bio(anonymous_cli
             )
 
             assert response.status_code == 400
-            assert "не найден в поле Bio профиля lichess" in response.json()["detail"]
+            assert "не найден в поле «О себе» профиля Lichess" in response.json()["detail"]
     finally:
         app.dependency_overrides.pop(current_active_user, None)
         app.dependency_overrides.pop(get_async_session, None)
@@ -285,6 +285,7 @@ async def test_platform_verification_code_is_bound_to_username_and_expires(
         assert data["platform"] == "chesscom"
         assert data["username"] == "Player_One"
         assert "Location" in data["instructions"]
+        assert "Местоположение" in data["instructions"]
         assert user.chesscom_verification_code == data["verification_code"]
         assert user.chesscom_verification_username == "Player_One"
         assert user.chesscom_verification_expires_at > datetime.now(timezone.utc)
@@ -449,6 +450,8 @@ async def test_verify_platform_missing_profile_code_increments_attempts(
             )
         assert response.status_code == 400
         assert "Location" in response.json()["detail"]
+        assert "Местоположение" in response.json()["detail"]
+        assert "Chess.com" in response.json()["detail"]
         assert user.chesscom_verification_attempts == 1
         assert user.chesscom_username is None
     finally:

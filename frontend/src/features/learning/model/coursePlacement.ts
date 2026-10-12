@@ -1,4 +1,10 @@
-const coursePlacementKey = 'coolchess.coursePlacement.v1';
+import { scopedKey } from '../../../shared/lib/userScopedStorage';
+
+const coursePlacementBaseKey = 'coolchess.coursePlacement.v1';
+
+function coursePlacementKey(): string {
+  return scopedKey(coursePlacementBaseKey);
+}
 
 export type CoursePlacement = {
   experience: 'beginner' | 'occasional' | 'regular';
@@ -8,7 +14,7 @@ export type CoursePlacement = {
 export function readCoursePlacement(): CoursePlacement | null {
   if (typeof window === 'undefined') return null;
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(coursePlacementKey) ?? 'null');
+    const value: unknown = JSON.parse(localStorage.getItem(coursePlacementKey()) ?? 'null');
     if (!value || typeof value !== 'object') return null;
     const placement = value as Partial<CoursePlacement>;
     if (!['beginner', 'occasional', 'regular'].includes(placement.experience ?? '')) return null;
@@ -20,5 +26,5 @@ export function readCoursePlacement(): CoursePlacement | null {
 }
 
 export function saveCoursePlacement(placement: CoursePlacement) {
-  localStorage.setItem(coursePlacementKey, JSON.stringify(placement));
+  localStorage.setItem(coursePlacementKey(), JSON.stringify(placement));
 }

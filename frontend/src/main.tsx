@@ -14,6 +14,7 @@ import { AuthPage as FeatureAuthPage } from './features/auth/ui/AuthPage';
 import { AuthProvider } from './features/auth/model/AuthProvider';
 import { useAuth } from './features/auth/model/AuthProvider';
 import { readCoursePlacement, saveCoursePlacement, type CoursePlacement } from './features/learning/model/coursePlacement';
+import { scopedKey } from './shared/lib/userScopedStorage';
 import * as courseProgressApi from './features/learning/api/courseProgressApi';
 import type { CourseMilestone, CourseProgressMap } from './features/learning/api/courseProgressApi';
 import { OpeningLibrary } from './features/learning/ui/OpeningLibrary';
@@ -47,10 +48,14 @@ function legalDests(game: Chess) {
 }
 
 const maiaLevels = Array.from({ length: 19 }, (_, index) => 800 + index * 100);
-const maiaAchievementKey = 'coolchess.maiaAchievements.v1';
+const maiaAchievementsBaseKey = 'coolchess.maiaAchievements.v1';
+
+function maiaAchievementKey(): string {
+  return scopedKey(maiaAchievementsBaseKey);
+}
 
 function readMaiaAchievements() {
-  try { return JSON.parse(localStorage.getItem(maiaAchievementKey) ?? '[]') as number[]; }
+  try { return JSON.parse(localStorage.getItem(maiaAchievementKey()) ?? '[]') as number[]; }
   catch { return []; }
 }
 
@@ -249,7 +254,7 @@ function ChessGame() {
     if (response.status === 'player_won') {
       setMaiaAchievements((current) => {
         const next = [...new Set([...current, response.bot_difficulty])].sort((a, b) => a - b);
-        localStorage.setItem(maiaAchievementKey, JSON.stringify(next));
+        localStorage.setItem(maiaAchievementKey(), JSON.stringify(next));
         return next;
       });
     }
@@ -738,11 +743,15 @@ function TheoryBoard({ visual, onLineViewed, kicker }: { visual: LessonVisual; o
 
 // Прогресс квизов «Проверка знаний»: помним, в каких темах ученик
 // верно ответил на все вопросы. Практика разблокируется только после квиза.
-const QUIZ_STORE_KEY = 'coolchess.quiz.v1';
+const QUIZ_STORE_BASE_KEY = 'coolchess.quiz.v1';
+
+function quizStoreKey(): string {
+  return scopedKey(QUIZ_STORE_BASE_KEY);
+}
 
 function readQuizStore(): Record<string, boolean> {
   try {
-    const raw = typeof window === 'undefined' ? null : localStorage.getItem(QUIZ_STORE_KEY);
+    const raw = typeof window === 'undefined' ? null : localStorage.getItem(quizStoreKey());
     const parsed: unknown = raw ? JSON.parse(raw) : {};
     if (parsed && typeof parsed === 'object') return parsed as Record<string, boolean>;
   } catch {
@@ -755,7 +764,7 @@ function writeQuizStore(topicId: string) {
   try {
     const store = readQuizStore();
     store[topicId] = true;
-    localStorage.setItem(QUIZ_STORE_KEY, JSON.stringify(store));
+    localStorage.setItem(quizStoreKey(), JSON.stringify(store));
   } catch {
     // Не сохранилось — квиз просто придётся пройти заново.
   }
@@ -764,13 +773,17 @@ function writeQuizStore(topicId: string) {
 // Черновик ответов квиза: чтобы переключение вкладок не сжигало прогресс,
 // храним выбранные варианты и вердикты в localStorage (сброс — при смене темы
 // компонент монтируется заново через key, а внутри темы состояние живёт).
-const QUIZ_ANSWERS_KEY = 'coolchess.quiz.answers.v1';
+const QUIZ_ANSWERS_BASE_KEY = 'coolchess.quiz.answers.v1';
+
+function quizAnswersKey(): string {
+  return scopedKey(QUIZ_ANSWERS_BASE_KEY);
+}
 
 type QuizDraft = { picked: Record<number, number>; checked: Record<number, boolean> };
 
 function readQuizDraft(topicId: string): QuizDraft {
   try {
-    const raw = typeof window === 'undefined' ? null : localStorage.getItem(QUIZ_ANSWERS_KEY);
+    const raw = typeof window === 'undefined' ? null : localStorage.getItem(quizAnswersKey());
     const parsed: unknown = raw ? JSON.parse(raw) : {};
     if (parsed && typeof parsed === 'object') {
       const entry = (parsed as Record<string, QuizDraft>)[topicId];
@@ -784,10 +797,10 @@ function readQuizDraft(topicId: string): QuizDraft {
 
 function writeQuizDraft(topicId: string, draft: QuizDraft) {
   try {
-    const raw = localStorage.getItem(QUIZ_ANSWERS_KEY);
+    const raw = localStorage.getItem(quizAnswersKey());
     const store: Record<string, QuizDraft> = raw ? JSON.parse(raw) : {};
     store[topicId] = draft;
-    localStorage.setItem(QUIZ_ANSWERS_KEY, JSON.stringify(store));
+    localStorage.setItem(quizAnswersKey(), JSON.stringify(store));
   } catch {
     // Не сохранилось — ответы просто не переживут перезагрузку.
   }
@@ -1039,11 +1052,15 @@ function OriginalLichessPuzzleLibrary() {
 const PRACTICE_QUOTA = 3;
 // Разовый бонус за закрытую практику темы (помимо XP за каждую задачу).
 const PRACTICE_BONUS = 30;
-const PRACTICE_STORE_KEY = 'coolchess.practice.v1';
+const PRACTICE_STORE_BASE_KEY = 'coolchess.practice.v1';
+
+function practiceStoreKey(): string {
+  return scopedKey(PRACTICE_STORE_BASE_KEY);
+}
 
 function readPracticeStore(): Record<string, string[]> {
   try {
-    const raw = typeof window === 'undefined' ? null : localStorage.getItem(PRACTICE_STORE_KEY);
+    const raw = typeof window === 'undefined' ? null : localStorage.getItem(practiceStoreKey());
     const parsed: unknown = raw ? JSON.parse(raw) : {};
     if (parsed && typeof parsed === 'object') return parsed as Record<string, string[]>;
   } catch {
@@ -1056,18 +1073,22 @@ function writePracticeStore(topicId: string, ids: string[]) {
   try {
     const store = readPracticeStore();
     store[topicId] = ids.slice(-3 * PRACTICE_QUOTA);
-    localStorage.setItem(PRACTICE_STORE_KEY, JSON.stringify(store));
+    localStorage.setItem(practiceStoreKey(), JSON.stringify(store));
   } catch {
     // Не удалось сохранить — практика просто не переживёт перезагрузку.
   }
 }
 
 // Трекер теории: помним, досмотрел ли ученик разбор линии до конца.
-const DEMO_STORE_KEY = 'coolchess.demo.v1';
+const DEMO_STORE_BASE_KEY = 'coolchess.demo.v1';
+
+function demoStoreKey(): string {
+  return scopedKey(DEMO_STORE_BASE_KEY);
+}
 
 function readDemoStore(): Record<string, boolean> {
   try {
-    const raw = typeof window === 'undefined' ? null : localStorage.getItem(DEMO_STORE_KEY);
+    const raw = typeof window === 'undefined' ? null : localStorage.getItem(demoStoreKey());
     const parsed: unknown = raw ? JSON.parse(raw) : {};
     if (parsed && typeof parsed === 'object') return parsed as Record<string, boolean>;
   } catch {
@@ -1080,7 +1101,7 @@ function writeDemoStore(topicId: string) {
   try {
     const store = readDemoStore();
     store[topicId] = true;
-    localStorage.setItem(DEMO_STORE_KEY, JSON.stringify(store));
+    localStorage.setItem(demoStoreKey(), JSON.stringify(store));
   } catch {
     // Игнорируем ошибки записи.
   }
@@ -1749,13 +1770,13 @@ function ProfilePage() {
       <div className="profile-card profile-platform-card">
         <span className="profile-card-kicker">LICHESS</span><strong>{profile?.lichess_username ? '✓' : '—'}</strong>
         <p>{profile?.lichess_username ?? 'Аккаунт не привязан'}</p>
-        <small>{profile?.lichess_rapid_rating ? `Rapid ${profile.lichess_rapid_rating}` : 'Рейтинг и задачи'}</small>
+        <small>{profile?.lichess_rapid_rating ? `Рапид ${profile.lichess_rapid_rating}` : 'Рейтинг и задачи'}</small>
         <button className="button button-link" type="button" onClick={() => { setVerification(''); setLinkDialog('lichess'); setLinkMessage(''); }}>Связать Lichess</button>
       </div>
       <div className="profile-card profile-platform-card">
         <span className="profile-card-kicker">CHESS.COM</span><strong>{profile?.chesscom_username ? '✓' : '—'}</strong>
         <p>{profile?.chesscom_username ?? 'Аккаунт не указан'}</p>
-        <small>{profile?.chesscom_rapid_rating ? `Rapid ${profile.chesscom_rapid_rating}` : 'Публичные рейтинги'} · {profile?.chesscom_blitz_rating ? `Blitz ${profile.chesscom_blitz_rating}` : 'Нет Blitz'}</small>
+        <small>{profile?.chesscom_rapid_rating ? `Рапид ${profile.chesscom_rapid_rating}` : 'Публичные рейтинги'} · {profile?.chesscom_blitz_rating ? `Блиц ${profile.chesscom_blitz_rating}` : 'Блиц: —'}</small>
         <button className="button button-link" type="button" onClick={() => { setVerification(''); setLinkDialog('chesscom'); setChesscomMessage(''); }}>Связать Chess.com</button>
       </div>
     </div>
@@ -1777,7 +1798,7 @@ function ProfilePage() {
         </> : <>
           <span className="profile-card-kicker">ПОДКЛЮЧЕНИЕ ПРОФИЛЯ</span>
           <h2 id="profile-link-title">Связать Chess.com</h2>
-          <p>Введите ник, получите одноразовый код и добавьте его в поле Location (местоположение) профиля Chess.com. Код действует 15 минут. Пароль Chess.com не нужен и не передаётся CoolChess.</p>
+          <p>Введите ник, получите одноразовый код и добавьте его в поле «Местоположение» (Location) профиля Chess.com. Код действует 15 минут. Пароль Chess.com не нужен и не передаётся CoolChess.</p>
           <label className="profile-link-label">Ник Chess.com<input value={chesscomName} onChange={(event) => setChesscomName(event.target.value)} placeholder="Ваш ник" autoComplete="username" /></label>
           {verification && <p className="profile-link-code">Код для профиля: <strong>{verification}</strong></p>}
           {chesscomMessage && <p role="status">{chesscomMessage}</p>}

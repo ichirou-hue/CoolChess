@@ -1,7 +1,7 @@
 import type { MouseEventHandler, RefObject } from 'react';
 
 const ranks = [8, 7, 6, 5, 4, 3, 2, 1];
-const files = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 
 type CoordinateBoardProps = {
   boardRef: RefObject<HTMLDivElement | null>;

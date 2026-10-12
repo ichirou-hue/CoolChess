@@ -169,7 +169,7 @@ function OpeningFamilyPreview({ family }: { family: OpeningFamily }) {
         {frame?.lastMove?.map(([row, col], index) => <i key={`last-${index}`} className="opening-family-preview-last" style={{ gridRow: row + 1, gridColumn: col + 1 }} />)}
         {frame?.pieces.map((piece, index) => <i key={`${piece.row}-${piece.col}-${index}`} className={`opening-family-preview-piece ${piece.color}`} style={{ gridRow: piece.row + 1, gridColumn: piece.col + 1 }}>{piece.glyph}</i>)}
       </span>
-      <span className="coordinate-board-files">{['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((file) => <span key={file}>{file}</span>)}</span>
+      <span className="coordinate-board-files">{['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((file) => <span key={file}>{file}</span>)}</span>
     </span>
   </span>;
 }

@@ -1,5 +1,5 @@
 /** Browser entry point: starts CoolChess and connects its main screens. */
-import { StrictMode, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { createElement, StrictMode, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Chess, type Square } from 'chess.js';
 import { Chessground } from 'chessground';
@@ -64,12 +64,23 @@ function getMoveNotation(uciMoves: string[]) {
   });
 }
 
-function BoardShell({ boardRef }: { boardRef: React.RefObject<HTMLDivElement | null> }) {
-  return <div className="game-coordinate-frame"><CoordinateBoard boardRef={boardRef} label="Шахматная доска" /></div>;
+function BoardShell({ boardRef, materialBalance }: { boardRef: React.RefObject<HTMLDivElement | null>; materialBalance: React.ReactNode }) {
+  return <div className="game-coordinate-frame">{materialBalance}<CoordinateBoard boardRef={boardRef} label="Шахматная доска" /></div>;
 }
 
 type LiveMoveFlash = { classification: MoveClassification | 'brilliant' | 'book' | 'unavailable'; glyph: string; label: string; explanation: string; notation: string; reward?: number };
-type MoveNag = { symbol: string; label: string; explanation: string };
+type MoveNag = { classification: MoveClassification | 'brilliant' | 'book'; symbol: string; label: string; explanation: string };
+const moveNagsStorageKey = (gameId: string) => `coolchess.gameMoveNags.${gameId}`;
+
+function readGameMoveNags(gameId: string): Record<number, MoveNag> {
+  try { return JSON.parse(localStorage.getItem(moveNagsStorageKey(gameId)) ?? '{}') as Record<number, MoveNag>; }
+  catch { return {}; }
+}
+
+function saveGameMoveNags(gameId: string, nags: Record<number, MoveNag>) {
+  try { localStorage.setItem(moveNagsStorageKey(gameId), JSON.stringify(nags)); }
+  catch { /* Keep the live game usable when browser storage is unavailable. */ }
+}
 
 const moveNagSymbols: Record<MoveClassification, string> = {
   best: '!',
@@ -89,6 +100,47 @@ function materialForSide(game: Chess, side: 'w' | 'b') {
     if (piece) total += (piece.color === side ? 1 : -1) * values[piece.type];
   }
   return total;
+}
+
+function getMaterialTotals(game: Chess) {
+  const values = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+  const totals = { white: 0, black: 0 };
+  for (const row of game.board()) for (const piece of row) {
+    if (piece) totals[piece.color === 'w' ? 'white' : 'black'] += values[piece.type];
+  }
+  return totals;
+}
+
+type CapturedPieceType = 'p' | 'n' | 'b' | 'r' | 'q';
+type CapturedPieceGroup = { piece: CapturedPieceType; color: 'w' | 'b'; count: number };
+const chessgroundPieceNames: Record<CapturedPieceType, string> = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen' };
+const capturedPieceNames: Record<CapturedPieceType, string> = { p: 'пешка', n: 'конь', b: 'слон', r: 'ладья', q: 'ферзь' };
+const chessgroundPieceClass = (piece: CapturedPieceType, color: 'w' | 'b') => `${chessgroundPieceNames[piece]} ${color === 'w' ? 'white' : 'black'}`;
+
+function getCapturedPieceGroups(game: Chess) {
+  const counts = { white: new Map<string, number>(), black: new Map<string, number>() };
+  for (const move of game.history({ verbose: true })) {
+    if (!move.captured) continue;
+    const side = move.color === 'w' ? 'white' : 'black';
+    const color = move.color === 'w' ? 'b' : 'w';
+    const key = `${color}:${move.captured}`;
+    counts[side].set(key, (counts[side].get(key) ?? 0) + 1);
+  }
+  const order: Record<CapturedPieceType, number> = { q: 0, r: 1, b: 2, n: 3, p: 4 };
+  const group = (side: 'white' | 'black'): CapturedPieceGroup[] => [...counts[side].entries()].map(([key, count]) => {
+    const [color, piece] = key.split(':') as ['w' | 'b', CapturedPieceType];
+    return { piece, color, count };
+  }).sort((left, right) => order[left.piece] - order[right.piece]);
+  return { white: group('white'), black: group('black') };
+}
+
+function PlayerMaterial({ name, pieces, advantage }: { name: string; pieces: CapturedPieceGroup[]; advantage: number }) {
+  if (pieces.length === 0 && advantage <= 0) return null;
+  const summary = pieces.map((item) => `${item.count} ${capturedPieceNames[item.piece]}`).join(', ');
+  return <span className="player-material" aria-label={`${name}: ${summary || 'без взятых фигур'}${advantage > 0 ? `, перевес ${advantage} пешечных единиц` : ''}`}>
+    {pieces.length > 0 && <span className="player-captured-pieces" aria-hidden="true">{pieces.map((item) => <span className="player-captured-piece cg-wrap" key={`${item.color}-${item.piece}`} title={`${item.count} ${capturedPieceNames[item.piece]}`}>{createElement('piece', { className: chessgroundPieceClass(item.piece, item.color) })}{item.count > 1 && <small>×{item.count}</small>}</span>)}</span>}
+    {advantage > 0 && <strong title={`Материальный перевес: +${advantage} пешечных единиц`}>+{advantage}</strong>}
+  </span>;
 }
 
 function moveSacrificesPiece(beforeFen: string, afterFen: string, before: PositionAnalysis, after: PositionAnalysis, playedMove: string, lossCp: number) {
@@ -116,6 +168,7 @@ const moveDescriptions: Record<MoveClassification, { label: string; glyph: strin
 
 function ChessGame() {
   const boardRef = useRef<HTMLDivElement>(null);
+  const moveHistoryRef = useRef<HTMLDivElement>(null);
   const groundRef = useRef<Api | null>(null);
   const gameRef = useRef(new Chess());
   const startedRef = useRef(false);
@@ -141,6 +194,16 @@ function ChessGame() {
   const [liveMoveFlash, setLiveMoveFlash] = useState<LiveMoveFlash | null>(null);
 
   useEffect(() => {
+    const history = moveHistoryRef.current;
+    const activeMove = history?.querySelector<HTMLButtonElement>('.move-column button.active');
+    if (!history || !activeMove) return;
+    const historyBounds = history.getBoundingClientRect();
+    const moveBounds = activeMove.getBoundingClientRect();
+    if (moveBounds.bottom > historyBounds.bottom) history.scrollTop += moveBounds.bottom - historyBounds.bottom;
+    else if (moveBounds.top < historyBounds.top) history.scrollTop -= historyBounds.top - moveBounds.top;
+  }, [moves.length, viewPly]);
+
+  useEffect(() => {
     const client = new StockfishClient();
     analysisClientRef.current = client;
     return () => {
@@ -154,7 +217,7 @@ function ChessGame() {
     if (gameStateRef.current?.id !== response.id) {
       analysisRunRef.current += 1;
       setLiveMoveFlash(null);
-      setMoveNags({});
+      setMoveNags(readGameMoveNags(response.id));
     }
     const nextGame = new Chess(response.current_fen);
     gameRef.current = nextGame;
@@ -191,6 +254,10 @@ function ChessGame() {
       });
     }
   };
+
+  useEffect(() => {
+    if (game?.id) saveGameMoveNags(game.id, moveNags);
+  }, [game?.id, moveNags]);
 
   const showPly = (ply: number) => {
     if (!game) return;
@@ -260,16 +327,17 @@ function ChessGame() {
         const quality = moveDescriptions[classification];
         const positiveMove = classification === 'best' || classification === 'excellent' || classification === 'good' || classification === 'great';
         const nag: MoveNag = brilliant
-          ? { symbol: '!!', label: 'Блестящий ход', explanation: 'Точная жертва с достаточной компенсацией.' }
+          ? { classification: 'brilliant', symbol: '!!', label: 'Блестящий ход', explanation: 'Точная жертва с достаточной компенсацией.' }
           : opening && positiveMove
-            ? { symbol: '!?', label: 'Дебютная новинка', explanation: `Ход из теории: ${opening.name} (${opening.eco}).` }
-            : { symbol: moveNagSymbols[classification], label: quality.label, explanation: quality.explanation };
+            ? { classification: 'book', symbol: '!?', label: 'Дебютная новинка', explanation: `Ход из теории: ${opening.name} (${opening.eco}).` }
+            : { classification, symbol: moveNagSymbols[classification], label: quality.label, explanation: quality.explanation };
         const result: LiveMoveFlash = brilliant
           ? { classification: 'brilliant', glyph: '⚡', label: 'Бриллиантовая жертва', explanation: 'Ты нашёл точный ход с реальной материальной жертвой. Stockfish подтверждает, что компенсация сохраняет позицию.', notation: `${playedMove.san} · подтверждено анализом`, reward: 50 }
           : opening && positiveMove
             ? { classification: 'book', glyph: '♟', label: `Теория · ${opening.name}`, explanation: `Отлично: ты продолжил известную дебютную линию (${opening.eco}). ${quality.label}: ${quality.explanation}`, notation: `${playedMove.san} · ${opening.eco}` }
             : { classification, glyph: quality.glyph, label: quality.label, explanation: opening ? `${quality.explanation} Этот ход также встречается в линии «${opening.name}» (${opening.eco}).` : quality.explanation, notation: `${playedMove.san}${opening ? ` · ${opening.eco}` : ''}` };
         if (brilliant) awardPawns(`game-brilliant:${currentGame.id}:${movePly}`, 50, 'game');
+        saveGameMoveNags(currentGame.id, { ...readGameMoveNags(currentGame.id), [movePly]: nag });
         setMoveNags((current) => ({ ...current, [movePly]: nag }));
         setLiveMoveFlash(result);
         liveFlashTimerRef.current = window.setTimeout(() => setLiveMoveFlash(null), 5000);
@@ -348,7 +416,29 @@ function ChessGame() {
   const moveCountWord = fullMoveCount % 100 >= 11 && fullMoveCount % 100 <= 14 ? 'ходов' : fullMoveCount % 10 === 1 ? 'ход' : fullMoveCount % 10 >= 2 && fullMoveCount % 10 <= 4 ? 'хода' : 'ходов';
   const annotatedPly = viewPly ?? Math.max(0, ...Object.keys(moveNags).map(Number));
   const activeNag = moveNags[annotatedPly];
+  const activeMoveFeedback = liveMoveFlash ?? (activeNag ? {
+    classification: activeNag.classification,
+    glyph: activeNag.symbol,
+    label: activeNag.label,
+    explanation: activeNag.explanation,
+    notation: moves[annotatedPly - 1] ?? '',
+  } : null);
   const playerIsWhite = game?.player_color !== 'black';
+  const materialPosition = new Chess();
+  const materialMoves = game ? game.moves_uci.slice(0, viewPly ?? game.moves_uci.length) : [];
+  for (const uci of materialMoves) {
+    try { materialPosition.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] as 'q' | 'r' | 'b' | 'n' | undefined }); }
+    catch { break; }
+  }
+  const materialTotals = getMaterialTotals(materialPosition);
+  const materialDifference = materialTotals.white - materialTotals.black;
+  const capturedPieces = getCapturedPieceGroups(materialPosition);
+  const materialLeadName = materialDifference === 0 ? 'Ровно' : materialDifference > 0 ? (playerIsWhite ? 'Вы' : 'Maia') : (playerIsWhite ? 'Maia' : 'Вы');
+  const whiteMaterialShare = materialTotals.white + materialTotals.black === 0 ? 50 : materialTotals.white / (materialTotals.white + materialTotals.black) * 100;
+  const materialBalance = <aside className={`material-balance-rail${materialDifference > 0 ? ' white-leading' : materialDifference < 0 ? ' black-leading' : ' balanced'}`} aria-label={`Материальный баланс: ${materialLeadName}, разница ${Math.abs(materialDifference)} пешечных единиц. Белые ${materialTotals.white}, чёрные ${materialTotals.black}.`} style={{ '--material-white-share': `${whiteMaterialShare}%` } as React.CSSProperties}>
+    <div className="material-balance-summary"><b>{materialDifference === 0 ? '±0' : `+${Math.abs(materialDifference)}`}</b></div>
+    <div className="material-balance-body"><div className="material-balance-track" aria-hidden="true"><i /></div></div>
+  </aside>;
   const gameResult = game && game.status !== 'in_progress' ? game.status : null;
   const resultCopy = gameResult === 'player_won'
     ? { tone: 'win', emblem: '♛', label: 'ПАРТИЯ ЗАВЕРШЕНА', title: 'Победа!', message: `Ты обыграл Maia на ${game?.bot_difficulty} ELO.` }
@@ -373,16 +463,20 @@ function ChessGame() {
       <div className="game-controls"><button className="button button-primary" type="button" onClick={() => void newGame()} disabled={loading || thinking}>Новая партия <span>↗</span></button>{game?.status === 'in_progress' && <button className="button button-link" type="button" onClick={() => void resign()} disabled={loading || thinking}>Сдаться</button>}{statusText && <span className="engine-status">{statusText}</span>}{(error?.includes('401') || error?.includes('Сначала войдите')) && <a className="source-link" href="#auth">Войти в аккаунт ↗</a>}</div>
       <div className="maia-achievements"><div className="achievement-heading"><strong>Уровни Maia</strong><span>{maiaAchievements.length}/{maiaLevels.length} побед</span></div><div className="maia-level-map" aria-label="Пройденные уровни Maia">{maiaLevels.map((level) => <span className={maiaAchievements.includes(level) ? 'earned' : ''} title={`${level} ELO${maiaAchievements.includes(level) ? ' · победа' : ''}`} key={level}>{maiaAchievements.includes(level) ? '✓' : level}</span>)}</div></div>
     </div>
-    <div className="game-layout"><div className="player-row"><span className="avatar black-avatar">♞</span><div><strong>CoolChess Maia</strong><small>{game?.bot_difficulty ?? difficulty} ELO · {playerIsWhite ? 'чёрные' : 'белые'}</small></div><span className="clock">MAIA</span></div><div className="game-board-stage"><BoardShell boardRef={boardRef} />{liveMoveFlash && game?.status === 'in_progress' && <div key={`${liveMoveFlash.notation}-${liveMoveFlash.label}`} className={`live-move-flash ${liveMoveFlash.classification}`} role="status" aria-live="polite"><span className="live-move-icon" aria-hidden="true">{liveMoveFlash.glyph}</span><div className="live-move-copy"><strong>{liveMoveFlash.label}</strong><p>{liveMoveFlash.explanation}</p><small>{liveMoveFlash.notation}</small></div>{liveMoveFlash.reward && <b className="live-move-reward">+{liveMoveFlash.reward} ♟</b>}</div>}{resultCopy && !resultDismissed && <div className={`game-result-overlay ${resultCopy.tone}`} role="region" aria-label={`Результат партии: ${resultCopy.title}`}><div className="game-result-card"><div className="game-result-confetti" aria-hidden="true">{Array.from({ length: 9 }, (_, index) => <i key={index} />)}</div><span className="game-result-emblem" aria-hidden="true">{resultCopy.emblem}</span><span className="game-result-label">{resultCopy.label}</span><h3>{resultCopy.title}</h3><p>{resultCopy.message}</p><div className="game-result-rewards"><span><strong>{game!.elo_delta >= 0 ? '+' : ''}{game!.elo_delta}</strong><small>ELO</small></span><span><strong>+{game!.xp_earned}</strong><small>опыт</small></span><span><strong>+{game!.coins_earned} ♟</strong><small>награда</small></span></div><div className="game-result-actions"><button className="button button-primary" type="button" onClick={() => void newGame()}>Новая партия ↗</button><button className="game-result-review" type="button" onClick={() => setResultDismissed(true)}>Разобрать ходы</button></div></div></div>}</div><div className="player-row user-row"><span className="avatar user-avatar">Е</span><div><strong>Ученик</strong><small>{playerIsWhite ? 'Белые' : 'Чёрные'}{viewPly !== null ? ` · просмотр ${viewPly}/${moves.length}` : ''}</small></div><span className="clock">ВЫ</span></div></div>
+    <div className="game-layout"><div className="player-row"><span className="avatar player-piece-avatar cg-wrap" aria-hidden="true">{createElement('piece', { className: `king ${playerIsWhite ? 'black' : 'white'}` })}</span><div><strong>CoolChess Maia</strong><small>{game?.bot_difficulty ?? difficulty} ELO · {playerIsWhite ? 'чёрные' : 'белые'}</small></div><PlayerMaterial name="Maia" pieces={capturedPieces[playerIsWhite ? 'black' : 'white']} advantage={playerIsWhite ? -materialDifference : materialDifference} /></div><div className="game-board-stage"><BoardShell boardRef={boardRef} materialBalance={materialBalance} />{resultCopy && !resultDismissed && <div className={`game-result-overlay ${resultCopy.tone}`} role="region" aria-label={`Результат партии: ${resultCopy.title}`}><div className="game-result-card"><div className="game-result-confetti" aria-hidden="true">{Array.from({ length: 9 }, (_, index) => <i key={index} />)}</div><span className="game-result-emblem" aria-hidden="true">{resultCopy.emblem}</span><span className="game-result-label">{resultCopy.label}</span><h3>{resultCopy.title}</h3><p>{resultCopy.message}</p><div className="game-result-rewards"><span><strong>{game!.elo_delta >= 0 ? '+' : ''}{game!.elo_delta}</strong><small>ELO</small></span><span><strong>+{game!.xp_earned}</strong><small>опыт</small></span><span><strong>+{game!.coins_earned} ♟</strong><small>награда</small></span></div><div className="game-result-actions"><button className="button button-primary" type="button" onClick={() => void newGame()}>Новая партия ↗</button><button className="game-result-review" type="button" onClick={() => setResultDismissed(true)}>Разобрать ходы</button></div></div></div>}</div><div className="player-row user-row"><span className="avatar player-piece-avatar cg-wrap" aria-hidden="true">{createElement('piece', { className: `king ${playerIsWhite ? 'white' : 'black'}` })}</span><div><strong>Ученик</strong><small>{playerIsWhite ? 'Белые' : 'Чёрные'}{viewPly !== null ? ` · просмотр ${viewPly}/${moves.length}` : ''}</small></div><PlayerMaterial name="Вы" pieces={capturedPieces[playerIsWhite ? 'white' : 'black']} advantage={playerIsWhite ? materialDifference : -materialDifference} /></div></div>
     <aside className="move-panel">
       <div className="move-panel-heading">
         <div className="move-title-wrap"><span className="move-title-icon" aria-hidden="true">♟</span><span><strong>Ходы партии</strong></span></div>
         <span className="move-count">{fullMoveCount} <small>{moveCountWord}</small></span>
       </div>
-      {activeNag && <div className="move-nag-callout" role="status" aria-live="polite"><span>{activeNag.symbol}</span><div><strong>{activeNag.label} · {moves[annotatedPly - 1]}</strong><p>{activeNag.explanation}</p></div></div>}
-      <div className="move-columns" aria-label="Список ходов">
-        <div className="move-column white-move-column"><strong>{playerIsWhite ? 'Вы · белые' : 'Maia · белые'}</strong>{movePairs.map((pair) => <button type="button" key={pair.number} className={(viewPly ?? moves.length) === pair.whitePly ? 'active' : ''} onClick={() => showPly(pair.whitePly)} disabled={!pair.white}><small>{pair.number}.</small>{pair.white ?? '—'}{moveNags[pair.whitePly] && <em className="move-nag" title={`${moveNags[pair.whitePly].label}: ${moveNags[pair.whitePly].explanation}`}>{moveNags[pair.whitePly].symbol}</em>}</button>)}</div>
-        <div className="move-column black-move-column"><strong>{playerIsWhite ? 'Maia · чёрные' : 'Вы · чёрные'}</strong>{movePairs.map((pair) => <button type="button" key={pair.number} className={(viewPly ?? moves.length) === pair.blackPly ? 'active' : ''} onClick={() => showPly(pair.blackPly)} disabled={!pair.black}><small>{pair.number}…</small>{pair.black ?? '—'}{moveNags[pair.blackPly] && <em className="move-nag" title={`${moveNags[pair.blackPly].label}: ${moveNags[pair.blackPly].explanation}`}>{moveNags[pair.blackPly].symbol}</em>}</button>)}</div>
+      {activeMoveFeedback && <div key={`${activeMoveFeedback.notation}-${activeMoveFeedback.label}`} className={`live-move-flash ${activeMoveFeedback.classification}`} role="status" aria-live="polite"><span className="live-move-icon" aria-hidden="true">{activeMoveFeedback.glyph}</span><div className="live-move-copy"><strong>{activeMoveFeedback.label}</strong><p>{activeMoveFeedback.explanation}</p><small>{activeMoveFeedback.notation}</small></div>{'reward' in activeMoveFeedback && activeMoveFeedback.reward && <b className="live-move-reward">+{activeMoveFeedback.reward} ♟</b>}</div>}
+      <div className="move-column-headings">
+        <div className="move-column-heading user-heading" aria-label={`Ваши ходы ${playerIsWhite ? 'белыми' : 'чёрными'}`}><span className="move-heading-piece cg-wrap" aria-hidden="true">{createElement('piece', { className: `king ${playerIsWhite ? 'white' : 'black'}` })}</span><strong className="move-column-heading-label">Вы</strong></div>
+        <div className="move-column-heading maia-heading" aria-label={`Ходы Maia ${playerIsWhite ? 'чёрными' : 'белыми'}`}><span className="move-heading-piece cg-wrap" aria-hidden="true">{createElement('piece', { className: `king ${playerIsWhite ? 'black' : 'white'}` })}</span><strong className="move-column-heading-label">Maia</strong></div>
+      </div>
+      <div className="move-columns" ref={moveHistoryRef} aria-label="Список ходов">
+        <div className="move-column user-move-column" role="group" aria-label={`Ваши ходы ${playerIsWhite ? 'белыми' : 'чёрными'}`}>{movePairs.map((pair) => { const ply = playerIsWhite ? pair.whitePly : pair.blackPly; const move = playerIsWhite ? pair.white : pair.black; const nag = moveNags[ply]; return <button type="button" key={pair.number} className={(viewPly ?? moves.length) === ply ? 'active' : ''} onClick={() => showPly(ply)} disabled={!move}><small>{pair.number}{playerIsWhite ? '.' : '…'}</small>{move ?? '—'}{nag && <em className={`move-nag ${nag.classification}`} title={`${nag.label}: ${nag.explanation}`}>{nag.symbol}</em>}</button>; })}</div>
+        <div className="move-column maia-move-column" role="group" aria-label={`Ходы Maia ${playerIsWhite ? 'чёрными' : 'белыми'}`}>{movePairs.map((pair) => { const ply = playerIsWhite ? pair.blackPly : pair.whitePly; const move = playerIsWhite ? pair.black : pair.white; const nag = moveNags[ply]; return <button type="button" key={pair.number} className={(viewPly ?? moves.length) === ply ? 'active' : ''} onClick={() => showPly(ply)} disabled={!move}><small>{pair.number}{playerIsWhite ? '…' : '.'}</small>{move ?? '—'}{nag && <em className={`move-nag ${nag.classification}`} title={`${nag.label}: ${nag.explanation}`}>{nag.symbol}</em>}</button>; })}</div>
       </div>
       {moves.length > 0 && <div className="move-panel-actions"><button className={`move-start${viewPly === 0 ? ' active' : ''}`} type="button" onClick={() => showPly(0)}>Начало партии</button><button className="move-current" type="button" onClick={() => showPly(moves.length)} disabled={viewPly === null}>К текущей позиции</button></div>}
       {moves.length === 0 && <p className="move-empty"><span aria-hidden="true">♘</span>{loading ? 'Подключаемся к серверу…' : 'Начните партию — здесь появится её разбор.'}</p>}
@@ -1636,24 +1730,29 @@ function ProfilePage() {
   };
 
   const displayName = user?.display_name ?? 'Ученик';
+  const profileXp = profile?.xp ?? 0;
+  const profileLevel = profile?.level ?? 1;
+  const levelStartXp = (profileLevel - 1) ** 2 * 100;
+  const levelNextXp = profileLevel ** 2 * 100;
+  const levelProgress = Math.min(100, Math.max(0, ((profileXp - levelStartXp) / Math.max(1, levelNextXp - levelStartXp)) * 100));
   return <section className="profile-page">
     <div className="profile-hero">
       <div className="profile-avatar-large">{displayName[0]?.toUpperCase() ?? 'У'}</div>
       <div><span className="eyebrow"><span>06</span> ПРОФИЛЬ УЧЕНИКА</span><h1>{displayName} <em>в игре.</em></h1><p>{profile?.email ?? user?.email ?? 'Данные профиля загружаются с сервера.'}</p></div>
-      <div className="profile-wallet"><span>РЕЙТИНГ COOLCHESS</span><strong>{loading ? '…' : profile?.elo_rating ?? '—'}</strong><small>{profile ? `уровень ${profile.level} · ${profile.coins} ♟` : user?.role ?? 'ученик'}</small></div>
+      <div className="profile-wallet"><span className="profile-rating-label">РЕЙТИНГ COOLCHESS</span><div className="profile-rating-value"><strong>{loading ? '…' : profile?.elo_rating ?? '—'}</strong><b>ELO</b></div><small>{profile ? `${profile.coins} ♟ на счету` : user?.role ?? 'ученик'}</small><div className="profile-level-progress" aria-label={`Прогресс уровня ${profileLevel}`}><strong>{profileLevel}</strong><div className="profile-level-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(levelProgress)} aria-label={`Уровень ${profileLevel}`}><i style={{ width: `${levelProgress}%` }} /></div><strong>{profileLevel + 1}</strong><small>{Math.max(0, profileXp - levelStartXp)} / {levelNextXp - levelStartXp} XP</small></div></div>
     </div>
     {error && <p className="puzzle-reward">{error}</p>}
     <div className="profile-grid">
-      <div className="profile-card streak-card"><span className="profile-card-kicker">ОПЫТ</span><strong>{loading ? '…' : profile?.xp ?? '—'} XP</strong><p>накопленный опыт</p><small>Уровень {loading ? '…' : profile?.level ?? '—'} · серверные данные</small></div>
+      <div className="profile-card streak-card"><span className="profile-card-kicker">ОПЫТ</span><strong>{loading ? '…' : profile?.xp ?? '—'} XP</strong><p>накопленный опыт</p><small>Уровень {loading ? '…' : profile?.level ?? '—'}</small></div>
       <div className="profile-card"><span className="profile-card-kicker">БАЛАНС</span><strong>{loading ? '…' : profile?.coins ?? '—'} ♟</strong><p>доступные пешки</p><small>Подтверждено сервером</small></div>
       <div className="profile-card"><span className="profile-card-kicker">ЗАДАЧИ</span><strong>{loading ? '…' : rankData?.my_rank?.puzzles_solved ?? '—'}</strong><p>решено правильно</p><small>{rankData?.my_rank ? `Место в рейтинге: ${rankData.my_rank.rank}` : 'Пока нет статистики'}</small></div>
-      <div className="profile-card">
+      <div className="profile-card profile-platform-card">
         <span className="profile-card-kicker">LICHESS</span><strong>{profile?.lichess_username ? '✓' : '—'}</strong>
         <p>{profile?.lichess_username ?? 'Аккаунт не привязан'}</p>
         <small>{profile?.lichess_rapid_rating ? `Rapid ${profile.lichess_rapid_rating}` : 'Рейтинг и задачи'}</small>
         <button className="button button-link" type="button" onClick={() => { setVerification(''); setLinkDialog('lichess'); setLinkMessage(''); }}>Связать Lichess</button>
       </div>
-      <div className="profile-card">
+      <div className="profile-card profile-platform-card">
         <span className="profile-card-kicker">CHESS.COM</span><strong>{profile?.chesscom_username ? '✓' : '—'}</strong>
         <p>{profile?.chesscom_username ?? 'Аккаунт не указан'}</p>
         <small>{profile?.chesscom_rapid_rating ? `Rapid ${profile.chesscom_rapid_rating}` : 'Публичные рейтинги'} · {profile?.chesscom_blitz_rating ? `Blitz ${profile.chesscom_blitz_rating}` : 'Нет Blitz'}</small>

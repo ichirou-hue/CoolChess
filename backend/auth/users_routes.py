@@ -229,6 +229,13 @@ def generate_verification_code() -> str:
     return f"coolchess-verify-{secrets.token_hex(4)}"
 
 
+# Названия платформ для пользовательских текстов: только русский + бренды.
+PLATFORM_RU_NAMES = {
+    ChessPlatform.LICHESS: "Lichess",
+    ChessPlatform.CHESSCOM: "Chess.com",
+}
+
+
 def _platform_verification_fields(platform: ChessPlatform) -> tuple[str, str, str, str]:
     prefix = "lichess" if platform == ChessPlatform.LICHESS else "chesscom"
     return (
@@ -281,7 +288,7 @@ async def create_platform_verification_code(
         )
     else:
         instructions = (
-            "Добавьте код в поле Location (местоположение) в настройках профиля "
+            "Добавьте код в поле «Местоположение» (Location) в настройках профиля "
             "Chess.com, сохраните изменения и вернитесь для подтверждения."
         )
     return PlatformVerificationCodeResponse(
@@ -348,11 +355,11 @@ async def _verify_platform_link(
     if expected_code.casefold() not in profile_text.casefold():
         setattr(db_user, attempts_field, getattr(db_user, attempts_field) + 1)
         await db.commit()
-        profile_field = "Bio" if platform == ChessPlatform.LICHESS else "Location"
+        profile_field = "«О себе»" if platform == ChessPlatform.LICHESS else "«Местоположение» (Location)"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"Код не найден в поле {profile_field} профиля {platform.value}. "
+                f"Код не найден в поле {profile_field} профиля {PLATFORM_RU_NAMES[platform]}. "
                 "Проверьте, что код скопирован без изменений и профиль сохранён, "
                 "затем повторите попытку."
             ),
@@ -384,7 +391,7 @@ async def _verify_platform_link(
     result = PlatformAccountLinkResponse(
         platform=platform,
         username=canonical_username,
-        message=f"Аккаунт {platform.value} {canonical_username} успешно подтверждён и привязан.",
+        message=f"Аккаунт {PLATFORM_RU_NAMES[platform]} {canonical_username} успешно подтверждён и привязан.",
         updated_elo=db_user.elo_rating if platform == ChessPlatform.LICHESS else None,
     )
     if platform == ChessPlatform.LICHESS:

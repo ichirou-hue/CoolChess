@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import * as authApi from '../api/authApi';
 import type { AuthUser } from '../api/authApi';
+import { setStorageOwner } from '../../../shared/lib/userScopedStorage';
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -31,6 +32,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     authApi.getMe().then(setUser).catch(() => setUser(null)).finally(() => setLoading(false));
   }, []);
+
+  // Хранилища прогресса привязаны к id пользователя: новый аккаунт
+  // в том же браузере стартует с чистого localStorage-прогресса.
+  useEffect(() => {
+    setStorageOwner(user?.id ?? null);
+  }, [user?.id]);
 
   const value = useMemo<AuthContextValue>(() => ({
     user,

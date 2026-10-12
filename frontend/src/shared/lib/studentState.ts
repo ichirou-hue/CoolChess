@@ -1,4 +1,5 @@
 /** Temporary browser storage for progress until the progress API is ready. */
+import { scopedKey } from './userScopedStorage';
 export type RewardKind = 'puzzle' | 'theory' | 'game';
 
 export type StudentState = {
@@ -14,7 +15,11 @@ export type StudentState = {
   claimed: string[];
 };
 
-const studentStateKey = 'coolchess.studentState';
+const studentStateBaseKey = 'coolchess.studentState';
+
+function studentStateKey(): string {
+  return scopedKey(studentStateBaseKey);
+}
 const defaultStudentState: StudentState = {
   pawns: 0,
   totalEarned: 0,
@@ -31,7 +36,7 @@ const defaultStudentState: StudentState = {
 export function readStudentState(): StudentState {
   if (typeof window === 'undefined') return defaultStudentState;
   try {
-    return { ...defaultStudentState, ...JSON.parse(localStorage.getItem(studentStateKey) ?? '{}') };
+    return { ...defaultStudentState, ...JSON.parse(localStorage.getItem(studentStateKey()) ?? '{}') };
   } catch {
     return defaultStudentState;
   }
@@ -69,7 +74,7 @@ export function awardPawns(eventId: string, reward: number, kind: RewardKind = '
     claimed: [...state.claimed, eventId],
   };
 
-  localStorage.setItem(studentStateKey, JSON.stringify(next));
+  localStorage.setItem(studentStateKey(), JSON.stringify(next));
   window.dispatchEvent(new Event('coolchess:state'));
   return next;
 }

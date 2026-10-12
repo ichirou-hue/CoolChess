@@ -42,6 +42,40 @@ def test_cyrillic_te_maps_to_latin_t():
     assert canonicalize_display_name("т") == canonicalize_display_name("t")
 
 
+def test_full_word_spoof_shares_key():
+    # Целое слово, набранное двойниками: кириллические А + украинская і.
+    assert canonicalize_display_name("Аdmіn") == canonicalize_display_name("Admin")
+    assert canonicalize_display_name("Кот") == canonicalize_display_name("Kot")
+
+
+def test_migration_backfill_map_matches_runtime():
+    """Карта в миграции пересчёта обязана совпадать с рантаймом.
+
+    Иначе backfill запишет ключи, которые проверка регистрации не узнает:
+    либо дыра для двойников, либо ложные 409 у существующих юзеров.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[3]
+    migration_path = (
+        repo_root
+        / "backend"
+        / "alembic"
+        / "versions"
+        / "c5d8e1a4b902_fix_nickname_confusables.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "nickname_confusables_migration", migration_path
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    import auth.display_names as runtime
+
+    assert module._CONFUSABLES == runtime._CONFUSABLES
+
+
 def _payload(**overrides):
     data = {
         "email": "bowie@chess.org",

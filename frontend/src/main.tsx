@@ -25,8 +25,10 @@ import type { GameResponse } from './features/chess-game/api/gameApi';
 import * as puzzleApi from './features/puzzles/api/puzzleApi';
 import type { Puzzle, PuzzleFilters } from './features/puzzles/api/puzzleApi';
 import * as leaderboardApi from './features/community/api/leaderboardApi';
+import * as tournamentsApi from './features/community/api/tournamentsApi';
 import * as pvpApi from './features/community/api/pvpApi';
 import { TournamentPage } from './features/community/ui/TournamentPage';
+import { TournamentCountdown } from './features/community/ui/TournamentCountdown';
 import type { PvpRoomState } from './features/community/api/pvpApi';
 import type { LeaderboardCategory, LeaderboardResponse } from './features/community/api/leaderboardApi';
 import * as profileApi from './features/profile/api/profileApi';
@@ -1385,18 +1387,68 @@ function CommunityPage() {
   const { user } = useAuth();
   const [category, setCategory] = useState<LeaderboardCategory>('elo');
   const [data, setData] = useState<LeaderboardResponse | null>(null);
+  const [tournaments, setTournaments] = useState<tournamentsApi.Tournament[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [tournamentError, setTournamentError] = useState('');
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    leaderboardApi.getLeaderboard(category).then((result) => { if (active) setData(result); }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : 'Не удалось загрузить рейтинг'); }).finally(() => { if (active) setLoading(false); });
+    leaderboardApi.getLeaderboard(category, 50).then((result) => { if (active) { setData(result); setError(''); } }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : 'Не удалось загрузить рейтинг'); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [category]);
 
+  useEffect(() => {
+    let active = true;
+    tournamentsApi.listTournaments().then((result) => { if (active) { setTournaments(result); setTournamentError(''); } }).catch((reason) => { if (active) setTournamentError(reason instanceof Error ? reason.message : 'Не удалось загрузить события'); });
+    return () => { active = false; };
+  }, []);
+
+  const race = tournaments.find((tournament) => tournament.name.toLocaleLowerCase('ru').includes('спринт'))
+    ?? tournaments.find((tournament) => tournament.status === 'registration');
+  const featuredTournaments = [...(race ? [race] : []), ...tournaments.filter((tournament) => tournament.id !== race?.id)].slice(0, 2);
+  const raceParticipants = race?.participants ?? [];
+  const myRaceEntry = raceParticipants.find((participant) => participant.user_id === user?.id);
+  const rankedRaceParticipants = raceParticipants
+    .slice()
+    .sort((left, right) => left.joined_at.localeCompare(right.joined_at))
+    .map((participant, index) => ({ participant, place: index + 1 }));
+  const myRaceStanding = rankedRaceParticipants.find(({ participant }) => participant.user_id === user?.id);
+  let visibleRaceParticipants = rankedRaceParticipants.slice(0, 4);
+  if (myRaceStanding && !visibleRaceParticipants.some(({ participant }) => participant.user_id === user?.id)) {
+    visibleRaceParticipants = [...visibleRaceParticipants.slice(0, 3), myRaceStanding]
+      .sort((left, right) => left.place - right.place);
+  }
+  const hiddenRaceParticipantCount = Math.max(0, rankedRaceParticipants.length - visibleRaceParticipants.length);
+  const raceIsFull = Boolean(race && race.participants.length >= race.max_players);
   const sortedValue = (player: LeaderboardResponse['top_players'][number]) => category === 'elo' ? `${player.elo_rating} ELO` : category === 'level' ? `ур. ${player.level}` : `${player.puzzles_solved} задач`;
-  return <section className="community-page" id="community"><div className="community-hero"><div><span className="eyebrow">СООБЩЕСТВО COOLCHESS</span><h2>Решай вместе.<br /><em>Расти быстрее.</em></h2><p>Сравнивай рейтинг, уровень и количество решённых задач с учениками школы.</p></div><div className="community-live"><span className="live-label">СЕРВЕРНЫЕ ДАННЫЕ</span><strong>{data?.top_players.length ?? '—'}</strong><small>учеников в текущем списке рейтинга</small><div className="live-stack"><span>♟</span><span>♞</span><span>♜</span></div></div></div><div className="community-grid"><div className="community-card race-large"><div className="card-kicker">СОРЕВНОВАНИЯ</div><h3>Гонки и PvP</h3><p>Создавай PvP-комнату по короткому коду или участвуй в турнирах.</p><div className="race-track"><span className="race-line" /><i style={{ left: '63%' }}>♟</i><i style={{ left: '74%' }}>♞</i></div><a className="source-link" href="#pvp">Перейти в PvP ↗</a></div><div className="community-card online-card"><div className="community-card-title"><h3>Твоя позиция</h3><span>СЕЙЧАС</span></div>{data?.my_rank ? <><div className="community-player"><span>#{data.my_rank.rank}</span><div><strong>Твой результат</strong><small>{data.my_rank.elo_rating} ELO · уровень {data.my_rank.level}</small></div><i /></div><div className="community-player"><span>♟</span><div><strong>{data.my_rank.xp} XP</strong><small>{data.my_rank.puzzles_solved} решённых задач</small></div></div></> : user ? <p>{loading ? 'Загружаем твоё место…' : 'Пока нет данных о твоём месте в рейтинге.'}</p> : <p><a className="source-link" href="#auth">Войди в аккаунт, чтобы увидеть своё место в рейтинге ↗</a></p>}</div><div className="community-card leaderboard-large"><div className="community-card-title"><h3>Рейтинг учеников</h3><div className="leaderboard-filters">{(['elo', 'level', 'puzzles'] as const).map((item) => <button className={category === item ? 'selected' : ''} key={item} type="button" onClick={() => { setError(''); setCategory(item); }}>{item === 'elo' ? 'ELO' : item === 'level' ? 'Уровень' : 'Задачи'}</button>)}</div></div>{error ? <p className="puzzle-reward">{error}</p> : loading ? <p>Загружаем рейтинг…</p> : data?.top_players.length ? data.top_players.map((player) => <div className={player.user_id === user?.id ? 'ranking-row current' : 'ranking-row'} key={player.user_id}><b>{String(player.rank).padStart(2, '0')}</b><span>{player.display_name}</span><small>{player.puzzles_solved} задач</small><strong>{sortedValue(player)}</strong></div>) : <p>Пока нет учеников в рейтинге.</p>}</div></div></section>;
+  return <section className="community-page" id="community">
+    <div className="community-hero">
+      <div><span className="eyebrow">СООБЩЕСТВО COOLCHESS</span><h2>Решай вместе.<br /><em>Расти быстрее.</em></h2><p>Сравнивай рейтинг, уровень и количество решённых задач с учениками школы.</p></div>
+      <div className="community-hero-side">
+        <div className="community-live"><span className="live-label">ИГРОКИ СООБЩЕСТВА</span><strong>{data?.total_players ?? data?.top_players.length ?? '—'}</strong><small>активных игроков в рейтинге</small><div className="live-stack"><span>♟</span><span>♞</span><span>♜</span><b>+</b></div></div>
+        <div className="community-hero-events"><span className="block-kicker">ТУРНИРЫ И СОБЫТИЯ</span>{tournamentError ? <p>{tournamentError}</p> : featuredTournaments.length ? <div className="community-event-grid">{featuredTournaments.map((tournament) => { const isRace = tournament.id === race?.id; const isFull = tournament.participants.length >= tournament.max_players; return <article className="community-event-tile" key={tournament.id}><span className={isRace ? 'community-event-badge live' : 'community-event-badge major'}>{isRace ? '● LIVE' : '♛ MAJOR'}</span><strong>{tournament.name}</strong><small>{tournament.participants.length} участников · {isFull ? 'мест больше нет' : tournament.status === 'registration' ? 'регистрация открыта' : tournament.status}</small><div className="community-event-detail"><b>{Math.floor(tournament.time_control / 60)}+{tournament.increment}</b><span>{isRace ? 'Условия и приз' : `${tournament.participants.length}/${tournament.max_players} мест`}</span></div><span className="community-event-prize">🏆 {tournament.prize}</span><TournamentCountdown endsAt={tournament.ends_at} compact /><a className="community-event-action" href="#tournaments">{isRace ? 'Правила и приз' : isFull ? 'Смотреть турнир' : 'Участвовать'}</a></article>; })}</div> : <p>Скоро здесь появятся турниры сообщества.</p>}</div>
+      </div>
+    </div>
+    <div className="community-grid">
+      <div className="community-card race-large">
+        <div className="card-kicker">ГОНКА И PvP</div>
+        <div className="race-title-row"><h3>{race?.name ?? 'Недельный спринт'}</h3>{race && <span className="race-open-badge">{race.status === 'ended' ? 'ТУРНИР ЗАВЕРШЁН' : raceIsFull ? 'НАБОР ЗАКРЫТ' : race.status === 'registration' ? 'ИДЁТ НАБОР' : race.status}</span>}</div>
+        <p>{race?.description ?? 'Собирай очки, играй с учениками школы и поднимайся в рейтинге.'}</p>
+        <div className="community-race-meta"><span>♟ {race?.participants.length ?? 0} участников</span><span>{race ? `${Math.floor(race.time_control / 60)}+${race.increment} · ${race.max_players} мест` : 'Ближайший старт'}</span>{user && race && !myRaceEntry && <span className="race-viewer-note">Вы пока не в гонке</span>}</div>
+        <div className="community-race-track" aria-label="Участники гонки">
+          <span className="race-line" />
+          {visibleRaceParticipants.map(({ participant, place }, index) => { const isMe = participant.user_id === user?.id; return <div className={`community-racer${isMe ? ' is-me' : ''}`} key={participant.user_id} style={{ left: `${8 + index * 22}%` }} title={`Место в списке участников: ${place} · ${participant.display_name}${isMe ? ' · Вы' : ''}`}><b className="community-racer-place">#{place}</b><span>{participant.display_name.trim().charAt(0).toLocaleUpperCase('ru') || '♟'}</span><small>{participant.display_name}{isMe ? ' · Вы' : ''}</small></div>; })}
+          {hiddenRaceParticipantCount > 0 && <a className="community-race-overflow" href="#tournaments">+{hiddenRaceParticipantCount} ещё ↗</a>}
+          <span className="race-finish">🏁</span>
+        </div>
+        <div className="race-actions"><a className="button button-primary" href="#tournaments">{user && race && !myRaceEntry && !raceIsFull ? 'Записаться в гонку ↗' : 'Открыть гонку ↗'}</a><a className="community-pvp-link" href="#pvp">Играть PvP</a></div>
+      </div>
+      <div className="community-card online-card"><div className="community-card-title"><h3>Твоя позиция</h3><span>СЕЙЧАС</span></div>{data?.my_rank ? <><div className="community-player"><span>#{data.my_rank.rank}</span><div><strong>Твой результат</strong><small>{data.my_rank.elo_rating} ELO · уровень {data.my_rank.level}</small></div><i /></div><div className="community-player"><span>♟</span><div><strong>{data.my_rank.xp} XP</strong><small>{data.my_rank.puzzles_solved} решённых задач</small></div></div></> : user ? <p>{loading ? 'Загружаем твоё место…' : 'Пока нет данных о твоём месте в рейтинге.'}</p> : <p><a className="source-link" href="#auth">Войди в аккаунт, чтобы увидеть своё место в рейтинге ↗</a></p>}</div>
+      <div className="community-card leaderboard-large" id="community-ranking"><div className="community-card-title"><h3>Рейтинг учеников</h3><div className="leaderboard-filters">{(['elo', 'level', 'puzzles'] as const).map((item) => <button className={category === item ? 'selected' : ''} key={item} type="button" onClick={() => { setError(''); setCategory(item); }}>{item === 'elo' ? 'ELO' : item === 'level' ? 'Уровень' : 'Задачи'}</button>)}</div></div>{error ? <p className="puzzle-reward">{error}</p> : loading ? <p>Загружаем рейтинг…</p> : data?.top_players.length ? <div className="community-ranking-list">{data.top_players.map((player) => { const medal = player.rank === 1 ? 'gold' : player.rank === 2 ? 'silver' : player.rank === 3 ? 'bronze' : ''; const place = player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : player.rank === 3 ? '🥉' : String(player.rank).padStart(2, '0'); return <div className={`ranking-row${player.user_id === user?.id ? ' current' : ''}${medal ? ` podium-row ${medal}` : ''}`} key={player.user_id}><b className={`ranking-place ${medal}`} aria-label={`${player.rank} место`} title={`${player.rank} место`}>{place}</b><span>{player.display_name}</span><small>{player.puzzles_solved} задач</small><strong>{sortedValue(player)}</strong></div>; })}</div> : <p>Пока нет учеников в рейтинге.</p>}</div>
+    </div>
+  </section>;
 
 }
 

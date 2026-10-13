@@ -35,3 +35,4 @@ class LeaderboardResponse(BaseModel):
     category: LeaderboardCategory
     top_players: List[LeaderboardUserItem]
     my_rank: Optional[MyRankInfo] = None
+    total_players: int = 0

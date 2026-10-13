@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -25,6 +26,8 @@ class TournamentCreate(BaseModel):
     time_control: int = Field(default=300, ge=30, le=7200)
     increment: int = Field(default=0, ge=0, le=60)
     max_players: int = Field(default=32, ge=2, le=128)
+    duration_hours: int = Field(default=168, ge=1, le=2160)
+    prize: str = Field(default="500 монет и медаль чемпиона", min_length=3, max_length=160)
 
 
 class ParticipantAdd(BaseModel):
@@ -54,6 +57,12 @@ def _participant_dict(participant: TournamentParticipant) -> dict:
 
 def _tournament_dict(tournament: Tournament, current_user_id: Optional[uuid.UUID] = None) -> dict:
     participants = tournament.participants
+    ends_at = tournament.ends_at or (tournament.created_at + timedelta(days=7))
+    if ends_at.tzinfo is None:
+        ends_at = ends_at.replace(tzinfo=timezone.utc)
+    status_value = tournament.status
+    if status_value == "registration" and ends_at <= datetime.now(timezone.utc):
+        status_value = "ended"
     return {
         "id": str(tournament.id),
         "name": tournament.name,
@@ -62,7 +71,9 @@ def _tournament_dict(tournament: Tournament, current_user_id: Optional[uuid.UUID
         "time_control": tournament.time_control,
         "increment": tournament.increment,
         "max_players": tournament.max_players,
-        "status": tournament.status,
+        "status": status_value,
+        "ends_at": ends_at.isoformat(),
+        "prize": tournament.prize,
         "created_at": tournament.created_at.isoformat(),
         "participants": [_participant_dict(participant) for participant in participants],
         "is_joined": any(item.user_id == current_user_id for item in participants) if current_user_id else False,
@@ -116,6 +127,8 @@ async def create_tournament(
         time_control=payload.time_control,
         increment=payload.increment,
         max_players=payload.max_players,
+        ends_at=datetime.now(timezone.utc) + timedelta(hours=payload.duration_hours),
+        prize=payload.prize.strip(),
         created_by_id=user.id,
     )
     if len(tournament.name) < 3:
@@ -153,7 +166,10 @@ async def add_tournament_participant(
     participant_id = payload.user_id or user.id
     if participant_id != user.id and not _is_manager(user):
         raise HTTPException(status_code=403, detail="Добавлять других игроков может только учитель или администратор.")
-    if tournament.status != "registration":
+    ends_at = tournament.ends_at
+    if ends_at.tzinfo is None:
+        ends_at = ends_at.replace(tzinfo=timezone.utc)
+    if tournament.status != "registration" or ends_at <= datetime.now(timezone.utc):
         raise HTTPException(status_code=409, detail="Регистрация на турнир закрыта.")
     if len(tournament.participants) >= tournament.max_players:
         raise HTTPException(status_code=409, detail="В турнире уже достигнут лимит участников.")

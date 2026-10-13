@@ -18,6 +18,7 @@ export type LeaderboardResponse = {
   category: LeaderboardCategory;
   top_players: LeaderboardPlayer[];
   my_rank: Omit<LeaderboardPlayer, 'user_id' | 'email'> | null;
+  total_players?: number;
 };
 
 export async function getLeaderboard(category: LeaderboardCategory = 'elo', limit = 20) {

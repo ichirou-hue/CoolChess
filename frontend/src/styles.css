@@ -919,6 +919,115 @@ html[data-theme="dark"] .pvp-heading em,
 html[data-theme="dark"] .tournaments-heading h1 em,
 html[data-theme="dark"] .profile-hero h1 em { color: #aeb2ff; }
 
+/* Community page: real tournament roster and a scrollable, populated ranking. */
+.community-hero { align-items: end; gap: 30px; }
+.community-hero-side { align-items: stretch; display: grid; gap: 12px; grid-template-columns: minmax(185px, .78fr) minmax(220px, 1fr); max-width: 570px; width: 54%; }
+.community-live { min-width: 0; }
+.community-hero-events { background: rgba(255,255,255,.94); border: 1px solid #e7e8ef; border-radius: 16px; display: flex; flex-direction: column; justify-content: center; padding: 14px; }
+.community-event-mini { align-items: center; border-top: 1px solid #ececf1; color: inherit; display: flex; gap: 9px; padding: 10px 0; text-decoration: none; }
+.community-event-mini:first-of-type { margin-top: 6px; }
+.community-event-mini > i { align-items: center; background: #fff0e6; border-radius: 999px; color: #b35a2c; display: inline-flex; flex: 0 0 34px; font: 700 8px Geologica, sans-serif; height: 22px; justify-content: center; width: 34px; }
+.community-event-mini > i.event-live { background: #fbe5e5; color: #ca3f44; }
+.community-event-mini > span { min-width: 0; }
+.community-event-mini strong, .community-event-mini small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.community-event-mini strong { font-size: 10px; }
+.community-event-mini small { color: #888b98; font: 8px Geologica, sans-serif; margin-top: 4px; }
+.community-event-mini > b { color: #777; margin-left: auto; }
+.community-hero-events > p { color: #858895; font-size: 10px; line-height: 1.4; }
+.community-grid { align-items: stretch; }
+.leaderboard-large { grid-row: auto; }
+.race-title-row { align-items: start; display: flex; gap: 14px; justify-content: space-between; }
+.race-large h3 { font-size: clamp(23px, 2.6vw, 34px); line-height: 1.15; margin: 20px 0 8px; }
+.race-open-badge { background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28); border-radius: 999px; color: #f2f3ff; flex: 0 0 auto; font: 700 8px Geologica, sans-serif; letter-spacing: .04em; padding: 7px 9px; }
+.community-race-meta { color: #e1e2ff; display: flex; flex-wrap: wrap; font: 9px Geologica, sans-serif; gap: 16px; margin-top: 18px; }
+.community-race-track { height: 92px; margin: 30px 0 16px; position: relative; }
+.community-race-track .race-line { background: rgba(255,255,255,.34); height: 3px; left: 0; position: absolute; top: 17px; width: 93%; }
+.community-racer { align-items: center; display: flex; flex-direction: column; position: absolute; top: 0; transform: translateX(-50%); }
+.community-racer-place { background: rgba(28,30,78,.72); border: 1px solid rgba(255,255,255,.3); border-radius: 6px; color: #fff; font: 700 8px Geologica, sans-serif; left: 50%; line-height: 1; padding: 3px 5px; position: absolute; top: -17px; transform: translateX(-50%); white-space: nowrap; }
+.community-racer > span { align-items: center; background: #dce204; border: 3px solid #464bff; border-radius: 50%; color: #17192a; display: inline-flex; font-size: 11px; font-weight: 800; height: 36px; justify-content: center; width: 36px; }
+.community-racer:nth-of-type(3) > span { background: #fff; }
+.community-racer:nth-of-type(4) > span { background: #ffb48f; }
+.community-racer:nth-of-type(5) > span { background: #c7dcff; }
+.community-racer small { color: #fff; font: 9px Geologica, sans-serif; margin-top: 5px; max-width: 98px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.community-race-overflow { background: rgba(28,30,78,.76); border: 1px solid rgba(255,255,255,.28); border-radius: 999px; bottom: 0; color: #fff; font: 700 8px Geologica, sans-serif; padding: 5px 8px; position: absolute; right: 7%; text-decoration: none; white-space: nowrap; }
+.race-finish { font-size: 20px; position: absolute; right: 1%; top: 6px; }
+.race-actions { align-items: center; display: flex; gap: 18px; }
+.race-actions .button { background: #fff; color: #25264a; }
+.community-pvp-link { color: #fff; font-size: 11px; font-weight: 650; text-decoration: none; }
+.community-ranking-list { max-height: 540px; overflow: auto; padding-right: 5px; scrollbar-color: #babdff transparent; scrollbar-width: thin; }
+.community-ranking-list .ranking-row { min-height: 44px; }
+.community-events-card { align-self: start; }
+.community-event-row { align-items: center; border-top: 1px solid #ececf1; color: inherit; display: flex; gap: 11px; padding: 13px 2px; text-decoration: none; }
+.community-event-icon { align-items: center; background: #f3f1ff; border-radius: 11px; color: #464bff; display: inline-flex; flex: 0 0 36px; font-size: 16px; height: 36px; justify-content: center; }
+.community-event-row > span:nth-child(2) { min-width: 0; }
+.community-event-row strong, .community-event-row small { display: block; }
+.community-event-row strong { font-size: 10px; }
+.community-event-row small { color: #9294a0; font: 8px Geologica, sans-serif; margin-top: 5px; }
+.community-event-row > b { color: #777; margin-left: auto; }
+html[data-theme="dark"] .community-hero-events { background: #1b2030; border-color: #32394b; color: #edf0f8; }
+html[data-theme="dark"] .community-event-mini,
+html[data-theme="dark"] .community-event-row { border-color: #343a4d; }
+html[data-theme="dark"] .community-event-mini small,
+html[data-theme="dark"] .community-event-row small { color: #aeb5c7; }
+html[data-theme="dark"] .community-event-icon { background: #303451; color: #c7c9ff; }
+@media (max-width: 1000px) {
+  .community-hero { align-items: start; }
+  .community-hero-side { max-width: 470px; width: 48%; }
+}
+@media (max-width: 700px) {
+  .community-hero-side { grid-template-columns: 1fr; width: 100%; }
+  .community-hero-events { min-height: 130px; }
+  .race-title-row { flex-direction: column; gap: 4px; }
+  .community-race-track { margin-top: 24px; }
+  .community-ranking-list { max-height: 460px; }
+}
+.community-hero-events { justify-content: flex-start; }
+.community-event-grid { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 9px; }
+.community-event-tile { background: #fff; border: 1px solid #e9eaf0; border-radius: 12px; display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 10px; }
+.community-event-badge { align-self: flex-start; border-radius: 999px; font: 700 7px Geologica, sans-serif; letter-spacing: .04em; padding: 5px 7px; }
+.community-event-badge.live { background: #ffe9e9; color: #c7353e; }
+.community-event-badge.major { background: #fff2c6; color: #8a6513; }
+.community-event-tile > strong { font-size: 10px; line-height: 1.3; min-height: 26px; }
+.community-event-tile > small { color: #888b98; font: 8px Geologica, sans-serif; line-height: 1.35; min-height: 22px; }
+.community-event-prize { color: #3436a4; font-size: 9px; font-weight: 750; line-height: 1.3; }
+.community-event-detail { align-items: center; border-top: 1px solid #ececf1; display: flex; flex-wrap: wrap; gap: 4px; padding-top: 7px; }
+.community-event-detail b { font: 700 9px Geologica, sans-serif; }
+.community-event-detail span { color: #8b8d99; font: 7px Geologica, sans-serif; }
+.community-event-action { background: #f1f0ff; border-radius: 7px; color: #464bff; font-size: 8px; font-weight: 700; margin-top: auto; padding: 7px 5px; text-align: center; text-decoration: none; }
+.community-event-tile:last-child .community-event-action { background: #464bff; color: #fff; }
+.tournament-incentive { align-items: stretch; display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+.tournament-prize, .tournament-countdown { background: #f5f5ff; border: 1px solid #e7e7ff; border-radius: 12px; display: flex; flex: 1 1 190px; flex-direction: column; gap: 5px; justify-content: center; min-width: 0; padding: 12px 14px; }
+.tournament-prize small, .tournament-countdown small { color: #787b91; font: 700 8px Geologica, sans-serif; letter-spacing: .07em; }
+.tournament-prize small:last-child { font: 9px Geologica, sans-serif; letter-spacing: 0; }
+.tournament-prize strong { color: #3538ba; font-size: 13px; }
+.tournament-countdown strong { color: #27294b; font: 750 14px Geologica, sans-serif; }
+.tournament-countdown.compact { background: transparent; border: 0; flex: 0 0 auto; gap: 2px; margin: 0; padding: 0; }
+.tournament-countdown.compact small { font-size: 7px; letter-spacing: 0; }
+.tournament-countdown.compact strong { color: #4548c5; font-size: 8px; }
+.tournament-winner-rule { background: #f8f8fb; border-left: 3px solid #555aff; border-radius: 0 9px 9px 0; color: #646675; font-size: 11px; line-height: 1.5; padding: 10px 12px; }
+.tournament-winner-rule strong { color: #27283a; display: block; margin-bottom: 3px; }
+.tournament-winner-rule small { display: block; font-size: 9px; margin-top: 5px; }
+html[data-theme="dark"] .tournament-prize, html[data-theme="dark"] .tournament-countdown { background: #252a40; border-color: #3b4162; }
+html[data-theme="dark"] .tournament-prize strong, html[data-theme="dark"] .tournament-countdown.compact strong { color: #c8caff; }
+html[data-theme="dark"] .tournament-countdown strong, html[data-theme="dark"] .tournament-winner-rule strong { color: #eef0ff; }
+html[data-theme="dark"] .tournament-winner-rule { background: #24293b; border-color: #777bff; color: #b9bed0; }
+html[data-theme="dark"] .community-event-prize { color: #d9dbff; }
+.community-racer.is-me > span { background: #dce204; color: #24264a; font-size: 9px; letter-spacing: -.04em; }
+.community-racer.is-me small { font-weight: 800; }
+.race-viewer-note { color: #fff; font-weight: 700; }
+html[data-theme="dark"] .community-event-tile { background: #22283a; border-color: #363e53; }
+html[data-theme="dark"] .community-event-tile > small,
+html[data-theme="dark"] .community-event-detail span { color: #aeb5c7; }
+html[data-theme="dark"] .community-event-detail { border-color: #3a4257; }
+html[data-theme="dark"] .community-event-action { background: #303451; color: #ced0ff; }
+html[data-theme="dark"] .community-event-tile:last-child .community-event-action { background: #555aff; color: #fff; }
+@media (min-width: 701px) and (max-width: 1000px) {
+  .community-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr); }
+}
+@media (max-width: 700px) {
+  .community-event-grid { grid-template-columns: 1fr 1fr; }
+}
+
 html[data-theme="dark"] .puzzle-workshop input,
 html[data-theme="dark"] .puzzle-filter-row select,
 html[data-theme="dark"] .lichess-link-controls input,
@@ -1454,3 +1563,19 @@ html[data-theme="dark"] .player-material > strong { background: #1d352b; color: 
   .lesson-tab-practice .lesson-practice { grid-template-areas: "header" "progress" "board" "info" "done"; grid-template-columns: minmax(0, 1fr); }
   .lesson-tab-practice .practice-info { align-self: auto; }
 }
+
+/* Podium medals in the community leaderboard. */
+.community-ranking-list .ranking-row { grid-template-columns: 30px minmax(0, 1fr) auto auto; }
+.community-ranking-list .ranking-place { align-items: center; background: transparent; border-radius: 50%; color: #464bff; display: inline-flex; font: 700 10px Geologica, sans-serif; height: 25px; justify-content: center; width: 25px; }
+.community-ranking-list .ranking-place.gold,
+.community-ranking-list .ranking-place.silver,
+.community-ranking-list .ranking-place.bronze { font-family: "Segoe UI Emoji", "Apple Color Emoji", sans-serif; font-size: 18px; }
+.community-ranking-list .ranking-place.gold { background: #fff3c2; }
+.community-ranking-list .ranking-place.silver { background: #edf0f4; }
+.community-ranking-list .ranking-place.bronze { background: #f8e2d4; }
+.community-ranking-list .ranking-row.podium-row.gold { background: linear-gradient(90deg, #fff9df, rgba(255,255,255,0)); }
+.community-ranking-list .ranking-row.podium-row.silver { background: linear-gradient(90deg, #f2f4f7, rgba(255,255,255,0)); }
+.community-ranking-list .ranking-row.podium-row.bronze { background: linear-gradient(90deg, #fbefe7, rgba(255,255,255,0)); }
+html[data-theme="dark"] .community-ranking-list .ranking-row.podium-row.gold { background: linear-gradient(90deg, #3d3727, rgba(27,32,48,0)); }
+html[data-theme="dark"] .community-ranking-list .ranking-row.podium-row.silver { background: linear-gradient(90deg, #303541, rgba(27,32,48,0)); }
+html[data-theme="dark"] .community-ranking-list .ranking-row.podium-row.bronze { background: linear-gradient(90deg, #40322e, rgba(27,32,48,0)); }

@@ -111,6 +111,16 @@ ENV=development ENABLE_DEMO_ACCOUNTS=true ../.venv/bin/python seed_demo_accounts
 
 В отдельном терминале из корня установите frontend-зависимости и запустите Vite:
 
+Чтобы заполнить страницу сообщества 141 тестовым участником и недельной гонкой,
+после создания локального пользователя выполните из `backend/`:
+
+```bash
+ENV=development ENABLE_COMMUNITY_DEMO=true ../.venv/bin/python seed_community_demo.py
+```
+
+Команда предназначена только для локальной базы разработки: добавляет недостающие
+демо-аккаунты и участников гонки, не меняя существующие учётные записи.
+
 ```bash
 cd frontend
 npm install

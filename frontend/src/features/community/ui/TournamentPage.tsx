@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '../../auth/model/AuthProvider';
 import * as tournamentsApi from '../api/tournamentsApi';
 import type { Tournament, TournamentColor } from '../api/tournamentsApi';
+import { TournamentCountdown } from './TournamentCountdown';
 
 const formatLabels: Record<Tournament['format'], string> = {
   round_robin: 'Круговой',
@@ -13,6 +14,12 @@ const colorLabels: Record<TournamentColor, string> = {
   white: 'Белые',
   black: 'Чёрные',
   random: 'Случайная сторона',
+};
+
+const winnerRules: Record<Tournament['format'], string> = {
+  round_robin: 'Очки: победа — 1, ничья — ½. При равенстве решает личная встреча.',
+  swiss: 'Очки: победа — 1, ничья — ½. При равенстве учитываются результаты соперников.',
+  single_elimination: 'Побеждает игрок, выигравший финальную партию сетки на выбывание.',
 };
 
 export function TournamentPage() {
@@ -78,6 +85,8 @@ export function TournamentPage() {
         time_control: Number(form.get('time_control')),
         increment: Number(form.get('increment')),
         max_players: Number(form.get('max_players')),
+        duration_hours: Number(form.get('duration_hours')),
+        prize: String(form.get('prize') ?? '').trim(),
       });
       formElement.reset();
     }, 'Турнир создан.');
@@ -96,11 +105,13 @@ export function TournamentPage() {
       <p>Создай событие и настрой формат, контроль времени, инкремент и лимит участников.</p>
       <label>Название<input name="name" required minLength={3} maxLength={80} placeholder="Весенний турнир" /></label>
       <label>Описание<textarea name="description" maxLength={2000} rows={3} placeholder="Правила и дополнительная информация" /></label>
+      <label>Приз победителю<input name="prize" maxLength={160} defaultValue="500 монет и медаль чемпиона" required /></label>
       <div className="tournament-form-grid">
         <label>Формат<select name="format" defaultValue="round_robin"><option value="round_robin">Круговой</option><option value="swiss">Швейцарская система</option><option value="single_elimination">На выбывание</option></select></label>
         <label>Время, секунд<input name="time_control" type="number" min={30} max={7200} defaultValue={300} required /></label>
         <label>Инкремент, секунд<input name="increment" type="number" min={0} max={60} defaultValue={0} required /></label>
         <label>Максимум игроков<input name="max_players" type="number" min={2} max={128} defaultValue={32} required /></label>
+        <label>Длительность, часов<input name="duration_hours" type="number" min={1} max={2160} defaultValue={168} required /></label>
       </div>
       <button className="button button-primary" disabled={busy} type="submit">{busy ? 'Сохраняем…' : 'Создать турнир'}</button>
     </form>}
@@ -114,9 +125,11 @@ export function TournamentPage() {
             <strong>{tournament.participants.length}/{tournament.max_players}</strong>
           </div>
           {tournament.description && <p>{tournament.description}</p>}
-          <p className="tournament-settings">{Math.floor(tournament.time_control / 60)}+{tournament.increment} · {tournament.status === 'registration' ? 'Идёт регистрация' : tournament.status}</p>
+          <p className="tournament-settings">{Math.floor(tournament.time_control / 60)}+{tournament.increment} · {tournament.status === 'registration' ? 'Идёт регистрация' : tournament.status === 'ended' ? 'Турнир завершён' : tournament.status}</p>
+          <div className="tournament-incentive"><span className="tournament-prize"><small>ПРИЗ ОТ ОРГАНИЗАТОРА</small><strong>🏆 {tournament.prize}</strong><small>Выдаётся после объявления итогов</small></span><TournamentCountdown endsAt={tournament.ends_at} /></div>
+          <p className="tournament-winner-rule"><strong>Как определяется победитель</strong>{winnerRules[tournament.format]}<small>Итог фиксирует организатор после окончания турнира.</small></p>
           {!user && <p><a href="#auth">Войдите</a>, чтобы записаться на турнир.</p>}
-          {user && !ownParticipant && <button className="button button-primary" disabled={busy || isFull} type="button" onClick={() => void runAction(() => tournamentsApi.joinTournament(tournament.id), 'Вы записаны на турнир.')}>Записаться</button>}
+          {user && !ownParticipant && <button className="button button-primary" disabled={busy || isFull || tournament.status !== 'registration'} type="button" onClick={() => void runAction(() => tournamentsApi.joinTournament(tournament.id), 'Вы записаны на турнир.')}>{tournament.status === 'ended' ? 'Регистрация закрыта' : 'Записаться'}</button>}
           {ownParticipant && <div className="tournament-side-picker"><span>Выбери сторону:</span>{(['white', 'black', 'random'] as const).map((color) => <button className={ownParticipant.preferred_color === color ? 'selected' : ''} key={color} disabled={busy} type="button" onClick={() => void runAction(() => tournamentsApi.chooseSide(tournament.id, color), `Выбрана сторона: ${colorLabels[color]}.`)}>{colorLabels[color]}</button>)}</div>}
           {canManage && !isFull && <div className="tournament-manage-row">
             <select aria-label={`Добавить игрока в турнир ${tournament.name}`} value={selectedPlayers[tournament.id] ?? ''} onChange={(event) => setSelectedPlayers((state) => ({ ...state, [tournament.id]: event.target.value }))}>

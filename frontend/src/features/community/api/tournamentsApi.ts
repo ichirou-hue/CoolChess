@@ -20,6 +20,8 @@ export type Tournament = {
   increment: number;
   max_players: number;
   status: string;
+  ends_at: string;
+  prize: string;
   created_at: string;
   participants: TournamentPlayer[];
   is_joined: boolean;
@@ -53,6 +55,8 @@ export function createTournament(payload: {
   time_control: number;
   increment: number;
   max_players: number;
+  duration_hours: number;
+  prize: string;
 }) {
   return request<Tournament>('/api/tournaments', { method: 'POST', body: JSON.stringify(payload) });
 }

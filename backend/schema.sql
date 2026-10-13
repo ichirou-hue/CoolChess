@@ -78,6 +78,8 @@ CREATE TABLE tournaments (
 	increment INTEGER NOT NULL,
 	max_players INTEGER NOT NULL,
 	status VARCHAR(16) NOT NULL,
+	ends_at TIMESTAMP WITH TIME ZONE,
+	prize VARCHAR(160) NOT NULL,
 	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
 	created_by_id UUID NOT NULL,
 	PRIMARY KEY (id),

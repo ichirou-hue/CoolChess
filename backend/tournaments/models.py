@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi_users_db_sqlalchemy.generics import GUID
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import relationship
 
 from database import Base
@@ -19,6 +19,8 @@ class Tournament(Base):
     increment = Column(Integer, nullable=False, default=0)
     max_players = Column(Integer, nullable=False, default=32)
     status = Column(String(16), nullable=False, default="registration")
+    ends_at = Column(DateTime(timezone=True), nullable=True)
+    prize = Column(String(160), nullable=False, default="500 монет и медаль чемпиона", server_default="500 монет и медаль чемпиона")
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     created_by_id = Column(GUID(), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
 

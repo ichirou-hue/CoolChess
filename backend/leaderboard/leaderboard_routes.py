@@ -172,4 +172,5 @@ async def get_leaderboard(
         category=category,
         top_players=top_players,
         my_rank=my_rank_info,
+        total_players=await db.scalar(select(func.count(User.id)).where(User.is_active.is_(True))) or 0,
     )

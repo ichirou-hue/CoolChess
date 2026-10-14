@@ -1979,16 +1979,7 @@ function AppV2() {
       document.removeEventListener('pointerdown', closeOutside);
     };
   }, [menuOpen]);
-  const [darkTheme, setDarkTheme] = useState(() => {
-    try { return localStorage.getItem('coolchess.theme') === 'dark'; }
-    catch { return false; }
-  });
   const { user, logout } = useAuth();
-  useEffect(() => {
-    document.documentElement.dataset.theme = darkTheme ? 'dark' : 'light';
-    try { localStorage.setItem('coolchess.theme', darkTheme ? 'dark' : 'light'); }
-    catch { /* The selected theme still applies for this page load. */ }
-  }, [darkTheme]);
   if (route === 'auth') return <FeatureAuthPage />;
   const page = route === 'learn' || route === 'theory' ? <LearnPage /> : route === 'play' ? <ChessGame /> : route === 'puzzles' ? <LichessPuzzleLibrary /> : route === 'community' ? <CommunityPage /> : route === 'pvp' ? <PvpPage /> : route === 'tournaments' ? <TournamentPage /> : route === 'profile' ? <ProfilePage /> : <StartLearningPanel />;
   const navigation = [
@@ -2008,7 +1999,7 @@ function AppV2() {
       <nav id="main-navigation" className={`main-nav${menuOpen ? ' open' : ''}`} aria-label="Основная навигация">
         {navigation.map((item) => <a title={item.hint} aria-label={`${item.label}: ${item.hint}`} className={`${item.route === 'profile' ? 'nav-profile ' : item.route === 'auth' ? 'nav-auth ' : ''}${(item.route === 'home' ? route === 'home' : item.route === 'learn' ? route === 'learn' || route === 'theory' : route === item.route) ? 'active' : ''}`} href={item.href} key={item.route} onClick={() => setMenuOpen(false)}><span aria-hidden="true">{item.icon}</span>{item.label}</a>)}
       </nav>
-      <div className="topbar-user"><button className={`theme-toggle${darkTheme ? ' is-dark' : ''}`} type="button" role="switch" aria-checked={darkTheme} aria-label={`Переключить тему: сейчас ${darkTheme ? 'тёмная' : 'светлая'}`} title={darkTheme ? 'Включить светлую тему' : 'Включить тёмную тему'} onClick={() => setDarkTheme((current) => !current)}><span className="theme-toggle-track"><span className="theme-toggle-thumb"><span aria-hidden="true">{darkTheme ? '☾' : '☀'}</span></span></span><span className="theme-toggle-label">{darkTheme ? 'Тёмная' : 'Светлая'}</span></button>{user ? <><a className="profile-button" href="#profile" aria-label={`Открыть профиль ${publicName}`}><span className="profile-avatar">{publicName[0]?.toUpperCase() ?? 'У'}</span><span className="profile-button-copy"><strong>Профиль</strong><small>{publicName}</small></span><span className="profile-arrow" aria-hidden="true">↗</span></a><button className="auth-nav-link" type="button" onClick={() => { void logout().then(() => { window.location.hash = '#home'; }); }}>Выйти</button></> : <a className="auth-nav-link" href="#auth">Войти / регистрация</a>}</div>
+      <div className="topbar-user">{user ? <><a className="profile-button" href="#profile" aria-label={`Открыть профиль ${publicName}`}><span className="profile-avatar">{publicName[0]?.toUpperCase() ?? 'У'}</span><span className="profile-button-copy"><strong>Профиль</strong><small>{publicName}</small></span><span className="profile-arrow" aria-hidden="true">↗</span></a><button className="auth-nav-link" type="button" onClick={() => { void logout().then(() => { window.location.hash = '#home'; }); }}>Выйти</button></> : <a className="auth-nav-link" href="#auth">Войти / регистрация</a>}</div>
       <button ref={menuButtonRef} className="menu-button" type="button" aria-controls="main-navigation" aria-expanded={menuOpen} aria-label={menuOpen ? "Закрыть меню" : "Открыть меню"} onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? "×" : "☰"}</button>
     </header>
     <main className="route-main">{page}</main>

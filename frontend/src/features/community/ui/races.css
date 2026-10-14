@@ -75,13 +75,7 @@
 .race-table-count, .race-search-empty { color: var(--race-subtle); font-size: 12px; line-height: 1.6; }
 .race-search-empty { padding-block: 20px; }
 .race-table-row .tournament-player-actions { padding: 0 12px 12px; }
-html[data-theme="dark"] .race-standings { --race-border: #3b4160; --race-text: #eef0ff; --race-subtle: #b5bbd2; --race-surface: #252a40; }
-html[data-theme="dark"] .race-event-facts b { color: #eef0ff; }
-html[data-theme="dark"] .race-event-facts > span, html[data-theme="dark"] .race-event-facts b small, html[data-theme="dark"] .race-rules p, html[data-theme="dark"] .race-table-panel .race-eyebrow { color: #b5bbd2; }
-html[data-theme="dark"] .race-back, html[data-theme="dark"] .race-rules summary, html[data-theme="dark"] .race-table-place.podium { color: #b9baff; }
-html[data-theme="dark"] .race-rules, html[data-theme="dark"] .race-event-facts > span { border-color: #3b4160; }
-html[data-theme="dark"] .race-table-row.is-me { background: #2b3727; border-color: #71864f; }
-html[data-theme="dark"] .race-table-row.is-selected { border-color: #8c91ed; }
+
 @media (max-width: 1000px) { .race-standings { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 540px) {
   .race-event-facts { gap: 20px 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }

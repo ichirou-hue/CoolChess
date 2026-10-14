@@ -749,175 +749,12 @@ small { font-size: .8rem; }
 .game-section .game-result-overlay { isolation: isolate; }
 
 .topbar-user { gap: 16px; }
-.theme-toggle { align-items: center; background: transparent; border: 1px solid #e5e7f1; border-radius: 999px; color: #555b70; display: inline-flex; gap: 9px; min-height: 42px; padding: 5px 11px 5px 6px; transition: background .2s ease, border-color .2s ease, box-shadow .2s ease; }
-.topbar-user > .theme-toggle { margin-right: -6px; }
-.theme-toggle:hover { background: #f7f7ff; border-color: #c9cbff; box-shadow: 0 4px 14px rgba(49,53,170,.1); }
-.theme-toggle:focus-visible { outline: 3px solid rgba(70,75,255,.3); outline-offset: 2px; }
-.theme-toggle-track { background: #e8e9f2; border-radius: 999px; display: flex; height: 28px; padding: 3px; transition: background .2s ease; width: 46px; }
-.theme-toggle-thumb { align-items: center; background: #fff; border-radius: 50%; box-shadow: 0 1px 4px rgba(24,28,50,.2); color: #464bff; display: inline-flex; font-size: 14px; height: 22px; justify-content: center; transition: transform .2s ease, color .2s ease; width: 22px; }
-.theme-toggle-label { font-size: 11px; font-weight: 700; }
-.theme-toggle.is-dark .theme-toggle-track { background: #464bff; }
-.theme-toggle.is-dark .theme-toggle-thumb { color: #464bff; transform: translateX(18px); }
 
 @media (max-width: 700px) {
   .topbar-user { display: contents; }
   .topbar-user > .profile-button, .topbar-user > .auth-nav-link { display: none; }
-  .theme-toggle { background: rgba(255,255,255,.9); left: auto; position: absolute; right: 68px; top: 18px; }
-  .theme-toggle-label { display: none; }
-  .theme-toggle { padding-right: 6px; }
+
 }
-
-/* Dark appearance is opt-in; the default light palette above remains unchanged. */
-html[data-theme="dark"] { color-scheme: dark; background: #10131b; color: #edf0f8; }
-html[data-theme="dark"] body { background: #10131b; color: #edf0f8; }
-html[data-theme="dark"] .app-shell { background: #10131b; color: #edf0f8; }
-html[data-theme="dark"] .topbar { background: rgba(18,21,31,.92); border-bottom: 1px solid #292e3d; }
-html[data-theme="dark"] .brand { filter: brightness(0) invert(1); }
-html[data-theme="dark"] .main-nav a { color: #c4cada; }
-html[data-theme="dark"] .main-nav a:hover, html[data-theme="dark"] .main-nav a.active { color: #fff; }
-html[data-theme="dark"] .profile-button { background: #1b2030; border-color: #343a4d; color: #f3f5fb; }
-html[data-theme="dark"] .profile-button-copy small { color: #a6aec2; }
-html[data-theme="dark"] .auth-nav-link { background: #464bff; color: #fff; }
-html[data-theme="dark"] .theme-toggle { background: #1b2030; border-color: #394054; color: #e5e9f5; }
-html[data-theme="dark"] .theme-toggle:hover { background: #252b3d; border-color: #686fff; }
-html[data-theme="dark"] .theme-toggle-track { background: #343b50; }
-html[data-theme="dark"] .theme-toggle.is-dark .theme-toggle-track { background: #464bff; }
-html[data-theme="dark"] .menu-button { background: #252b3d; color: #e4e8f5; }
-
-html[data-theme="dark"] .route-main { background: #10131b; color: #edf0f8; }
-html[data-theme="dark"] .home-journey,
-html[data-theme="dark"] .game-section,
-html[data-theme="dark"] .puzzle-section,
-html[data-theme="dark"] .community-page,
-html[data-theme="dark"] .profile-page,
-html[data-theme="dark"] .learn-page,
-html[data-theme="dark"] .pvp-page,
-html[data-theme="dark"] .tournaments-page,
-html[data-theme="dark"] .theory-page { background: linear-gradient(145deg, #171d2a 0%, #171a27 54%, #202039 100%); color: #edf0f8; }
-html[data-theme="dark"] .start-panel { background: linear-gradient(145deg, #202b48 0%, #263663 52%, #34305f 100%); }
-html[data-theme="dark"] .home-welcome { background: linear-gradient(120deg, #202b48 0%, #302e56 100%); color: #f4f5fb; }
-html[data-theme="dark"] .home-welcome h1 em,
-html[data-theme="dark"] .start-copy h1 em { color: #eafe5f; }
-html[data-theme="dark"] .home-welcome p,
-html[data-theme="dark"] .start-copy > p { color: #d0d7e8; }
-html[data-theme="dark"] .footer { background: #0b0e15; }
-
-html[data-theme="dark"] .learn-page-sidebar { background: rgba(20,24,35,.94); border-color: #2b3040; }
-html[data-theme="dark"] .learn-module,
-html[data-theme="dark"] .learn-route-reset { border-color: #343a4d; }
-html[data-theme="dark"] .learn-module-toggle { background: #1a1f2d; color: #cbd1e0; }
-html[data-theme="dark"] .learn-module-toggle:hover,
-html[data-theme="dark"] .learn-module.expanded .learn-module-toggle,
-html[data-theme="dark"] .learn-topic:hover { background: #292d49; color: #c7c9ff; }
-html[data-theme="dark"] .learn-topic { color: #b5bdcf; }
-html[data-theme="dark"] .learn-topic.active { background: #464bff; color: #fff; }
-html[data-theme="dark"] .learn-route-reset { color: #bfc2ff; }
-html[data-theme="dark"] .learn-article,
-html[data-theme="dark"] .course-placement,
-html[data-theme="dark"] .quiz-card,
-html[data-theme="dark"] .quiz-options button,
-html[data-theme="dark"] .learn-complete,
-html[data-theme="dark"] .practice-done,
-html[data-theme="dark"] .profile-card,
-html[data-theme="dark"] .profile-link-dialog,
-html[data-theme="dark"] .profile-activity,
-html[data-theme="dark"] .community-card,
-html[data-theme="dark"] .move-panel,
-html[data-theme="dark"] .pvp-panel,
-html[data-theme="dark"] .tournament-create,
-html[data-theme="dark"] .tournament-card,
-html[data-theme="dark"] .puzzle-workshop,
-html[data-theme="dark"] .leaderboard-card,
-html[data-theme="dark"] .journey-card,
-html[data-theme="dark"] .home-extra-links a { background: #1b2030; border-color: #32394b; color: #edf0f8; }
-html[data-theme="dark"] .theory-board-card { background: linear-gradient(145deg, #202637 0%, #1b2030 70%, #22243a 100%); border-color: #363d50; color: #edf0f8; }
-html[data-theme="dark"] .theory-board-col .theory-board { background: #171c29; border-color: #343b4d; }
-html[data-theme="dark"] .course-placement-options button,
-html[data-theme="dark"] .quiz-question,
-html[data-theme="dark"] .quiz-progress,
-html[data-theme="dark"] .puzzle-type-tabs button,
-html[data-theme="dark"] .leaderboard-filters button,
-html[data-theme="dark"] .tournament-side-picker button,
-html[data-theme="dark"] .move-column button,
-html[data-theme="dark"] .move-column-heading,
-html[data-theme="dark"] .move-start,
-html[data-theme="dark"] .move-empty,
-html[data-theme="dark"] .learn-callout,
-html[data-theme="dark"] .learn-example,
-html[data-theme="dark"] .practice-info,
-html[data-theme="dark"] .theory-explain-card { background: #242a3b; border-color: #3a4257; color: #e3e7f1; }
-html[data-theme="dark"] .quiz-question.right,
-html[data-theme="dark"] .practice-success,
-html[data-theme="dark"] .practice-done,
-html[data-theme="dark"] .learn-complete { background: #1b332d; border-color: #315c49; }
-html[data-theme="dark"] .quiz-question.wrong { background: #38252d; border-color: #67404b; }
-html[data-theme="dark"] .demo-ask { background: #3a3525; border-color: #66592e; color: #f4e8b8; }
-html[data-theme="dark"] .demo-ask.solved { background: #1d352b; border-color: #315c49; }
-html[data-theme="dark"] .move-column button.active,
-html[data-theme="dark"] .move-start.active,
-html[data-theme="dark"] .move-column button:hover:not(:disabled) { background: #464bff; border-color: #6e73ff; color: #fff; }
-html[data-theme="dark"] .move-column button:disabled { background: #1b2030; color: #737c90; }
-html[data-theme="dark"] .move-panel-heading,
-html[data-theme="dark"] .tournament-participants li,
-html[data-theme="dark"] .learn-example { border-color: #343a4d; }
-html[data-theme="dark"] .move-column-heading { background: #1b2030; border-color: #343a4d; }
-html[data-theme="dark"] .move-heading-piece { filter: drop-shadow(0 1px 2px rgba(0,0,0,.3)); }
-html[data-theme="dark"] .move-column-heading-label { color: #f1f3fa; }
-html[data-theme="dark"] .material-balance-rail { background: #202637; border-color: #343b4d; }
-html[data-theme="dark"] .material-balance-summary > b { background: #34365a; color: #d7d9ff; }
-html[data-theme="dark"] .material-balance-track { background: #565b6c; border-color: #687083; }
-html[data-theme="dark"] .material-balance-track i { background: #faf5f1; }
-
-html[data-theme="dark"] .community-hero p,
-html[data-theme="dark"] .game-intro > p:not(.eyebrow),
-html[data-theme="dark"] .profile-hero p,
-html[data-theme="dark"] .learn-page-heading p,
-html[data-theme="dark"] .puzzle-copy > p:not(.eyebrow),
-html[data-theme="dark"] .puzzle-section > .section-heading p,
-html[data-theme="dark"] .tournaments-heading p,
-html[data-theme="dark"] .tournament-create > p,
-html[data-theme="dark"] .tournament-card > p,
-html[data-theme="dark"] .pvp-heading p,
-html[data-theme="dark"] .course-placement > p,
-html[data-theme="dark"] .learn-topic-lead,
-html[data-theme="dark"] .learn-article-text p,
-html[data-theme="dark"] .quiz-heading p,
-html[data-theme="dark"] .learn-practice-heading p,
-html[data-theme="dark"] .learn-callout p,
-html[data-theme="dark"] .learn-example p,
-html[data-theme="dark"] .practice-info small,
-html[data-theme="dark"] .profile-card p,
-html[data-theme="dark"] .profile-activity p,
-html[data-theme="dark"] .profile-link-dialog > p,
-html[data-theme="dark"] .profile-link-label,
-html[data-theme="dark"] .puzzle-reward,
-html[data-theme="dark"] .pvp-panel label,
-html[data-theme="dark"] .tournament-create label,
-html[data-theme="dark"] .tournament-manage-row,
-html[data-theme="dark"] .tournament-side-picker > span,
-html[data-theme="dark"] .move-column > strong,
-html[data-theme="dark"] .section-heading h2,
-html[data-theme="dark"] .game-intro h2,
-html[data-theme="dark"] .community-hero h2,
-html[data-theme="dark"] .learn-page-heading h1,
-html[data-theme="dark"] .profile-hero h1,
-html[data-theme="dark"] .learn-topic-title,
-html[data-theme="dark"] .quiz-heading h2,
-html[data-theme="dark"] .learn-practice-heading h2,
-html[data-theme="dark"] .quiz-question > strong,
-html[data-theme="dark"] .lesson-tab-practice .practice-info strong,
-html[data-theme="dark"] .theory-board-top strong { color: #f1f3fa; }
-html[data-theme="dark"] .theory-board-top .block-kicker,
-html[data-theme="dark"] .theory-board-bottom > p,
-html[data-theme="dark"] .quiz-options button,
-html[data-theme="dark"] .course-placement-options button { color: #dce2ef; }
-html[data-theme="dark"] .section-heading h2 span,
-html[data-theme="dark"] .game-intro h2 em,
-html[data-theme="dark"] .community-hero h2 em,
-html[data-theme="dark"] .learn-article-text h2 em,
-html[data-theme="dark"] .pvp-heading em,
-html[data-theme="dark"] .tournaments-heading h1 em,
-html[data-theme="dark"] .profile-hero h1 em { color: #aeb2ff; }
 
 /* Community page: real tournament roster and a scrollable, populated ranking. */
 .community-hero { align-items: end; gap: 30px; }
@@ -964,12 +801,7 @@ html[data-theme="dark"] .profile-hero h1 em { color: #aeb2ff; }
 .community-event-row strong { font-size: 10px; }
 .community-event-row small { color: #9294a0; font: 8px Geologica, sans-serif; margin-top: 5px; }
 .community-event-row > b { color: #777; margin-left: auto; }
-html[data-theme="dark"] .community-hero-events { background: #1b2030; border-color: #32394b; color: #edf0f8; }
-html[data-theme="dark"] .community-event-mini,
-html[data-theme="dark"] .community-event-row { border-color: #343a4d; }
-html[data-theme="dark"] .community-event-mini small,
-html[data-theme="dark"] .community-event-row small { color: #aeb5c7; }
-html[data-theme="dark"] .community-event-icon { background: #303451; color: #c7c9ff; }
+
 @media (max-width: 1000px) {
   .community-hero { align-items: start; }
   .community-hero-side { max-width: 470px; width: 48%; }
@@ -1007,69 +839,17 @@ html[data-theme="dark"] .community-event-icon { background: #303451; color: #c7c
 .tournament-winner-rule { background: #f8f8fb; border-left: 3px solid #555aff; border-radius: 0 9px 9px 0; color: #646675; font-size: 11px; line-height: 1.5; padding: 10px 12px; }
 .tournament-winner-rule strong { color: #27283a; display: block; margin-bottom: 3px; }
 .tournament-winner-rule small { display: block; font-size: 9px; margin-top: 5px; }
-html[data-theme="dark"] .tournament-prize, html[data-theme="dark"] .tournament-countdown { background: #252a40; border-color: #3b4162; }
-html[data-theme="dark"] .tournament-prize strong, html[data-theme="dark"] .tournament-countdown.compact strong { color: #c8caff; }
-html[data-theme="dark"] .tournament-countdown strong, html[data-theme="dark"] .tournament-winner-rule strong { color: #eef0ff; }
-html[data-theme="dark"] .tournament-winner-rule { background: #24293b; border-color: #777bff; color: #b9bed0; }
-html[data-theme="dark"] .community-event-prize { color: #d9dbff; }
+
 .community-racer.is-me > span { background: #dce204; color: #24264a; font-size: 9px; letter-spacing: -.04em; }
 .community-racer.is-me small { font-weight: 800; }
 .race-viewer-note { color: #fff; font-weight: 700; }
-html[data-theme="dark"] .community-event-tile { background: #22283a; border-color: #363e53; }
-html[data-theme="dark"] .community-event-tile > small,
-html[data-theme="dark"] .community-event-detail span { color: #aeb5c7; }
-html[data-theme="dark"] .community-event-detail { border-color: #3a4257; }
-html[data-theme="dark"] .community-event-action { background: #303451; color: #ced0ff; }
-html[data-theme="dark"] .community-event-tile:last-child .community-event-action { background: #555aff; color: #fff; }
+
 @media (min-width: 701px) and (max-width: 1000px) {
   .community-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr); }
 }
 @media (max-width: 700px) {
   .community-event-grid { grid-template-columns: 1fr 1fr; }
 }
-
-html[data-theme="dark"] .puzzle-workshop input,
-html[data-theme="dark"] .puzzle-filter-row select,
-html[data-theme="dark"] .lichess-link-controls input,
-html[data-theme="dark"] .profile-link-label input,
-html[data-theme="dark"] .profile-link-close,
-html[data-theme="dark"] .pvp-panel input,
-html[data-theme="dark"] .tournament-create input,
-html[data-theme="dark"] .tournament-create textarea,
-html[data-theme="dark"] .tournament-create select,
-html[data-theme="dark"] .tournament-manage-row select,
-html[data-theme="dark"] .tournament-player-actions input,
-html[data-theme="dark"] .course-placement-options button { background: #151a27; border-color: #3a4256; color: #eef1f8; }
-html[data-theme="dark"] .puzzle-search { background: #151a27; border-color: #3a4256; color: #c3cad9; }
-html[data-theme="dark"] .puzzle-search input { background: transparent; border: 0; color: #eef1f8; }
-html[data-theme="dark"] .puzzle-filter-row label,
-html[data-theme="dark"] .puzzle-type-tabs button,
-html[data-theme="dark"] .puzzle-type-tabs button small,
-html[data-theme="dark"] .puzzle-filter-heading > div small,
-html[data-theme="dark"] .course-placement-options span,
-html[data-theme="dark"] .course-placement > small,
-html[data-theme="dark"] .profile-card-kicker,
-html[data-theme="dark"] .profile-card small,
-html[data-theme="dark"] .achievement-heading span { color: #aab3c7; }
-html[data-theme="dark"] .puzzle-type-tabs button.selected { background: #30315b; border-color: #7378ff; color: #e4e5ff; }
-html[data-theme="dark"] .leaderboard-filters button { color: #b7bfd1; }
-html[data-theme="dark"] .leaderboard-filters button.selected,
-html[data-theme="dark"] .tournament-side-picker button.selected { background: #464bff; color: #fff; }
-html[data-theme="dark"] .tournament-card-heading > strong { background: #30315b; color: #d8d9ff; }
-html[data-theme="dark"] .puzzle-instruction { background: #3a3525; color: #f3e7b2; }
-html[data-theme="dark"] .puzzle-instruction strong { color: #fff3c4; }
-html[data-theme="dark"] .maia-level-map span { background: #242a3b; border-color: #3a4257; color: #c2c9d8; }
-html[data-theme="dark"] .activity-calendar i { background: #30374a; }
-html[data-theme="dark"] .profile-wallet,
-html[data-theme="dark"] .pvp-clocks { background: #0b0e15; }
-
-html[data-theme="dark"] .main-nav { background: #1b2030; border-color: #343a4d; }
-html[data-theme="dark"] [class*="bg-[#f7f7fb]"] { background-color: #10131b !important; color: #edf0f8 !important; }
-html[data-theme="dark"] [class*="border-[#e1e2eb]"] { border-color: #343a4d !important; }
-html[data-theme="dark"] [class*="text-[#111]"],
-html[data-theme="dark"] [class*="text-[#777985]"] { color: #d7dceb !important; }
-html[data-theme="dark"] [class*="bg-white"] { background-color: #1b2030 !important; }
-html[data-theme="dark"] .footer { color: #f1f3fa; }
 
 /* Readable lesson text and a lighter, guided board experience. */
 .learn-module { border: 1px solid #e7e8ef; border-radius: 12px; margin-top: 8px; overflow: hidden; }
@@ -1337,8 +1117,7 @@ html[data-theme="dark"] .footer { color: #f1f3fa; }
 .player-captured-piece.cg-wrap piece { height: 100%; width: 100%; }
 .player-captured-piece small { background: #fff; border: 1px solid #e5e6ed; border-radius: 5px; bottom: -1px; color: #41465a; font-size: 7px; font-weight: 800; line-height: 1; padding: 1px 2px; position: absolute; right: -2px; z-index: 3; }
 .player-material > strong { background: #e4f5e9; border-radius: 999px; color: #177a43; flex: 0 0 auto; font-size: 9px; line-height: 1; padding: 5px 6px; }
-html[data-theme="dark"] .player-captured-piece small { background: #202637; border-color: #343a4d; color: #b9c2d5; }
-html[data-theme="dark"] .player-material > strong { background: #1d352b; color: #7fe0a5; }
+
 .board-file-label { bottom: -24px; font-size: 10px; letter-spacing: .08em; pointer-events: none; }
 
 /* In-game coordinates stay in the board frame gutters, clear of the squares. */
@@ -1576,6 +1355,3 @@ html[data-theme="dark"] .player-material > strong { background: #1d352b; color: 
 .community-ranking-list .ranking-row.podium-row.gold { background: linear-gradient(90deg, #fff9df, rgba(255,255,255,0)); }
 .community-ranking-list .ranking-row.podium-row.silver { background: linear-gradient(90deg, #f2f4f7, rgba(255,255,255,0)); }
 .community-ranking-list .ranking-row.podium-row.bronze { background: linear-gradient(90deg, #fbefe7, rgba(255,255,255,0)); }
-html[data-theme="dark"] .community-ranking-list .ranking-row.podium-row.gold { background: linear-gradient(90deg, #3d3727, rgba(27,32,48,0)); }
-html[data-theme="dark"] .community-ranking-list .ranking-row.podium-row.silver { background: linear-gradient(90deg, #303541, rgba(27,32,48,0)); }
-html[data-theme="dark"] .community-ranking-list .ranking-row.podium-row.bronze { background: linear-gradient(90deg, #40322e, rgba(27,32,48,0)); }

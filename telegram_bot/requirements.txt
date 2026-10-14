@@ -1,0 +1,7 @@
+# Зависимости Telegram-бота CoolChess (aiogram 3, long polling).
+# Единый контур с сайтом: SQLAlchemy/asyncpg для доступа к общей БД.
+aiogram>=3.0,<4
+python-dotenv>=1.0
+SQLAlchemy>=2.0
+asyncpg>=0.29.0
+aiosqlite>=0.20.0

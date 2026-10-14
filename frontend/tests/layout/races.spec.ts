@@ -82,10 +82,6 @@ for (const width of [320, 390, 768, 1440]) {
     await expect(table.locator('.is-me')).toContainText('До места #7 — 300 ELO');
     await page.getByText('Как определяется победитель?', { exact: true }).click();
     await expect(page.locator('.race-rules')).toHaveAttribute('open', '');
-    await page.getByRole('switch').click();
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await contained(page);
-    if (browserName === 'chromium' && width === 390) await page.locator('.race-event-card').screenshot({ path: '../.tools/race-dark-390.png' });
     await page.getByRole('link', { name: 'Все события', exact: false }).click();
     await expect(page.locator('.tournament-card')).toHaveCount(2);
     await page.locator('.tournament-card h2 a').last().click();

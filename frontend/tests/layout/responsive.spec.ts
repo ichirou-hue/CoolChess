@@ -152,8 +152,9 @@ test('PvP copy reflows with large text and a long message', async ({ page }) => 
   await expect(page.locator('.auth-page')).toBeVisible();
 });
 
-test('phone registration and dark navigation remain usable', async ({ page }) => {
+test('phone registration and navigation remain usable with a saved dark preference', async ({ page }) => {
   await page.setViewportSize(viewports[0]);
+  await page.addInitScript(() => localStorage.setItem('coolchess.theme', 'dark'));
   await open(page, 'auth');
   await page.getByRole('button', { name: 'Регистрация', exact: true }).click();
   await expectContained(page);
@@ -161,8 +162,8 @@ test('phone registration and dark navigation remain usable', async ({ page }) =>
     expect(await field.evaluate(el => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
   }
   await open(page, 'home');
-  await page.getByRole('switch').click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.getByRole('switch')).toHaveCount(0);
+  await expect(page.locator('html')).not.toHaveAttribute('data-theme', 'dark');
   await page.getByRole('button', { name: 'Открыть меню' }).click();
   await expectContained(page);
   await page.locator('#main-navigation').getByRole('link', { name: 'PvP: Партия с другом' }).click();
@@ -189,6 +190,10 @@ test.describe('touchscreen', () => {
     await expect(page.locator('.puzzle-board cg-board')).toBeVisible();
     await expectContained(page);
     const board = page.locator('.puzzle-board cg-board');
+    await board.scrollIntoViewIfNeeded();
+    await expect(board.locator('piece.white.king')).toBeVisible();
+    // Chessground refreshes pointer bounds on the frame after scrolling.
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     const bounds = (await board.boundingBox())!;
     await board.tap({ position: { x: bounds.width / 16, y: bounds.height * 15 / 16 } });
     await expect(board.locator('square.selected')).toBeVisible();

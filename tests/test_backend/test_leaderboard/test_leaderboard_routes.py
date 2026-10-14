@@ -139,6 +139,9 @@ async def test_get_leaderboard_invalid_parameters(anonymous_client):
     res_zero = await anonymous_client.get("/api/leaderboard?limit=0")
     assert res_zero.status_code == 422
 
+    res_offset = await anonymous_client.get("/api/leaderboard?offset=-1")
+    assert res_offset.status_code == 422
+
     # несуществующая категория
     res_cat = await anonymous_client.get("/api/leaderboard?category=invalid_category")
     assert res_cat.status_code == 422

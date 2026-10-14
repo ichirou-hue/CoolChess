@@ -21,9 +21,9 @@ export type LeaderboardResponse = {
   total_players?: number;
 };
 
-export async function getLeaderboard(category: LeaderboardCategory = 'elo', limit = 20) {
+export async function getLeaderboard(category: LeaderboardCategory = 'elo', limit = 20, offset = 0) {
   const token = sessionStorage.getItem('coolchess.accessToken');
-  const response = await fetchApi(`/api/leaderboard?${new URLSearchParams({ category, limit: String(limit) })}`, {
+  const response = await fetchApi(`/api/leaderboard?${new URLSearchParams({ category, limit: String(limit), offset: String(offset) })}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!response.ok) {

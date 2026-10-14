@@ -34,6 +34,7 @@ async def get_leaderboard(
         description="Критерий сортировки: elo, level или puzzles"
     ),
     limit: int = Query(default=20, ge=1, le=100, description="Количество игроков в выборке"),
+    offset: int = Query(default=0, ge=0, description="Количество игроков перед текущей страницей"),
     db: AsyncSession = Depends(get_async_session),
     current_user: Optional[User] = Depends(current_optional_user),
 ):
@@ -71,15 +72,16 @@ async def get_leaderboard(
             desc(User.elo_rating),
         )
 
-    # 1. Запрашиваем топ игроков
-    top_res = await db.execute(query.limit(limit))
+    # A final unique tie-break keeps adjacent pages stable for equal results.
+    query = query.order_by(User.id.asc())
+    top_res = await db.execute(query.offset(offset).limit(limit))
     top_rows = top_res.all()
 
     top_players: list[LeaderboardUserItem] = []
     current_user_found_in_top = False
     my_rank_info: Optional[MyRankInfo] = None
 
-    for idx, (user, solved_cnt) in enumerate(top_rows, start=1):
+    for idx, (user, solved_cnt) in enumerate(top_rows, start=offset + 1):
         item = LeaderboardUserItem(
             rank=idx,
             user_id=user.id,
@@ -122,13 +124,29 @@ async def get_leaderboard(
                 | (
                     (User.elo_rating == current_user.elo_rating)
                     & (User.xp > current_user.xp)
+                )
+                | (
+                    (User.elo_rating == current_user.elo_rating)
+                    & (User.xp == current_user.xp)
+                    & (User.id < current_user.id)
                 ),
             )
         elif category == LeaderboardCategory.LEVEL:
             rank_stmt = select(func.count(User.id)).where(
                 User.is_active == True,
                 (User.level > current_user.level)
-                | ((User.level == current_user.level) & (User.xp > current_user.xp)),
+                | ((User.level == current_user.level) & (User.xp > current_user.xp))
+                | (
+                    (User.level == current_user.level)
+                    & (User.xp == current_user.xp)
+                    & (User.elo_rating > current_user.elo_rating)
+                )
+                | (
+                    (User.level == current_user.level)
+                    & (User.xp == current_user.xp)
+                    & (User.elo_rating == current_user.elo_rating)
+                    & (User.id < current_user.id)
+                ),
             )
         else:  # PUZZLES — tie-break топа: solved desc, elo desc
             user_counts_subq = (
@@ -151,6 +169,11 @@ async def get_leaderboard(
                     | (
                         (func.coalesce(user_counts_subq.c.solved_count, 0) == my_solved_cnt)
                         & (User.elo_rating > current_user.elo_rating)
+                    )
+                    | (
+                        (func.coalesce(user_counts_subq.c.solved_count, 0) == my_solved_cnt)
+                        & (User.elo_rating == current_user.elo_rating)
+                        & (User.id < current_user.id)
                     ),
                 )
             )

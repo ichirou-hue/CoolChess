@@ -1,0 +1,17 @@
+.leaderboard-pagination { border-top: 1px solid #e7e8ef; margin-top: 16px; padding-top: 16px; }
+.leaderboard-page-summary { color: #74798c; font-size: 12px; line-height: 1.5; margin: 0 0 12px; }
+.leaderboard-page-controls { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+.leaderboard-page-controls button { background: #f4f4fd; border: 1px solid #e4e5f2; border-radius: 10px; color: #4548c9; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; min-height: 44px; padding: 10px 12px; }
+.leaderboard-page-controls button:hover:not(:disabled) { background: #e9eaff; border-color: #bfc2ff; }
+.leaderboard-page-controls button:disabled { color: #9295a6; cursor: default; }
+.leaderboard-page-controls button[aria-current="page"] { background: #464bff; border-color: #464bff; color: #fff; }
+.leaderboard-page-numbers, .leaderboard-page-slot { align-items: center; display: inline-flex; gap: 4px; }
+.leaderboard-page-numbers button { min-width: 36px; padding-inline: 8px; }
+.leaderboard-page-gap { color: #858a9c; padding-inline: 3px; }
+@media (max-width: 540px) {
+  .leaderboard-page-controls { justify-content: center; }
+  .leaderboard-page-numbers { justify-content: center; order: -1; width: 100%; }
+  .leaderboard-page-controls button { min-height: 48px; }
+  .leaderboard-page-numbers button { min-width: 44px; }
+  .leaderboard-page-controls > button { flex: 1; }
+}

@@ -61,6 +61,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+test-results/
+playwright-report/
 
 # ==========================================
 # IDE, редакторы и системные файлы

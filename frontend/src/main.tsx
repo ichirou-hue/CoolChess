@@ -29,6 +29,8 @@ import * as tournamentsApi from './features/community/api/tournamentsApi';
 import * as pvpApi from './features/community/api/pvpApi';
 import { TournamentPage } from './features/community/ui/TournamentPage';
 import { TournamentCountdown } from './features/community/ui/TournamentCountdown';
+import { RaceTrack } from './features/community/ui/RaceTrack';
+import { tournamentHref, tournamentStandings, tournamentStatus } from './features/community/model/tournamentStandings';
 import type { PvpRoomState } from './features/community/api/pvpApi';
 import type { LeaderboardCategory, LeaderboardResponse } from './features/community/api/leaderboardApi';
 import * as profileApi from './features/profile/api/profileApi';
@@ -38,6 +40,8 @@ import { CoordinateBoard } from './shared/ui/CoordinateBoard';
 import 'chessground/assets/chessground.base.css';
 import 'chessground/assets/chessground.cburnett.css';
 import './styles.css';
+import './responsive.css';
+import './features/community/ui/races.css';
 
 function legalDests(game: Chess) {
   const dests = new Map<Key, Key[]>();
@@ -708,10 +712,17 @@ function TheoryBoard({ visual, onLineViewed, kicker }: { visual: LessonVisual; o
     if (!boardRef.current) return;
     groundRef.current = Chessground(boardRef.current, { fen: visual.fen, coordinates: false, orientation: 'white', movable: { free: false, color: 'white', dests: new Map() }, highlight: { lastMove: true, check: true, custom: boardHighlights() }, animation: { enabled: true, duration: 260 } });
     groundRef.current.set({ drawable: { shapes: boardShapes() } });
-    const resizeObserver = new ResizeObserver(() => groundRef.current?.redrawAll());
+    // Redraw after layout settles so orientation changes do not cause a
+    // synchronous ResizeObserver loop.
+    let resizeFrame = 0;
+    const resizeObserver = new ResizeObserver(() => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => groundRef.current?.redrawAll());
+    });
     resizeObserver.observe(boardRef.current);
     return () => {
       resizeObserver.disconnect();
+      cancelAnimationFrame(resizeFrame);
       groundRef.current?.destroy();
       groundRef.current = null;
       if (linePlaybackRef.current !== null) window.clearInterval(linePlaybackRef.current);
@@ -1410,25 +1421,15 @@ function CommunityPage() {
   const featuredTournaments = [...(race ? [race] : []), ...tournaments.filter((tournament) => tournament.id !== race?.id)].slice(0, 2);
   const raceParticipants = race?.participants ?? [];
   const myRaceEntry = raceParticipants.find((participant) => participant.user_id === user?.id);
-  const rankedRaceParticipants = raceParticipants
-    .slice()
-    .sort((left, right) => left.joined_at.localeCompare(right.joined_at))
-    .map((participant, index) => ({ participant, place: index + 1 }));
-  const myRaceStanding = rankedRaceParticipants.find(({ participant }) => participant.user_id === user?.id);
-  let visibleRaceParticipants = rankedRaceParticipants.slice(0, 4);
-  if (myRaceStanding && !visibleRaceParticipants.some(({ participant }) => participant.user_id === user?.id)) {
-    visibleRaceParticipants = [...visibleRaceParticipants.slice(0, 3), myRaceStanding]
-      .sort((left, right) => left.place - right.place);
-  }
-  const hiddenRaceParticipantCount = Math.max(0, rankedRaceParticipants.length - visibleRaceParticipants.length);
+  const rankedRaceParticipants = tournamentStandings(raceParticipants);
   const raceIsFull = Boolean(race && race.participants.length >= race.max_players);
   const sortedValue = (player: LeaderboardResponse['top_players'][number]) => category === 'elo' ? `${player.elo_rating} ELO` : category === 'level' ? `ур. ${player.level}` : `${player.puzzles_solved} задач`;
   return <section className="community-page" id="community">
     <div className="community-hero">
       <div><span className="eyebrow">СООБЩЕСТВО COOLCHESS</span><h2>Решай вместе.<br /><em>Расти быстрее.</em></h2><p>Сравнивай рейтинг, уровень и количество решённых задач с учениками школы.</p></div>
       <div className="community-hero-side">
-        <div className="community-live"><span className="live-label">ИГРОКИ СООБЩЕСТВА</span><strong>{data?.total_players ?? data?.top_players.length ?? '—'}</strong><small>активных игроков в рейтинге</small><div className="live-stack"><span>♟</span><span>♞</span><span>♜</span><b>+</b></div></div>
-        <div className="community-hero-events"><span className="block-kicker">ТУРНИРЫ И СОБЫТИЯ</span>{tournamentError ? <p>{tournamentError}</p> : featuredTournaments.length ? <div className="community-event-grid">{featuredTournaments.map((tournament) => { const isRace = tournament.id === race?.id; const isFull = tournament.participants.length >= tournament.max_players; return <article className="community-event-tile" key={tournament.id}><span className={isRace ? 'community-event-badge live' : 'community-event-badge major'}>{isRace ? '● LIVE' : '♛ MAJOR'}</span><strong>{tournament.name}</strong><small>{tournament.participants.length} участников · {isFull ? 'мест больше нет' : tournament.status === 'registration' ? 'регистрация открыта' : tournament.status}</small><div className="community-event-detail"><b>{Math.floor(tournament.time_control / 60)}+{tournament.increment}</b><span>{isRace ? 'Условия и приз' : `${tournament.participants.length}/${tournament.max_players} мест`}</span></div><span className="community-event-prize">🏆 {tournament.prize}</span><TournamentCountdown endsAt={tournament.ends_at} compact /><a className="community-event-action" href="#tournaments">{isRace ? 'Правила и приз' : isFull ? 'Смотреть турнир' : 'Участвовать'}</a></article>; })}</div> : <p>Скоро здесь появятся турниры сообщества.</p>}</div>
+        <div className="community-live"><span className="live-label"><span className="community-live-label-desktop">ИГРОКИ СООБЩЕСТВА</span><span className="community-live-label-mobile">ИГРОКИ ОНЛАЙН</span></span><strong>{data?.total_players ?? data?.top_players.length ?? '—'}</strong><small>активных игроков в рейтинге</small><div className="live-stack"><span>♟</span><span>♞</span><span>♜</span><b>+</b></div></div>
+        <div className="community-hero-events"><span className="block-kicker">ТУРНИРЫ И СОБЫТИЯ</span>{tournamentError ? <p>{tournamentError}</p> : featuredTournaments.length ? <div className="community-event-grid">{featuredTournaments.map((tournament) => { const isRace = tournament.id === race?.id; const isFull = tournament.participants.length >= tournament.max_players; return <article className="community-event-tile" key={tournament.id}><span className={isRace ? 'community-event-badge live' : 'community-event-badge major'}>{tournamentStatus(tournament.status)}</span><strong>{tournament.name}</strong><small>{tournament.participants.length} участников · {isFull ? 'мест больше нет' : tournament.status === 'registration' ? 'регистрация открыта' : tournament.status}</small><div className="community-event-detail"><b>{Math.floor(tournament.time_control / 60)}+{tournament.increment}</b><span>{isRace ? 'Условия и приз' : `${tournament.participants.length}/${tournament.max_players} мест`}</span></div><span className="community-event-prize">🏆 {tournament.prize}</span><TournamentCountdown endsAt={tournament.ends_at} compact /><a className="community-event-action" href={tournamentHref(tournament.id)}>{isRace ? 'Правила и приз' : isFull ? 'Смотреть турнир' : 'Участвовать'}</a></article>; })}</div> : <p>Скоро здесь появятся турниры сообщества.</p>}</div>
       </div>
     </div>
     <div className="community-grid">
@@ -1437,13 +1438,8 @@ function CommunityPage() {
         <div className="race-title-row"><h3>{race?.name ?? 'Недельный спринт'}</h3>{race && <span className="race-open-badge">{race.status === 'ended' ? 'ТУРНИР ЗАВЕРШЁН' : raceIsFull ? 'НАБОР ЗАКРЫТ' : race.status === 'registration' ? 'ИДЁТ НАБОР' : race.status}</span>}</div>
         <p>{race?.description ?? 'Собирай очки, играй с учениками школы и поднимайся в рейтинге.'}</p>
         <div className="community-race-meta"><span>♟ {race?.participants.length ?? 0} участников</span><span>{race ? `${Math.floor(race.time_control / 60)}+${race.increment} · ${race.max_players} мест` : 'Ближайший старт'}</span>{user && race && !myRaceEntry && <span className="race-viewer-note">Вы пока не в гонке</span>}</div>
-        <div className="community-race-track" aria-label="Участники гонки">
-          <span className="race-line" />
-          {visibleRaceParticipants.map(({ participant, place }, index) => { const isMe = participant.user_id === user?.id; return <div className={`community-racer${isMe ? ' is-me' : ''}`} key={participant.user_id} style={{ left: `${8 + index * 22}%` }} title={`Место в списке участников: ${place} · ${participant.display_name}${isMe ? ' · Вы' : ''}`}><b className="community-racer-place">#{place}</b><span>{participant.display_name.trim().charAt(0).toLocaleUpperCase('ru') || '♟'}</span><small>{participant.display_name}{isMe ? ' · Вы' : ''}</small></div>; })}
-          {hiddenRaceParticipantCount > 0 && <a className="community-race-overflow" href="#tournaments">+{hiddenRaceParticipantCount} ещё ↗</a>}
-          <span className="race-finish">🏁</span>
-        </div>
-        <div className="race-actions"><a className="button button-primary" href="#tournaments">{user && race && !myRaceEntry && !raceIsFull ? 'Записаться в гонку ↗' : 'Открыть гонку ↗'}</a><a className="community-pvp-link" href="#pvp">Играть PvP</a></div>
+        {race ? <RaceTrack standings={rankedRaceParticipants} tournamentId={race.id} userId={user?.id} showLeaderCrown /> : <p>Новая гонка скоро появится здесь.</p>}
+        <div className="race-actions"><a className="button button-primary" href={race ? tournamentHref(race.id) : '#tournaments'}>{user && race?.status === 'registration' && !myRaceEntry && !raceIsFull ? 'Записаться в гонку ↗' : race ? 'Открыть гонку ↗' : 'Все события ↗'}</a><a className="community-pvp-link" href="#pvp">Играть PvP</a></div>
       </div>
       <div className="community-card online-card"><div className="community-card-title"><h3>Твоя позиция</h3><span>СЕЙЧАС</span></div>{data?.my_rank ? <><div className="community-player"><span>#{data.my_rank.rank}</span><div><strong>Твой результат</strong><small>{data.my_rank.elo_rating} ELO · уровень {data.my_rank.level}</small></div><i /></div><div className="community-player"><span>♟</span><div><strong>{data.my_rank.xp} XP</strong><small>{data.my_rank.puzzles_solved} решённых задач</small></div></div></> : user ? <p>{loading ? 'Загружаем твоё место…' : 'Пока нет данных о твоём месте в рейтинге.'}</p> : <p><a className="source-link" href="#auth">Войди в аккаунт, чтобы увидеть своё место в рейтинге ↗</a></p>}</div>
       <div className="community-card leaderboard-large" id="community-ranking"><div className="community-card-title"><h3>Рейтинг учеников</h3><div className="leaderboard-filters">{(['elo', 'level', 'puzzles'] as const).map((item) => <button className={category === item ? 'selected' : ''} key={item} type="button" onClick={() => { setError(''); setCategory(item); }}>{item === 'elo' ? 'ELO' : item === 'level' ? 'Уровень' : 'Задачи'}</button>)}</div></div>{error ? <p className="puzzle-reward">{error}</p> : loading ? <p>Загружаем рейтинг…</p> : data?.top_players.length ? <div className="community-ranking-list">{data.top_players.map((player) => { const medal = player.rank === 1 ? 'gold' : player.rank === 2 ? 'silver' : player.rank === 3 ? 'bronze' : ''; const place = player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : player.rank === 3 ? '🥉' : String(player.rank).padStart(2, '0'); return <div className={`ranking-row${player.user_id === user?.id ? ' current' : ''}${medal ? ` podium-row ${medal}` : ''}`} key={player.user_id}><b className={`ranking-place ${medal}`} aria-label={`${player.rank} место`} title={`${player.rank} место`}>{place}</b><span>{player.display_name}</span><small>{player.puzzles_solved} задач</small><strong>{sortedValue(player)}</strong></div>; })}</div> : <p>Пока нет учеников в рейтинге.</p>}</div>
@@ -1915,8 +1911,8 @@ function PvpPage() {
       movable: { free: false, color: 'white', dests: new Map(), events: { after: (orig, dest) => socketRef.current?.send(JSON.stringify({ action: 'move', move: `${orig}${dest}` })) } },
       highlight: { lastMove: true, check: true }, animation: { enabled: true, duration: 180 },
     });
-    return () => { socketRef.current?.close(); groundRef.current?.destroy(); };
-  }, []);
+    return () => { socketRef.current?.close(); groundRef.current?.destroy(); groundRef.current = null; };
+  }, [user?.id]);
 
   const createRoom = async () => {
     setBusy(true); setError(''); setMessage('Создаём комнату…');
@@ -1963,6 +1959,26 @@ function PvpPage() {
 function AppV2() {
   const route = useHashRoute();
   const [menuOpen, setMenuOpen] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { setMenuOpen(false); }, [route]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setMenuOpen(false);
+      menuButtonRef.current?.focus();
+    };
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !headerRef.current?.contains(event.target)) setMenuOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('pointerdown', closeOutside);
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('pointerdown', closeOutside);
+    };
+  }, [menuOpen]);
   const [darkTheme, setDarkTheme] = useState(() => {
     try { return localStorage.getItem('coolchess.theme') === 'dark'; }
     catch { return false; }
@@ -1987,13 +2003,13 @@ function AppV2() {
   ];
   const publicName = user?.display_name ?? 'Ученик';
   return <div className="app-shell">
-    <header className="topbar">
+    <header className="topbar" ref={headerRef}>
       <a className="brand" href="#home" aria-label="CoolChess, на главную"><span className="brand-mark">♞</span><span>cool<span>chess</span></span></a>
-      <nav className={`main-nav${menuOpen ? ' open' : ''}`} aria-label="Основная навигация">
+      <nav id="main-navigation" className={`main-nav${menuOpen ? ' open' : ''}`} aria-label="Основная навигация">
         {navigation.map((item) => <a title={item.hint} aria-label={`${item.label}: ${item.hint}`} className={`${item.route === 'profile' ? 'nav-profile ' : item.route === 'auth' ? 'nav-auth ' : ''}${(item.route === 'home' ? route === 'home' : item.route === 'learn' ? route === 'learn' || route === 'theory' : route === item.route) ? 'active' : ''}`} href={item.href} key={item.route} onClick={() => setMenuOpen(false)}><span aria-hidden="true">{item.icon}</span>{item.label}</a>)}
       </nav>
       <div className="topbar-user"><button className={`theme-toggle${darkTheme ? ' is-dark' : ''}`} type="button" role="switch" aria-checked={darkTheme} aria-label={`Переключить тему: сейчас ${darkTheme ? 'тёмная' : 'светлая'}`} title={darkTheme ? 'Включить светлую тему' : 'Включить тёмную тему'} onClick={() => setDarkTheme((current) => !current)}><span className="theme-toggle-track"><span className="theme-toggle-thumb"><span aria-hidden="true">{darkTheme ? '☾' : '☀'}</span></span></span><span className="theme-toggle-label">{darkTheme ? 'Тёмная' : 'Светлая'}</span></button>{user ? <><a className="profile-button" href="#profile" aria-label={`Открыть профиль ${publicName}`}><span className="profile-avatar">{publicName[0]?.toUpperCase() ?? 'У'}</span><span className="profile-button-copy"><strong>Профиль</strong><small>{publicName}</small></span><span className="profile-arrow" aria-hidden="true">↗</span></a><button className="auth-nav-link" type="button" onClick={() => { void logout().then(() => { window.location.hash = '#home'; }); }}>Выйти</button></> : <a className="auth-nav-link" href="#auth">Войти / регистрация</a>}</div>
-      <button className="menu-button" type="button" aria-expanded={menuOpen} aria-label={menuOpen ? "Закрыть меню" : "Открыть меню"} onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? "×" : "☰"}</button>
+      <button ref={menuButtonRef} className="menu-button" type="button" aria-controls="main-navigation" aria-expanded={menuOpen} aria-label={menuOpen ? "Закрыть меню" : "Открыть меню"} onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? "×" : "☰"}</button>
     </header>
     <main className="route-main">{page}</main>
     <footer className="footer"><div className="footer-brand"><span className="brand-mark">♞</span><span>cool<span>chess</span></span></div><p>Шахматы, которые растут вместе с тобой.</p><small>© 2026 CoolChess. Учимся думать на несколько ходов вперёд.</small></footer>

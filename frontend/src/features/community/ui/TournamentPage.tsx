@@ -3,6 +3,14 @@ import { useAuth } from '../../auth/model/AuthProvider';
 import * as tournamentsApi from '../api/tournamentsApi';
 import type { Tournament, TournamentColor } from '../api/tournamentsApi';
 import { TournamentCountdown } from './TournamentCountdown';
+import { RaceStandings } from './RaceStandings';
+import { tournamentHref, tournamentStatus } from '../model/tournamentStandings';
+
+function readEventLocation() {
+  const [, id = '', playerId = ''] = window.location.hash.split('/');
+  try { return { id: decodeURIComponent(id), playerId: decodeURIComponent(playerId) }; }
+  catch { return { id: '', playerId: '' }; }
+}
 
 const formatLabels: Record<Tournament['format'], string> = {
   round_robin: 'Круговой',
@@ -32,6 +40,14 @@ export function TournamentPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [location, setLocation] = useState(readEventLocation);
+
+  useEffect(() => {
+    const sync = () => setLocation(readEventLocation());
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, []);
 
   const refresh = async () => {
     const [items, availablePlayers] = await Promise.all([
@@ -44,6 +60,7 @@ export function TournamentPage() {
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
     Promise.all([
       tournamentsApi.listTournaments(),
       canManage ? tournamentsApi.listTournamentPlayers() : Promise.resolve([]),
@@ -54,7 +71,7 @@ export function TournamentPage() {
       }
     }).catch((reason: unknown) => {
       if (active) setError(reason instanceof Error ? reason.message : 'Не удалось загрузить турниры.');
-    });
+    }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [canManage]);
 
@@ -92,15 +109,19 @@ export function TournamentPage() {
     }, 'Турнир создан.');
   };
 
+  const selectedTournament = tournaments.find(item => item.id === location.id);
+  const shownTournaments = location.id ? tournaments.filter(item => item.id === location.id) : tournaments;
+
   return <section className="tournaments-page">
     <header className="tournaments-heading">
+      <a className="race-back" href={location.id ? '#tournaments' : '#community'}>← {location.id ? 'Все события' : 'Сообщество'}</a>
       <span className="eyebrow"><span>08</span> СОБЫТИЯ COOLCHESS</span>
-      <h1>Турниры<br /><em>и команды.</em></h1>
-      <p>Записывайся на турнир, выбирай сторону, а учителя могут распределять участников по группам.</p>
+      <h1>{location.id ? selectedTournament?.name ?? 'Событие' : <>Турниры<br /><em>и команды.</em></>}</h1>
+      <p>Найди себя на дорожке, сравни рейтинг и познакомься с соперниками.</p>
     </header>
     {error && <p className="puzzle-reward" role="alert">{error}</p>}
     {message && <p className="tournament-status" role="status">{message}</p>}
-    {canManage && <form className="tournament-create" onSubmit={(event) => void create(event)}>
+    {canManage && !location.id && <form className="tournament-create" onSubmit={(event) => void create(event)}>
       <h2>Панель учителя / администратора</h2>
       <p>Создай событие и настрой формат, контроль времени, инкремент и лимит участников.</p>
       <label>Название<input name="name" required minLength={3} maxLength={80} placeholder="Весенний турнир" /></label>
@@ -116,21 +137,21 @@ export function TournamentPage() {
       <button className="button button-primary" disabled={busy} type="submit">{busy ? 'Сохраняем…' : 'Создать турнир'}</button>
     </form>}
     <div className="tournament-list">
-      {tournaments.map((tournament) => {
+      {shownTournaments.map((tournament) => {
         const isFull = tournament.participants.length >= tournament.max_players;
         const ownParticipant = tournament.participants.find((participant) => participant.user_id === user?.id);
-        return <article className="tournament-card" key={tournament.id}>
+        return <article className="tournament-card race-event-card" key={tournament.id}>
           <div className="tournament-card-heading">
-            <div><span className="profile-card-kicker">{formatLabels[tournament.format]}</span><h2>{tournament.name}</h2></div>
-            <strong>{tournament.participants.length}/{tournament.max_players}</strong>
+            <div><span className="profile-card-kicker">{formatLabels[tournament.format]}</span><h2>{location.id ? 'Участники и условия' : <a href={tournamentHref(tournament.id)}>{tournament.name} ↗</a>}</h2></div>
+            <strong>{tournamentStatus(tournament.status)}</strong>
           </div>
           {tournament.description && <p>{tournament.description}</p>}
-          <p className="tournament-settings">{Math.floor(tournament.time_control / 60)}+{tournament.increment} · {tournament.status === 'registration' ? 'Идёт регистрация' : tournament.status === 'ended' ? 'Турнир завершён' : tournament.status}</p>
+          <div className="race-event-facts"><span><b>{tournament.participants.length}<small> / {tournament.max_players}</small></b>участников</span><span><b>{Math.floor(tournament.time_control / 60)}+{tournament.increment}</b>минут + секунд за ход</span><span><b>{ownParticipant ? 'Ты в игре' : isFull ? 'Все в сборе' : tournament.status === 'registration' ? 'Присоединяйся' : 'Набор закрыт'}</b>{ownParticipant ? 'Твоё место выделено ниже' : isFull ? 'Свободных мест нет' : 'Соревнуйся с учениками школы'}</span></div>
           <div className="tournament-incentive"><span className="tournament-prize"><small>ПРИЗ ОТ ОРГАНИЗАТОРА</small><strong>🏆 {tournament.prize}</strong><small>Выдаётся после объявления итогов</small></span><TournamentCountdown endsAt={tournament.ends_at} /></div>
-          <p className="tournament-winner-rule"><strong>Как определяется победитель</strong>{winnerRules[tournament.format]}<small>Итог фиксирует организатор после окончания турнира.</small></p>
+          <details className="race-rules"><summary>Как определяется победитель?</summary><p>{winnerRules[tournament.format]}</p><p>Таблица ниже сравнивает текущий ELO участников. Это не турнирные очки. Итоги по результатам партий объявляет организатор.</p></details>
           {!user && <p><a href="#auth">Войдите</a>, чтобы записаться на турнир.</p>}
-          {user && !ownParticipant && <button className="button button-primary" disabled={busy || isFull || tournament.status !== 'registration'} type="button" onClick={() => void runAction(() => tournamentsApi.joinTournament(tournament.id), 'Вы записаны на турнир.')}>{tournament.status === 'ended' ? 'Регистрация закрыта' : 'Записаться'}</button>}
-          {ownParticipant && <div className="tournament-side-picker"><span>Выбери сторону:</span>{(['white', 'black', 'random'] as const).map((color) => <button className={ownParticipant.preferred_color === color ? 'selected' : ''} key={color} disabled={busy} type="button" onClick={() => void runAction(() => tournamentsApi.chooseSide(tournament.id, color), `Выбрана сторона: ${colorLabels[color]}.`)}>{colorLabels[color]}</button>)}</div>}
+          {user && !ownParticipant && <button className="button button-primary" disabled={busy || isFull || tournament.status !== 'registration'} type="button" onClick={() => void runAction(() => tournamentsApi.joinTournament(tournament.id), 'Вы записаны на турнир.')}>{tournament.status !== 'registration' ? 'Регистрация закрыта' : isFull ? 'Мест больше нет' : 'Записаться'}</button>}
+          {ownParticipant && <div className="tournament-side-picker"><span>Выбери сторону:</span>{(['white', 'black', 'random'] as const).map((color) => <button className={ownParticipant.preferred_color === color ? 'selected' : ''} aria-pressed={ownParticipant.preferred_color === color} key={color} disabled={busy} type="button" onClick={() => void runAction(() => tournamentsApi.chooseSide(tournament.id, color), `Выбрана сторона: ${colorLabels[color]}.`)}>{colorLabels[color]}</button>)}</div>}
           {canManage && !isFull && <div className="tournament-manage-row">
             <select aria-label={`Добавить игрока в турнир ${tournament.name}`} value={selectedPlayers[tournament.id] ?? ''} onChange={(event) => setSelectedPlayers((state) => ({ ...state, [tournament.id]: event.target.value }))}>
               <option value="">Выбрать игрока для добавления</option>
@@ -138,19 +159,15 @@ export function TournamentPage() {
             </select>
             <button className="button button-link" type="button" disabled={busy || !selectedPlayers[tournament.id]} onClick={() => void runAction(() => tournamentsApi.joinTournament(tournament.id, selectedPlayers[tournament.id]), 'Игрок добавлен в турнир.')}>Добавить игрока</button>
           </div>}
-          <ul className="tournament-participants">
-            {tournament.participants.map((participant) => <li key={participant.user_id}>
-              <span><strong>{participant.display_name}</strong><small>{participant.elo_rating} ELO{participant.group_name ? ` · Группа ${participant.group_name}` : ''}{participant.preferred_color ? ` · ${colorLabels[participant.preferred_color]}` : ''}</small></span>
-              {canManage && <div className="tournament-player-actions">
+          <RaceStandings tournament={tournament} userId={user?.id} initialPlayerId={location.playerId || undefined} renderActions={canManage ? (participant) => <div className="tournament-player-actions">
                 <input aria-label={`Группа игрока ${participant.display_name}`} value={groups[participant.user_id] ?? participant.group_name ?? ''} maxLength={24} placeholder="Группа" onChange={(event) => setGroups((state) => ({ ...state, [participant.user_id]: event.target.value }))} />
                 <button className="button button-link" type="button" disabled={busy} onClick={() => void runAction(() => tournamentsApi.assignGroup(tournament.id, participant.user_id, groups[participant.user_id]?.trim() || null), 'Распределение обновлено.')}>Назначить</button>
                 <button className="button button-link" type="button" disabled={busy} onClick={() => void runAction(() => tournamentsApi.removeParticipant(tournament.id, participant.user_id), 'Участник удалён.')}>Убрать</button>
-              </div>}
-            </li>)}
-          </ul>
+              </div> : undefined} />
         </article>;
       })}
-      {!tournaments.length && !error && <p className="tournament-empty">Турниров пока нет.</p>}
+      {loading && <p className="tournament-empty" role="status">Загружаем события…</p>}
+      {!loading && !shownTournaments.length && !error && <p className="tournament-empty">{location.id ? 'Событие не найдено. Вернись ко всем событиям и выбери другое.' : 'Турниров пока нет.'}</p>}
     </div>
   </section>;
 }

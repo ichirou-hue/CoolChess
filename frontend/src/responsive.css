@@ -1,0 +1,271 @@
+/* Layout constraints live here, after the visual styles. Sizes are CSS pixels:
+   the same rules apply to window resizing, display scaling and browser zoom. */
+:root {
+  --content-width: 1440px;
+  --page-gutter: max(clamp(16px, 3vw, 48px), env(safe-area-inset-left), env(safe-area-inset-right));
+  --header-height: 76px;
+  --viewport-height: 100vh;
+}
+@supports (height: 100svh) { :root { --viewport-height: 100svh; } }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { min-width: 0; }
+button, input, select, textarea { font-family: inherit; }
+.app-shell { overflow: visible; }
+.route-main { min-height: calc(var(--viewport-height) - var(--header-height)); }
+.route-main :is(h1, h2, h3, p, strong, small) { overflow-wrap: anywhere; }
+:is(.route-main, .topbar, .auth-page) :is(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid #777aff;
+  outline-offset: 3px;
+}
+.button {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  line-height: 1.4;
+  max-width: 100%;
+  min-height: 48px;
+  text-align: center;
+  white-space: normal;
+}
+.button:disabled { cursor: default; }
+.button:disabled:hover { box-shadow: none; transform: none; }
+
+/* The navigation collapses before its content can collide with the account. */
+.topbar {
+  gap: 16px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  height: auto;
+  min-height: var(--header-height);
+  padding-inline: max(var(--page-gutter), calc((100% - 1600px) / 2));
+  position: sticky;
+  z-index: 20;
+}
+.brand { height: 48px; width: clamp(180px, 16vw, 230px); }
+.topbar-user { display: flex; gap: 12px; min-width: 0; }
+.topbar-user > .theme-toggle { margin: 0; position: static; }
+.theme-toggle { flex-shrink: 0; min-height: 44px; }
+.profile-button-copy { max-width: 120px; min-width: 0; }
+.profile-button-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-user > .auth-nav-link { min-height: 44px; display: inline-flex; align-items: center; }
+.main-nav { min-width: 0; }
+.main-nav a { font-size: 13px; min-height: 44px; padding-inline: 8px; }
+.menu-button { background: #f0efff; border: 0; border-radius: 12px; color: #353ad8; flex-shrink: 0; height: 48px; width: 48px; }
+
+/* Bound the workspace on ultrawide displays without stretching text or boards. */
+:is(.home-journey, .game-section, .puzzle-section, .pvp-page, .community-page, .profile-page, .tournaments-page) {
+  padding-inline: max(var(--page-gutter), calc((100% - var(--content-width)) / 2));
+}
+:is(.game-section, .puzzle-section, .pvp-page, .community-page, .profile-page, .tournaments-page, .learn-page, .home-journey) {
+  min-height: calc(var(--viewport-height) - var(--header-height));
+}
+.puzzle-section { max-width: none; }
+.footer { padding-inline: max(var(--page-gutter), calc((100% - var(--content-width)) / 2)); }
+
+.home-welcome { min-height: 0; padding: clamp(24px, 4vw, 64px); }
+.home-welcome > div:first-child { min-width: 0; width: 100%; }
+.home-welcome h1 { font-size: clamp(34px, 4.5vw, 68px); letter-spacing: -.05em; line-height: 1.06; }
+.home-welcome .eyebrow { line-height: 1.6; }
+.home-chess-mark { bottom: 5%; font-size: clamp(100px, 22vw, 300px); margin: 0; position: absolute; right: 2%; }
+.journey-map { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.journey-card { display: flex; flex-direction: column; min-width: 0; }
+.journey-card p { margin-bottom: 16px; }
+.journey-cta { gap: 8px; margin-top: auto; }
+.home-extra-links > a > span:nth-child(2) { min-width: 0; }
+
+/* A board never forces its column wider than the available space. Short windows
+   scroll vertically instead of clipping controls into a fixed-height game. */
+.route-main > :not(.game-section) .coordinate-board-layout {
+  margin-inline: auto;
+  width: calc(100% - 10px);
+}
+.game-section {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr);
+  height: auto;
+  padding-block: clamp(24px, 3vw, 48px);
+}
+.game-intro { margin: 0; min-width: 0; }
+.game-section .game-layout { justify-self: center; max-width: 760px; width: 100%; }
+.game-section .move-panel { align-self: start; grid-column: auto; height: auto; margin: 0; max-height: none; min-height: 0; min-width: 0; width: 100%; }
+.game-section .move-columns { max-height: min(50vh, 480px); overflow-y: auto; }
+.player-row { flex-wrap: wrap; }
+.player-row > div { flex: 1 1 100px; }
+.player-row .player-material { margin-left: auto; }
+.puzzle-layout { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); }
+.puzzle-board { margin: 0; max-width: 760px; min-width: 0; width: 100%; }
+.puzzle-copy { max-width: none; min-width: 0; width: 100%; }
+.puzzle-meta { flex-wrap: wrap; }
+.puzzle-search input { min-width: 0; }
+
+.pvp-layout { gap: 24px; grid-template-columns: minmax(0, 1fr); max-width: none; }
+.pvp-board-card, .pvp-panel { min-width: 0; }
+.pvp-panel { order: -1; }
+.pvp-panel label, .pvp-panel input { min-width: 0; width: 100%; }
+.pvp-panel input { font-size: 16px; min-height: 48px; }
+.pvp-actions .button { font-size: 13px; min-height: 48px; }
+.pvp-clocks { flex-wrap: wrap; gap: 12px; }
+.pvp-clocks > span { display: flex; flex: 1 1 160px; gap: 8px; justify-content: space-between; min-width: 0; overflow-wrap: anywhere; }
+.pvp-clocks b { flex-shrink: 0; margin: 0; }
+.pvp-auth-card { gap: 20px; margin: clamp(24px, 6vh, 64px) auto; width: min(100%, 520px); }
+.pvp-auth-card h1 { font-size: clamp(40px, 5vw, 64px); letter-spacing: -.04em; line-height: 1.1; }
+.pvp-auth-card p { line-height: 1.65; }
+.pvp-auth-card .button { flex-shrink: 0; }
+.pvp-heading h1, .tournaments-heading h1 { font-size: clamp(36px, 5vw, 68px); letter-spacing: -.05em; line-height: 1.05; }
+
+.learn-page { grid-template-columns: minmax(0, 1fr); }
+.learn-page-main { margin-inline: auto; max-width: 1440px; width: 100%; }
+.learn-page-sidebar { border-bottom: 1px solid #e7e8ef; border-right: 0; max-height: 280px; overflow-y: auto; }
+.learn-page-heading { flex-wrap: wrap; gap: 16px; }
+.learn-page-heading > div { min-width: 0; }
+.theory-board-top, .theory-board-bottom { flex-wrap: wrap; gap: 12px; }
+.learn-practice-card, .learn-article { min-width: 0; }
+.lesson-stepper, .practice-header, .practice-progress { flex-wrap: wrap; }
+.practice-dots { flex-wrap: wrap; }
+
+.community-hero { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); }
+.community-hero > div { min-width: 0; }
+.community-hero-side { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: none; width: 100%; }
+.community-hero-events { min-width: 0; }
+.community-live-label-mobile { display: none; }
+.community-grid { display: grid; grid-template-columns: minmax(0, 1fr); }
+.community-card { min-width: 0; }
+.race-actions { flex-wrap: wrap; }
+.community-card-title { flex-wrap: wrap; gap: 8px; }
+.community-ranking-list .ranking-row { grid-template-columns: 30px minmax(0, 1fr) auto auto; }
+.ranking-row > span { min-width: 0; }
+.profile-hero { flex-wrap: wrap; }
+.profile-hero > div { min-width: 0; }
+.profile-wallet { min-width: 0; }
+.activity-calendar { gap: 5px; grid-template-columns: repeat(14, minmax(0, 15px)); }
+.activity-calendar i { height: auto; aspect-ratio: 1; width: 100%; }
+.tournament-card-heading { flex-wrap: wrap; }
+.tournament-card-heading > div { min-width: 0; }
+
+/* Keep Safari form fields large enough to type without automatic page zoom. */
+.auth-page, .auth-layout, .auth-form-panel { min-height: var(--viewport-height); }
+.auth-layout { grid-template-columns: minmax(0, 1fr); }
+.auth-form-panel { min-width: 0; padding-top: max(32px, env(safe-area-inset-top)); padding-bottom: max(32px, env(safe-area-inset-bottom)); }
+.auth-form-panel > div { min-width: 0; }
+.auth-form-header { gap: 12px; }
+.auth-form-header a { min-width: 0; }
+.auth-form-header img { max-width: 100%; width: min(220px, 55vw); }
+.auth-form-header > span { flex-shrink: 0; }
+.auth-page input:not([type="checkbox"]) { font-size: 16px; }
+.auth-page button { min-height: 44px; }
+.auth-page p { overflow-wrap: anywhere; }
+
+@media (max-width: 1400px) {
+  .topbar { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .menu-button { display: block; }
+  .theme-toggle { left: auto; right: auto; top: auto; }
+  .main-nav {
+    border: 1px solid #e6e8ef;
+    border-radius: 16px;
+    box-shadow: 0 12px 30px rgba(21,30,54,.12);
+    display: none;
+    gap: 4px;
+    left: var(--page-gutter);
+    max-height: calc(var(--viewport-height) - var(--header-height) - 16px);
+    overflow-y: auto;
+    padding: 10px;
+    position: absolute;
+    right: var(--page-gutter);
+    top: 100%;
+    background: #fff;
+  }
+  .main-nav.open { display: grid; }
+  .main-nav a, .main-nav .nav-profile, .main-nav .nav-auth { border-radius: 10px; display: flex; font-size: 15px; justify-content: flex-start; min-height: 48px; padding: 12px; white-space: normal; }
+  .main-nav a > span { flex: 0 0 24px; }
+  html[data-theme="dark"] .main-nav { background: #1b2030; border-color: #343a4d; }
+}
+@media (max-width: 900px) {
+  .topbar { gap: 8px; }
+  .brand { width: clamp(150px, 44vw, 230px); }
+  .topbar-user > .profile-button, .topbar-user > .auth-nav-link { display: none; }
+  .topbar-user .theme-toggle-label { display: none; }
+  .theme-toggle { padding: 5px 6px; min-height: 48px; }
+  .community-hero-side { grid-template-columns: minmax(0, 1fr); }
+  .tournament-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-shell input:not([type="range"]):not([type="checkbox"]):not([type="radio"]), .app-shell select, .app-shell textarea { font-size: 16px; min-height: 44px; }
+}
+@media (max-width: 700px) {
+  .community-live {
+    align-items: center;
+    aspect-ratio: 1;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: center;
+    justify-self: start;
+    max-width: 100%;
+    min-height: 0;
+    padding: 12px 10px;
+    text-align: center;
+    width: 112px;
+  }
+  .community-live strong { font-size: 32px; letter-spacing: -.04em; line-height: 1; margin: 0; max-width: 100%; }
+  .community-live .live-label { color: #49d791; font-size: 10px; font-weight: 600; justify-content: center; letter-spacing: .03em; line-height: 1.4; }
+  .community-live .community-live-label-mobile { display: inline; }
+  .community-live .community-live-label-desktop, .community-live small, .community-live .live-stack { display: none; }
+}
+@media (min-width: 901px) {
+  .game-section { grid-template-columns: minmax(190px, .6fr) minmax(0, 1.5fr); gap: 32px; }
+  .game-section .move-panel { grid-column: 1 / -1; }
+  .puzzle-layout { grid-template-columns: minmax(0, 1.3fr) minmax(260px, .7fr); }
+  .pvp-layout { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); }
+  .pvp-panel { order: 0; }
+}
+@media (min-width: 1101px) {
+  .journey-map { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .learn-page { grid-template-columns: 260px minmax(0, 1fr); }
+  .learn-page-sidebar { border-right: 1px solid #e7e8ef; max-height: none; overflow: visible; }
+  .community-hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .community-grid { grid-template-columns: minmax(0, 1.25fr) minmax(0, .8fr); }
+}
+@media (min-width: 1280px) {
+  .game-section { gap: 64px; grid-template-columns: minmax(200px, .7fr) minmax(0, 1.8fr) minmax(260px, 1fr); }
+  .game-section .move-panel { grid-column: auto; }
+}
+@media (max-width: 1279px) {
+  .game-coordinate-frame .material-balance-rail { align-items: center; bottom: auto; display: flex; flex-direction: row; gap: 8px; height: auto; justify-content: space-between; left: auto; margin: 0 0 10px; padding: 8px 10px; position: relative; top: auto; transform: none; width: 100%; }
+  .game-coordinate-frame .material-balance-summary { flex: 0 0 auto; flex-direction: row; }
+  .game-coordinate-frame .material-balance-body { align-items: center; display: flex; min-width: 0; width: auto; }
+  .game-coordinate-frame .material-balance-track { flex: 0 1 72px; flex-direction: row; height: 7px; min-height: 0; width: 72px; }
+  .game-coordinate-frame .material-balance-track i { height: 100%; width: var(--material-white-share); }
+}
+@media (min-width: 1024px) {
+  .auth-layout { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
+  .auth-layout > .auth-illustration { height: var(--viewport-height); min-height: 500px; }
+}
+@media (max-width: 480px) {
+  .journey-map { grid-template-columns: minmax(0, 1fr); }
+  .journey-card { display: grid; gap: 8px 16px; grid-template-columns: 48px minmax(0, 1fr); min-height: 0; padding: 20px; }
+  .journey-icon { grid-row: 1 / span 2; margin: 0; }
+  .journey-card h3 { font-size: 18px; margin: 0; }
+  .journey-card p { font-size: 14px; grid-column: 2; margin: 0; }
+  .journey-cta { grid-column: 2; margin-top: 8px; }
+  .home-welcome .button, .pvp-auth-card .button { width: 100%; }
+  .home-chess-mark { opacity: .45; }
+  .pvp-board-card { padding: 12px; }
+  .pvp-panel { padding: 20px; }
+  .pvp-actions { flex-direction: column; }
+  .pvp-actions .button { width: 100%; }
+  .community-event-grid { grid-template-columns: minmax(0, 1fr); }
+  .tournament-form-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (pointer: coarse) {
+  .app-shell button, .auth-page button, .community-pvp-link, .community-event-action, .auth-nav-link { min-height: 48px; }
+  .community-pvp-link { align-items: center; display: inline-flex; }
+  .community-event-action { align-items: center; display: flex; justify-content: center; font-size: 12px; }
+  .maia-slider input { min-height: 40px; }
+}
+@media (hover: none) {
+  .button:hover, .journey-card:hover, .topbar-user .profile-button:hover { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

@@ -181,6 +181,43 @@ test('layout responds when a tablet rotates without reloading', async ({ page })
   await expectContained(page);
 });
 
+test('game history stays visible, scrolls and aligns with the board after resizing', async ({ page, browserName }) => {
+  await page.addInitScript(() => sessionStorage.setItem('coolchess.accessToken', 'layout-test-token'));
+  await page.route('**/api/users/me', route => route.fulfill({ json: {
+    id: 'layout-player', email: 'layout@example.test', display_name: longName, role: 'student', is_superuser: false, elo_rating: 1200,
+  } }));
+  await page.route('**/api/games/active', route => route.fulfill({ json: {
+    id: 'history-game', status: 'in_progress', player_color: 'white', bot_difficulty: 1500,
+    current_fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 60 31',
+    moves_uci: Array.from({ length: 15 }, () => ['g1f3', 'g8f6', 'f3g1', 'f6g8']).flat(),
+    is_check: false, is_game_over: false, winner: null, last_bot_move: 'f6g8', xp_earned: 0, coins_earned: 0, elo_delta: 0,
+  } }));
+  await open(page, 'play');
+  const history = page.locator('.move-columns');
+  await expect(history.locator('button')).toHaveCount(60);
+  for (const width of [390, 1024, 1280, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(async () => (await history.boundingBox())!.height).toBeGreaterThan(120);
+    await expectContained(page);
+    expect(await history.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+    await expect.poll(() => history.evaluate(el => {
+      const active = el.querySelector('.move-column button.active')!.getBoundingClientRect();
+      const bounds = el.getBoundingClientRect();
+      return Math.max(bounds.top - active.top, active.bottom - bounds.bottom);
+    })).toBeLessThanOrEqual(1);
+    if (width >= 1280) await expect.poll(async () => {
+      const board = (await page.locator('.game-layout .coordinate-board-surface').boundingBox())!;
+      const panel = (await page.locator('.move-panel').boundingBox())!;
+      return Math.max(Math.abs(board.y - panel.y), Math.abs(board.height - panel.height));
+    }).toBeLessThan(1);
+    if (browserName === 'chromium' && width === 1440) await page.locator('.game-section').screenshot({ path: '../.tools/game-history-1440.png' });
+  }
+  await page.locator('.user-move-column button').first().click();
+  await expect(page.locator('.user-row')).toContainText('просмотр 1/60');
+  await page.getByRole('button', { name: 'К текущей позиции' }).click();
+  await expect(page.locator('.user-row')).not.toContainText('просмотр');
+});
+
 test.describe('touchscreen', () => {
   test.use({ hasTouch: true, deviceScaleFactor: 3, viewport: { width: 390, height: 844 } });
   test('menu and chess moves support taps', async ({ page }) => {

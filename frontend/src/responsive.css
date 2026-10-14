@@ -86,9 +86,9 @@ button, input, select, textarea { font-family: inherit; }
   padding-block: clamp(24px, 3vw, 48px);
 }
 .game-intro { margin: 0; min-width: 0; }
-.game-section .game-layout { justify-self: center; max-width: 760px; width: 100%; }
+.game-section .game-layout { align-self: start; justify-self: center; margin-block: 0; max-width: 760px; width: 100%; }
 .game-section .move-panel { align-self: start; grid-column: auto; height: auto; margin: 0; max-height: none; min-height: 0; min-width: 0; width: 100%; }
-.game-section .move-columns { max-height: min(50vh, 480px); overflow-y: auto; }
+.game-section .move-columns { flex: 0 1 auto; max-height: min(50vh, 480px); overflow-y: auto; }
 .player-row { flex-wrap: wrap; }
 .player-row > div { flex: 1 1 100px; }
 .player-row .player-material { margin-left: auto; }
@@ -225,7 +225,9 @@ button, input, select, textarea { font-family: inherit; }
 }
 @media (min-width: 1280px) {
   .game-section { gap: 64px; grid-template-columns: minmax(200px, .7fr) minmax(0, 1.8fr) minmax(260px, 1fr); }
-  .game-section .move-panel { grid-column: auto; }
+  .game-section .move-panel { grid-column: auto; height: var(--game-board-height, auto); margin-top: var(--game-board-offset, 0px); }
+  .game-section .move-columns { flex: 1 1 0; max-height: none; }
+  .game-section .move-panel-heading, .game-section .move-column-headings, .game-section .move-panel-actions { flex-shrink: 0; }
 }
 @media (max-width: 1279px) {
   .game-coordinate-frame .material-balance-rail { align-items: center; bottom: auto; display: flex; flex-direction: row; gap: 8px; height: auto; justify-content: space-between; left: auto; margin: 0 0 10px; padding: 8px 10px; position: relative; top: auto; transform: none; width: 100%; }

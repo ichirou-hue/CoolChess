@@ -22,6 +22,7 @@ import { classifyMove, StockfishClient, type MoveClassification, type PositionAn
 import { identifyOpening } from './features/analysis/model/openingBook';
 import * as gameApi from './features/chess-game/api/gameApi';
 import type { GameResponse } from './features/chess-game/api/gameApi';
+import { PlayerAvatar } from './features/chess-game/ui/PlayerAvatar';
 import * as puzzleApi from './features/puzzles/api/puzzleApi';
 import type { Puzzle, PuzzleFilters } from './features/puzzles/api/puzzleApi';
 import * as leaderboardApi from './features/community/api/leaderboardApi';
@@ -178,8 +179,12 @@ const moveDescriptions: Record<MoveClassification, { label: string; glyph: strin
 };
 
 function ChessGame() {
+  const { user } = useAuth();
+  const playerName = user?.display_name?.trim() || 'Ученик';
   const boardRef = useRef<HTMLDivElement>(null);
   const moveHistoryRef = useRef<HTMLDivElement>(null);
+  const gameLayoutRef = useRef<HTMLDivElement>(null);
+  const movePanelRef = useRef<HTMLElement>(null);
   const groundRef = useRef<Api | null>(null);
   const gameRef = useRef(new Chess());
   const startedRef = useRef(false);
@@ -204,7 +209,7 @@ function ChessGame() {
   const liveFlashTimerRef = useRef<number | null>(null);
   const [liveMoveFlash, setLiveMoveFlash] = useState<LiveMoveFlash | null>(null);
 
-  useEffect(() => {
+  const revealActiveMove = () => {
     const history = moveHistoryRef.current;
     const activeMove = history?.querySelector<HTMLButtonElement>('.move-column button.active');
     if (!history || !activeMove) return;
@@ -212,7 +217,37 @@ function ChessGame() {
     const moveBounds = activeMove.getBoundingClientRect();
     if (moveBounds.bottom > historyBounds.bottom) history.scrollTop += moveBounds.bottom - historyBounds.bottom;
     else if (moveBounds.top < historyBounds.top) history.scrollTop -= historyBounds.top - moveBounds.top;
-  }, [moves.length, viewPly]);
+  };
+
+  useEffect(() => {
+    const board = boardRef.current;
+    const layout = gameLayoutRef.current;
+    const panel = movePanelRef.current;
+    if (!board || !layout || !panel) return;
+    let frame = 0;
+    let revealFrame = 0;
+    const syncPanel = () => {
+      const boardBounds = board.getBoundingClientRect();
+      const layoutBounds = layout.getBoundingClientRect();
+      panel.style.setProperty('--game-board-height', `${boardBounds.height}px`);
+      panel.style.setProperty('--game-board-offset', `${boardBounds.top - layoutBounds.top}px`);
+      cancelAnimationFrame(revealFrame);
+      revealFrame = requestAnimationFrame(() => {
+        groundRef.current?.redrawAll();
+        revealActiveMove();
+      });
+    };
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(syncPanel);
+    });
+    observer.observe(board);
+    observer.observe(layout);
+    syncPanel();
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); cancelAnimationFrame(revealFrame); };
+  }, []);
+
+  useEffect(revealActiveMove, [moves.length, viewPly]);
 
   useEffect(() => {
     const client = new StockfishClient();
@@ -474,8 +509,8 @@ function ChessGame() {
       <div className="game-controls"><button className="button button-primary" type="button" onClick={() => void newGame()} disabled={loading || thinking}>Новая партия <span>↗</span></button>{game?.status === 'in_progress' && <button className="button button-link" type="button" onClick={() => void resign()} disabled={loading || thinking}>Сдаться</button>}{statusText && <span className="engine-status">{statusText}</span>}{(error?.includes('401') || error?.includes('Сначала войдите')) && <a className="source-link" href="#auth">Войти в аккаунт ↗</a>}</div>
       <div className="maia-achievements"><div className="achievement-heading"><strong>Уровни Maia</strong><span>{maiaAchievements.length}/{maiaLevels.length} побед</span></div><div className="maia-level-map" aria-label="Пройденные уровни Maia">{maiaLevels.map((level) => <span className={maiaAchievements.includes(level) ? 'earned' : ''} title={`${level} ELO${maiaAchievements.includes(level) ? ' · победа' : ''}`} key={level}>{maiaAchievements.includes(level) ? '✓' : level}</span>)}</div></div>
     </div>
-    <div className="game-layout"><div className="player-row"><span className="avatar player-piece-avatar cg-wrap" aria-hidden="true">{createElement('piece', { className: `king ${playerIsWhite ? 'black' : 'white'}` })}</span><div><strong>CoolChess Maia</strong><small>{game?.bot_difficulty ?? difficulty} ELO · {playerIsWhite ? 'чёрные' : 'белые'}</small></div><PlayerMaterial name="Maia" pieces={capturedPieces[playerIsWhite ? 'black' : 'white']} advantage={playerIsWhite ? -materialDifference : materialDifference} /></div><div className="game-board-stage"><BoardShell boardRef={boardRef} materialBalance={materialBalance} />{resultCopy && !resultDismissed && <div className={`game-result-overlay ${resultCopy.tone}`} role="region" aria-label={`Результат партии: ${resultCopy.title}`}><div className="game-result-card"><div className="game-result-confetti" aria-hidden="true">{Array.from({ length: 9 }, (_, index) => <i key={index} />)}</div><span className="game-result-emblem" aria-hidden="true">{resultCopy.emblem}</span><span className="game-result-label">{resultCopy.label}</span><h3>{resultCopy.title}</h3><p>{resultCopy.message}</p><div className="game-result-rewards"><span><strong>{game!.elo_delta >= 0 ? '+' : ''}{game!.elo_delta}</strong><small>ELO</small></span><span><strong>+{game!.xp_earned}</strong><small>опыт</small></span><span><strong>+{game!.coins_earned} ♟</strong><small>награда</small></span></div><div className="game-result-actions"><button className="button button-primary" type="button" onClick={() => void newGame()}>Новая партия ↗</button><button className="game-result-review" type="button" onClick={() => setResultDismissed(true)}>Разобрать ходы</button></div></div></div>}</div><div className="player-row user-row"><span className="avatar player-piece-avatar cg-wrap" aria-hidden="true">{createElement('piece', { className: `king ${playerIsWhite ? 'white' : 'black'}` })}</span><div><strong>Ученик</strong><small>{playerIsWhite ? 'Белые' : 'Чёрные'}{viewPly !== null ? ` · просмотр ${viewPly}/${moves.length}` : ''}</small></div><PlayerMaterial name="Вы" pieces={capturedPieces[playerIsWhite ? 'white' : 'black']} advantage={playerIsWhite ? materialDifference : -materialDifference} /></div></div>
-    <aside className="move-panel">
+    <div className="game-layout" ref={gameLayoutRef}><div className="player-row"><PlayerAvatar name="Maia" bot /><div><strong>CoolChess Maia</strong><small>{game?.bot_difficulty ?? difficulty} ELO · {playerIsWhite ? 'чёрные' : 'белые'}</small></div><PlayerMaterial name="Maia" pieces={capturedPieces[playerIsWhite ? 'black' : 'white']} advantage={playerIsWhite ? -materialDifference : materialDifference} /></div><div className="game-board-stage"><BoardShell boardRef={boardRef} materialBalance={materialBalance} />{resultCopy && !resultDismissed && <div className={`game-result-overlay ${resultCopy.tone}`} role="region" aria-label={`Результат партии: ${resultCopy.title}`}><div className="game-result-card"><div className="game-result-confetti" aria-hidden="true">{Array.from({ length: 9 }, (_, index) => <i key={index} />)}</div><span className="game-result-emblem" aria-hidden="true">{resultCopy.emblem}</span><span className="game-result-label">{resultCopy.label}</span><h3>{resultCopy.title}</h3><p>{resultCopy.message}</p><div className="game-result-rewards"><span><strong>{game!.elo_delta >= 0 ? '+' : ''}{game!.elo_delta}</strong><small>ELO</small></span><span><strong>+{game!.xp_earned}</strong><small>опыт</small></span><span><strong>+{game!.coins_earned} ♟</strong><small>награда</small></span></div><div className="game-result-actions"><button className="button button-primary" type="button" onClick={() => void newGame()}>Новая партия ↗</button><button className="game-result-review" type="button" onClick={() => setResultDismissed(true)}>Разобрать ходы</button></div></div></div>}</div><div className="player-row user-row"><PlayerAvatar name={playerName} /><div><strong>{playerName}</strong><small>{playerIsWhite ? 'Белые' : 'Чёрные'}{viewPly !== null ? ` · просмотр ${viewPly}/${moves.length}` : ''}</small></div><PlayerMaterial name="Вы" pieces={capturedPieces[playerIsWhite ? 'white' : 'black']} advantage={playerIsWhite ? materialDifference : -materialDifference} /></div></div>
+    <aside className="move-panel" ref={movePanelRef}>
       <div className="move-panel-heading">
         <div className="move-title-wrap"><span className="move-title-icon" aria-hidden="true">♟</span><span><strong>Ходы партии</strong></span></div>
         <span className="move-count">{fullMoveCount} <small>{moveCountWord}</small></span>

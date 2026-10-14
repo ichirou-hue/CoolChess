@@ -1,0 +1,19 @@
+.game-player-avatar {
+  align-items: center;
+  border: 2px solid #fff;
+  border-radius: 14px;
+  box-shadow: 0 3px 10px #3938b51a;
+  display: inline-flex;
+  flex: 0 0 44px;
+  height: 44px;
+  isolation: isolate;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  width: 44px;
+}
+.game-player-avatar.is-bot { background: linear-gradient(145deg, #6562ff, #3d3bb8); }
+.game-player-avatar.is-bot svg { height: 34px; width: 34px; }
+.game-player-avatar.is-user { background: linear-gradient(145deg, #f0ffae, #dce961); color: #3839aa; }
+.game-player-avatar.is-user::before { border: 5px solid #ffffff55; border-radius: 50%; content: ''; height: 39px; position: absolute; right: -14px; top: -12px; width: 39px; z-index: -1; }
+.game-player-initial { font-size: 19px; font-weight: 800; line-height: 1; }

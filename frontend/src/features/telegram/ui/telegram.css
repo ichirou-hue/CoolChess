@@ -1,0 +1,91 @@
+/** Стили Telegram Mini App (по мотивам TelegramThemeProvider из ChessNowBot).
+ *
+ * Провайдер выставляет на <html>: data-tg-theme="light|dark" и переменные
+ * --tg-bg/--tg-text/--tg-button/... из WebApp.themeParams, а также
+ * --tg-viewport-height. Вне Telegram эти правила не применяются.
+ */
+
+/* --- Тема из Telegram: подменяем фон/текст только внутри Mini App --- */
+html[data-tg-theme] body {
+  background: var(--tg-bg, #f7f7fb);
+  color: var(--tg-text, #111);
+}
+
+html[data-tg-theme] a {
+  color: var(--tg-link, #464bff);
+}
+
+html[data-tg-theme] .button-primary,
+html[data-tg-theme] button[type="submit"].button-primary {
+  background: var(--tg-button, #464bff);
+  color: var(--tg-button-text, #fff);
+}
+
+/* --- Высота вьюпорта Telegram (клавиатура/хром клиента её меняет) --- */
+html[data-tg-theme] #root {
+  min-height: var(--tg-viewport-height, 100dvh);
+}
+
+/* --- Мобильная шахматная доска (паттерн BoardWrapper из ChessNowBot:
+ * доска занимает 100% ширины экрана и остаётся квадратной) --- */
+@media (max-width: 640px) {
+  .game-layout {
+    padding-inline: 0;
+  }
+
+  .game-board-stage,
+  .game-coordinate-frame,
+  .coordinate-board-layout {
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  .game-board.coordinate-board-surface {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+  }
+}
+
+/* --- Тач-поведение: никакого скролла/зума во время drag & drop фигур --- */
+html.is-telegram,
+html.is-telegram body,
+html.is-telegram #root {
+  overscroll-behavior: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+  -ms-touch-action: manipulation;
+}
+
+html.is-telegram {
+  overflow: hidden;
+  height: 100dvh;
+}
+
+html.is-telegram body {
+  overflow: hidden;
+  height: 100dvh;
+}
+
+/* --- Запрет отскока (bounce) на всей странице внутри TMA --- */
+html.is-telegram {
+  overscroll-behavior-y: none;
+}
+
+html.is-telegram body {
+  overscroll-behavior-y: none;
+}
+
+/* --- Штурвал/руль доски: крупные цели для пальцев --- */
+/* Доска уже настраивается через CSS в telegrambot/Dockerfile + CoordinateBoard, но базовые минималки */
+@media (max-width: 640px) {
+  .game-board.coordinate-board-surface .square {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+html.is-telegram a {
+  -webkit-touch-callout: none;
+}
